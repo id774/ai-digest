@@ -1,6 +1,12 @@
 ai-digest Repository Version History
 ====================================
 
+v0.2 (Release Date: TBD)
+------------------------
+- Add SUMMARIZER_BACKEND=plain, letting the batch pipeline run without
+  an Anthropic API key by building topics mechanically instead of
+  calling the Claude API.
+
 v0.1 (2026-07-26)
 -----------------
 - The initial version of the project.
