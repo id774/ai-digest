@@ -149,6 +149,28 @@ python cli.py run
 
 The command collects the last 24 hours, summarizes them, writes `data/reports/<today>/` and exits with status 1 when nothing usable could be produced, which makes failures visible in cron mail.
 
+#### "no entry collected"
+
+```
+INFO ai_digest.collectors.arxiv: collected 0 arXiv papers
+INFO ai_digest.collectors.news_rss: collected 0 news articles
+ERROR ai_digest.cli: no entry collected; check ARXIV_CATEGORIES and NEWS_FEED_URLS, or the network connection
+```
+
+When this happens with no `WARNING ... request failed` lines above it, every request actually succeeded; there was simply nothing published in the last `LOOKBACK_HOURS` (24 by default). This is expected, not a bug, and it is unrelated to `SUMMARIZER_BACKEND`, since it happens before summarization runs. Two causes are common:
+
+- **arXiv does not announce papers on weekends.** Friday through Sunday submissions are all announced on Monday, so `cli.py run` on a Saturday or Sunday routinely collects 0 arXiv papers.
+- **The configured news feeds do not publish every day.** The default feeds (OpenAI, Google AI Blog, Hugging Face Blog) can go a day or more between posts.
+
+A `WARNING ... request failed` line, by contrast, does indicate a real problem (DNS, TLS, a proxy, or a timeout) and is unrelated to the lack of new content described above.
+
+To confirm which case applies or to work around a quiet day:
+
+```sh
+python cli.py run --verbose     # logs how many entries were fetched vs. dropped as too old
+LOOKBACK_HOURS=72 python cli.py run   # widen the window instead of waiting
+```
+
 ### Useful variants
 
 ```sh
