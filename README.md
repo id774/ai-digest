@@ -8,6 +8,8 @@ The batch pipeline and the web viewer are separate processes. `cli.py` performs 
 
 Every topic carries an illustration. The application first tries to obtain a real image from the source, an `ar5iv` figure for arXiv papers or the Open Graph image for news articles, and draws a card locally with Pillow when that fails. Scraping is best effort by design; a publisher changing its markup degrades the look of the report, never its availability.
 
+The Claude API is only used for one stage: clustering, translating and classifying the collected entries into topics. Collection (arXiv, RSS/Atom) and every image path already run without an API key. Setting `SUMMARIZER_BACKEND=plain` removes the last dependency and runs the whole pipeline offline except for fetching the feeds themselves; see [Standalone use, no API key](#standalone-use-no-api-key).
+
 ## Features
 
 - **Daily pipeline in a single command**: collect, deduplicate, summarize, illustrate, render
@@ -22,9 +24,9 @@ Every topic carries an illustration. The application first tries to obtain a rea
 ## Requirements
 
 - Python 3.9 or later
-- An Anthropic API key with access to the Claude Messages API
+- An Anthropic API key with access to the Claude Messages API, unless `SUMMARIZER_BACKEND=plain` (see [Standalone use, no API key](#standalone-use-no-api-key))
 - A CJK capable TrueType font, for example the `fonts-noto-cjk` package; see [Japanese font](#japanese-font)
-- Outbound HTTPS access to `export.arxiv.org`, the configured feeds and the Anthropic API
+- Outbound HTTPS access to `export.arxiv.org`, the configured feeds and, unless running standalone, the Anthropic API
 
 Python dependencies are listed in `requirements.txt`:
 
@@ -92,8 +94,9 @@ All settings are read from environment variables, optionally through `.env`. The
 
 | Variable | Default | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Claude API key. Required by `cli.py run`, unused by the viewer. |
+| `ANTHROPIC_API_KEY` | none | Claude API key. Required by `cli.py run` when `SUMMARIZER_BACKEND` is `claude`, unused by the viewer. |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Model used for summarization. |
+| `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
 | `NEWS_FEED_URLS` | three AI blogs | RSS or Atom feeds to collect, comma separated. |
@@ -117,6 +120,24 @@ All settings are read from environment variables, optionally through `.env`. The
 ```
 
 When no CJK font is found, the batch logs a warning once and keeps running with the Pillow bitmap font; the HTML report stays correct, but the images lose their text.
+
+## Standalone use, no API key
+
+Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without an Anthropic API key:
+
+```sh
+cp .env.example .env
+echo "SUMMARIZER_BACKEND=plain" >> .env
+python cli.py run
+```
+
+In this mode:
+
+- The Claude API is never called, and `ANTHROPIC_API_KEY` can stay unset.
+- Each collected entry becomes its own topic, newest first; there is no cross-entry clustering and no translation, so titles and bullets stay in whatever language the source published them in (English for most feeds, English abstracts for arXiv). The `category` label is taken from the entry's origin (the arXiv category or the feed title) instead of being chosen freely by a model.
+- Topic illustrations are unaffected: image scraping and the Pillow fallback cards already run without a key. Add `--no-images` to also skip scraping and only draw local cards, for a run that touches nothing but arXiv and the configured feeds.
+
+This trades the quality of the Japanese summary and the topic grouping for zero setup beyond `pip install -r requirements.txt`. Switch back to `SUMMARIZER_BACKEND=claude` (or unset it, since that is the default) whenever an API key becomes available again; both backends write the same `report.json` shape, and `cli.py render` works on reports produced by either one.
 
 ## Usage
 
