@@ -1,0 +1,11 @@
+# Runtime dependencies of ai-digest.
+# Versions are pinned to a compatible range so that a future major
+# release cannot break an unattended cron run.
+Flask>=3.0,<4.0
+anthropic>=0.39,<1.0
+feedparser>=6.0,<7.0
+requests>=2.31,<3.0
+beautifulsoup4>=4.12,<5.0
+Pillow>=10.0,<12.0
+python-dotenv>=1.0,<2.0
+gunicorn>=21.2,<24.0

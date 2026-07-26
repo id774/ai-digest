@@ -1,0 +1,13 @@
+# Generated reports; only the directory itself is tracked.
+data/reports/*
+!data/reports/.gitkeep
+
+# Local configuration holding the API key.
+.env
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/

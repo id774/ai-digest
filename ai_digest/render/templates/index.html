@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}AI ダイジェスト 一覧{% endblock %}
+{% block content %}
+<section class="archive">
+<h2>レポート一覧</h2>
+{% if dates %}
+<ul class="date-list">
+{% for date in dates %}
+<li><a href="{{ url_for('report', date=date) }}">{{ date }}</a></li>
+{% endfor %}
+</ul>
+{% else %}
+<p class="empty">レポートがまだありません。<code>python cli.py run</code> を実行して生成してください。</p>
+{% endif %}
+</section>
+{% endblock %}

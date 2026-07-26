@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}ai-digest{% endblock %}</title>
+{% if standalone %}
+<link rel="stylesheet" href="style.css">
+{% else %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% endif %}
+</head>
+<body>
+<header class="site-header">
+<h1><a href="{% if standalone %}../../index.html{% else %}{{ url_for('index') }}{% endif %}">AI ダイジェスト</a></h1>
+<p class="tagline">AI 関連の論文とニュースを日次で要約・分類</p>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer class="site-footer">
+<p>本資料は公開情報を AI により要約・分類した参考情報です。重要な判断に際しては、原典となる一次情報を確認してください。</p>
+</footer>
+</body>
+</html>
