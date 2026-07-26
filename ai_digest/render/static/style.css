@@ -1,0 +1,188 @@
+/*
+ * style.css: Stylesheet of the ai-digest viewer
+ *
+ * The layout mirrors the composite summary image: a header carrying the
+ * date and scope, a grid of colored topic cards and a footer with the
+ * disclaimer. Only system fonts are used so that the pages render
+ * offline and without any external request.
+ */
+
+:root {
+    --background: #e8ecf1;
+    --card: #ffffff;
+    --border: #c7d0da;
+    --text: #1a1a1a;
+    --subtext: #4a5560;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0 0 48px;
+    background: var(--background);
+    color: var(--text);
+    font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+    line-height: 1.7;
+}
+
+.site-header {
+    padding: 24px 32px 16px;
+    background: #12181f;
+    color: #ffffff;
+}
+
+.site-header h1 {
+    margin: 0;
+    font-size: 26px;
+}
+
+.site-header h1 a {
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.tagline {
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: #b7c2cd;
+}
+
+main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px 16px;
+}
+
+h2 {
+    font-size: 22px;
+    margin: 0 0 16px;
+}
+
+.date-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.date-list a {
+    display: block;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.date-list a:hover {
+    border-color: #12181f;
+}
+
+.empty {
+    padding: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.summary {
+    margin: 0 0 28px;
+}
+
+.summary img {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+}
+
+.summary figcaption {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--subtext);
+}
+
+.topics {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.topic {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-top: 5px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px 18px;
+}
+
+.topic h3 {
+    margin: 8px 0 10px;
+    font-size: 17px;
+}
+
+.category {
+    display: inline-block;
+    margin: 0;
+    padding: 2px 10px;
+    border-radius: 3px;
+    color: #ffffff;
+    font-size: 12px;
+}
+
+.thumb {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.bullets {
+    margin: 12px 0 10px;
+    padding-left: 20px;
+    font-size: 14px;
+}
+
+.sources {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 12px;
+    color: var(--subtext);
+}
+
+.sources a {
+    color: var(--subtext);
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 16px;
+    margin: 28px 0 0;
+    font-size: 13px;
+    color: var(--subtext);
+}
+
+.stats dt {
+    font-weight: bold;
+}
+
+.stats dd {
+    margin: 0;
+}
+
+.site-footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 16px;
+    font-size: 12px;
+    color: var(--subtext);
+}

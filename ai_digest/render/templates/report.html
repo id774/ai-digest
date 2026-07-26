@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}AI ダイジェスト {{ date }}{% endblock %}
+{% block content %}
+<section class="report">
+<h2>{{ date }} のダイジェスト</h2>
+
+<figure class="summary">
+{% if standalone %}
+<img src="summary.png" alt="{{ date }} のサマリー画像">
+{% else %}
+<img src="{{ url_for('report_image', date=date) }}" alt="{{ date }} のサマリー画像">
+{% endif %}
+<figcaption>この日のトピックを 1 枚にまとめたサマリー画像</figcaption>
+</figure>
+
+<div class="topics">
+{% for topic in topics %}
+<article class="topic" style="border-top-color: {{ category_color(topic.category) }}">
+<p class="category" style="background-color: {{ category_color(topic.category) }}">{{ topic.category }}</p>
+<h3>{{ loop.index }}. {{ topic.title }}</h3>
+{% if topic.image %}
+{% if standalone %}
+<img class="thumb" src="{{ topic.image }}" alt="{{ topic.title }}">
+{% else %}
+<img class="thumb" src="{{ url_for('report_asset', date=date, filename=topic.image) }}" alt="{{ topic.title }}">
+{% endif %}
+{% endif %}
+<ul class="bullets">
+{% for bullet in topic.bullets %}
+<li>{{ bullet }}</li>
+{% endfor %}
+</ul>
+<ul class="sources">
+{% for source in topic.sources %}
+<li><a href="{{ source.url }}" rel="noopener noreferrer" target="_blank">{{ source.title }}</a></li>
+{% endfor %}
+</ul>
+</article>
+{% endfor %}
+</div>
+
+{% if stats %}
+<dl class="stats">
+{% for key, value in stats.items() %}
+<dt>{{ key }}</dt>
+<dd>{{ value }}</dd>
+{% endfor %}
+</dl>
+{% endif %}
+</section>
+{% endblock %}

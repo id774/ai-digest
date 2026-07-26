@@ -1,0 +1,137 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+########################################################################
+# ai_digest/collectors/news_rss.py: News feed collector
+#
+#  Description:
+#  This module reads the RSS or Atom feeds configured through
+#  NEWS_FEED_URLS and returns the articles published during the look
+#  back window.
+#
+#  Feeds are fetched with requests rather than handed to feedparser
+#  directly, so that the HTTP timeout and the User-Agent of the
+#  application apply to every source. Feeds that are unreachable, that
+#  time out or that cannot be parsed contribute no entries and never
+#  abort the daily batch.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - feedparser, requests
+#
+#  Version History:
+#  v1.0 2026-07-25
+#       Initial release.
+#
+########################################################################
+
+import logging
+import re
+import time
+from datetime import datetime, timedelta, timezone
+from typing import List
+from urllib.parse import urlparse
+
+import feedparser
+import requests
+
+from ai_digest import Entry
+
+# Strip HTML markup from feed summaries; feeds mix plain text, escaped
+# HTML and full articles, and only the readable text is useful here.
+TAG_PATTERN = re.compile(r"<[^>]+>")
+
+# Feed summaries can be whole articles. Only the beginning is needed to
+# let the language model judge and summarize the item.
+SUMMARY_LIMIT = 1200
+
+logger = logging.getLogger(__name__)
+
+
+def _plain_text(html: str) -> str:
+    """ Remove tags and collapse whitespace of a feed summary. """
+    return " ".join(TAG_PATTERN.sub(" ", html).split())[:SUMMARY_LIMIT]
+
+
+def _entry_datetime(raw_entry) -> datetime:
+    """
+    Return the publication time of a feed entry as an aware datetime.
+
+    Feeds that omit both published and updated timestamps are treated
+    as epoch old, which makes the age filter drop them.
+    """
+    parsed = getattr(raw_entry, "published_parsed", None)
+    if parsed is None:
+        parsed = getattr(raw_entry, "updated_parsed", None)
+    if parsed is None:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    return datetime.fromtimestamp(time.mktime(parsed), tz=timezone.utc)
+
+
+def _feed_origin(parsed_feed, url: str) -> str:
+    """ Return the feed title, falling back on its host name. """
+    title = getattr(parsed_feed.feed, "title", "")
+    if title:
+        return " ".join(title.split())
+    return urlparse(url).netloc
+
+
+def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
+            user_agent: str = "ai-digest") -> List[Entry]:
+    """
+    Collect recent news articles from RSS or Atom feeds.
+
+    Args:
+        feed_urls: Feed URLs to read.
+        lookback_hours: Only articles newer than this age are kept.
+        timeout: HTTP timeout in seconds.
+        user_agent: User-Agent header sent to the feed hosts.
+
+    Returns:
+        A list of Entry objects with source_type 'news', newest first.
+        Duplicate URLs across feeds are reported once.
+    """
+    threshold = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    entries: List[Entry] = []
+    seen_urls = set()
+
+    for url in feed_urls:
+        try:
+            response = requests.get(
+                url, timeout=timeout, headers={"User-Agent": user_agent}
+            )
+            response.raise_for_status()
+        except requests.RequestException as error:
+            logger.warning("feed request failed for %s: %s", url, error)
+            continue
+
+        parsed_feed = feedparser.parse(response.content)
+        origin = _feed_origin(parsed_feed, url)
+        for raw_entry in parsed_feed.entries:
+            published = _entry_datetime(raw_entry)
+            if published < threshold:
+                # Feed order is not guaranteed, so keep scanning the
+                # remaining items instead of breaking out of the loop.
+                continue
+            link = getattr(raw_entry, "link", "")
+            if not link or link in seen_urls:
+                continue
+            seen_urls.add(link)
+            summary = getattr(raw_entry, "summary", "")
+            entries.append(Entry(
+                source_type="news",
+                title=" ".join(getattr(raw_entry, "title", "").split()),
+                url=link,
+                summary=_plain_text(summary),
+                published=published.isoformat(),
+                origin=origin,
+            ))
+
+    entries.sort(key=lambda item: item.published, reverse=True)
+    logger.info("collected %d news articles", len(entries))
+    return entries
