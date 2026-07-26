@@ -26,11 +26,18 @@
 #
 #  Environment Variables:
 #  - ANTHROPIC_API_KEY
-#      API key for the Claude API. Required by the batch pipeline, not
-#      by the Flask viewer.
+#      API key for the Claude API. Required by the batch pipeline when
+#      SUMMARIZER_BACKEND is 'claude' (the default), unused otherwise
+#      and unused by the Flask viewer in every case.
 #  - ANTHROPIC_MODEL
 #      Model name used for summarization. Defaults to a Claude Sonnet
 #      model; override it when a different model is preferred.
+#  - SUMMARIZER_BACKEND
+#      'claude' (default) calls the Claude API for clustering,
+#      translation and classification. 'plain' skips the API entirely
+#      and builds topics mechanically, so the batch can run without
+#      ANTHROPIC_API_KEY at the cost of translation and clustering
+#      quality.
 #  - ARXIV_CATEGORIES
 #      Comma separated arXiv categories to collect (e.g. cs.AI,cs.LG).
 #  - ARXIV_MAX_RESULTS
@@ -69,6 +76,10 @@ except ImportError:  # python-dotenv is optional at import time
 
 # Directory holding this file, used to resolve default relative paths.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Valid values of SUMMARIZER_BACKEND. 'claude' calls the Claude API;
+# 'plain' builds topics mechanically and needs no API key.
+SUMMARIZER_BACKENDS = ("claude", "plain")
 
 # Default arXiv categories: artificial intelligence, machine learning
 # and computation and language.
@@ -111,6 +122,14 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_choice(name: str, default: str, choices: tuple) -> str:
+    """ Read a string environment variable constrained to choices. """
+    raw = os.environ.get(name, "").strip().lower()
+    if raw in choices:
+        return raw
+    return default
+
+
 def detect_font_path(explicit: Optional[str] = None) -> Optional[str]:
     """
     Return a usable CJK font path.
@@ -135,6 +154,7 @@ class Config:
 
     anthropic_api_key: Optional[str] = None
     anthropic_model: str = "claude-sonnet-4-5"
+    summarizer_backend: str = "claude"
     arxiv_categories: List[str] = field(default_factory=list)
     arxiv_max_results: int = 60
     news_feed_urls: List[str] = field(default_factory=list)
@@ -180,6 +200,9 @@ def load_config() -> Config:
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
         anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5").strip()
         or "claude-sonnet-4-5",
+        summarizer_backend=_env_choice(
+            "SUMMARIZER_BACKEND", "claude", SUMMARIZER_BACKENDS
+        ),
         arxiv_categories=_split_csv(
             os.environ.get("ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)
         ),

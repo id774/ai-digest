@@ -26,7 +26,8 @@
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt
-#  - ANTHROPIC_API_KEY must be set for the 'run' command
+#  - ANTHROPIC_API_KEY must be set for the 'run' command, unless
+#    SUMMARIZER_BACKEND=plain is used
 #
 #  Usage:
 #      python cli.py run [--date YYYY-MM-DD] [--no-images] [--verbose]
@@ -71,7 +72,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from ai_digest import Entry, Topic, __version__
-from ai_digest.analyzer import summarizer
+from ai_digest.analyzer import plain, summarizer
 from ai_digest.collectors import arxiv, news_rss
 from ai_digest.dedup import deduplicate
 from ai_digest.images import fallback, resolver
@@ -153,11 +154,14 @@ def attach_images(topics: List[Topic], report_dir: str, config: Config,
 def command_run(args: argparse.Namespace, config: Config) -> int:
     """ Execute the whole pipeline for one date. """
     date = args.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    try:
-        api_key = config.require_api_key()
-    except RuntimeError as error:
-        logger.error("%s", error)
-        return 1
+    use_claude = config.summarizer_backend == "claude"
+    api_key = None
+    if use_claude:
+        try:
+            api_key = config.require_api_key()
+        except RuntimeError as error:
+            logger.error("%s", error)
+            return 1
 
     collected = collect_entries(config)
     if not collected:
@@ -167,8 +171,12 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
 
     unique = deduplicate(collected)
     try:
-        topics = summarizer.summarize(unique, api_key, config.anthropic_model,
-                                      config.max_topics)
+        if use_claude:
+            topics = summarizer.summarize(unique, api_key,
+                                          config.anthropic_model,
+                                          config.max_topics)
+        else:
+            topics = plain.summarize(unique, config.max_topics)
     except Exception as error:  # network, quota and protocol errors alike
         logger.error("summarization failed: %s", error)
         return 1
@@ -183,7 +191,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         "collected": len(collected),
         "deduplicated": len(unique),
         "topics": len(topics),
-        "model": config.anthropic_model,
+        "model": config.anthropic_model if use_claude else "plain",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     save_report(config.data_dir, date, topics, stats)
