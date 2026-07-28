@@ -29,6 +29,11 @@
 #      API key for the Claude API. Required by the batch pipeline when
 #      SUMMARIZER_BACKEND is 'claude' (the default), unused otherwise
 #      and unused by the Flask viewer in every case.
+#  - ANTHROPIC_AUTH_TOKEN
+#      Bearer token for an Anthropic-compatible API. Mutually exclusive
+#      with ANTHROPIC_API_KEY.
+#  - ANTHROPIC_BASE_URL
+#      Optional base URL for an Anthropic-compatible API.
 #  - ANTHROPIC_MODEL
 #      Model name used for summarization. Defaults to a Claude Sonnet
 #      model; override it when a different model is preferred.
@@ -153,6 +158,8 @@ class Config:
     """ Immutable snapshot of every runtime setting. """
 
     anthropic_api_key: Optional[str] = None
+    anthropic_auth_token: Optional[str] = None
+    anthropic_base_url: Optional[str] = None
     anthropic_model: str = "claude-sonnet-4-5"
     summarizer_backend: str = "claude"
     arxiv_categories: List[str] = field(default_factory=list)
@@ -180,6 +187,18 @@ class Config:
             )
         return self.anthropic_api_key
 
+    def validate_anthropic_auth(self) -> None:
+        """ Validate the configured Anthropic-compatible authentication. """
+        if self.anthropic_api_key and self.anthropic_auth_token:
+            raise RuntimeError(
+                "Set only one of ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN."
+            )
+        if not self.anthropic_api_key and not self.anthropic_auth_token:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is required. "
+                "Export one or place it in .env."
+            )
+
 
 def load_config() -> Config:
     """
@@ -198,6 +217,8 @@ def load_config() -> Config:
 
     return Config(
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
+        anthropic_auth_token=os.environ.get("ANTHROPIC_AUTH_TOKEN") or None,
+        anthropic_base_url=os.environ.get("ANTHROPIC_BASE_URL") or None,
         anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5").strip()
         or "claude-sonnet-4-5",
         summarizer_backend=_env_choice(

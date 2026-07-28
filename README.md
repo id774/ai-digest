@@ -77,7 +77,9 @@ cp .env.example .env
 $EDITOR .env
 ```
 
-At minimum, set `ANTHROPIC_API_KEY`. The file is listed in `.gitignore` and must never be committed. Variables already exported in the shell take precedence over `.env`, which is what allows a systemd unit or a PaaS to provide the key without a file.
+At minimum, set `ANTHROPIC_API_KEY`. An Anthropic-compatible API can instead use
+`ANTHROPIC_AUTH_TOKEN`. The `.env` file is ignored by Git and must never be committed.
+Exported variables take precedence over `.env` values.
 
 ### 5. Verify the installation
 
@@ -94,7 +96,9 @@ All settings are read from environment variables, optionally through `.env`. The
 
 | Variable | Default | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Claude API key. Required by `cli.py run` when `SUMMARIZER_BACKEND` is `claude`, unused by the viewer. |
+| `ANTHROPIC_API_KEY` | none | Claude API key. Mutually exclusive with `ANTHROPIC_AUTH_TOKEN`. |
+| `ANTHROPIC_AUTH_TOKEN` | none | Bearer token for an Anthropic-compatible API. |
+| `ANTHROPIC_BASE_URL` | none | Base URL for an Anthropic-compatible API. |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Model used for summarization. |
 | `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
@@ -107,6 +111,22 @@ All settings are read from environment variables, optionally through `.env`. The
 | `HTTP_TIMEOUT` | `15` | Timeout in seconds of every outgoing HTTP request. |
 | `USER_AGENT` | `ai-digest/1.0 ...` | User-Agent sent with every outgoing request. |
 | `PORT` | `5000` | Port of the development server and of gunicorn. |
+
+### Anthropic-compatible APIs
+
+Set a base URL and Bearer token to use an Anthropic-compatible Messages API.
+For example, Sakura AI Engine can be configured as follows:
+
+```env
+ANTHROPIC_API_KEY=
+ANTHROPIC_AUTH_TOKEN=<UUID>:<secret>
+ANTHROPIC_BASE_URL=https://api.ai.sakura.ad.jp
+ANTHROPIC_MODEL=preview/Kimi-K2.6
+SUMMARIZER_BACKEND=claude
+```
+
+Do not set `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` together.
+The provider must support `tools`, forced `tool_choice`, and `tool_use` responses.
 
 ### Japanese font
 
