@@ -3,6 +3,10 @@ ai-digest Repository Version History
 
 v0.2 (Release Date: TBD)
 ------------------------
+- Add the 'demo' command, which builds a report from the sample bundled
+  in ai_digest/demo without collecting anything or calling the API, and
+  document the output with screenshots captured from it by
+  tools/capture_screens.py.
 - Add SUMMARIZER_BACKEND=plain, letting the batch pipeline run without
   an Anthropic API key by building topics mechanically instead of
   calling the Claude API.

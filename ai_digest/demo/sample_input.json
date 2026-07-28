@@ -1,0 +1,153 @@
+{
+  "date": "2026-07-28",
+  "note": "Sample input of 'python cli.py demo'. 'entries' stands in for a collection run, 'build_report' stands in for the arguments of the build_report tool call returned by the Claude API. See doc/DEMO.md.",
+  "entries": [
+    {
+      "source_type": "paper",
+      "title": "Attention Is All You Need",
+      "url": "https://arxiv.org/abs/1706.03762",
+      "summary": "Introduces the Transformer, a sequence transduction architecture built solely on attention mechanisms, without recurrence or convolution.",
+      "published": "2017-06-12T00:00:00+00:00",
+      "origin": "arXiv cs.CL"
+    },
+    {
+      "source_type": "paper",
+      "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+      "url": "https://arxiv.org/abs/1810.04805",
+      "summary": "Pre-trains deep bidirectional representations from unlabeled text and fine-tunes them for a range of language understanding tasks.",
+      "published": "2018-10-11T00:00:00+00:00",
+      "origin": "arXiv cs.CL"
+    },
+    {
+      "source_type": "paper",
+      "title": "Language Models are Few-Shot Learners",
+      "url": "https://arxiv.org/abs/2005.14165",
+      "summary": "Trains a 175 billion parameter autoregressive language model and evaluates it in the few-shot setting without gradient updates.",
+      "published": "2020-05-28T00:00:00+00:00",
+      "origin": "arXiv cs.CL"
+    },
+    {
+      "source_type": "paper",
+      "title": "Training language models to follow instructions with human feedback",
+      "url": "https://arxiv.org/abs/2203.02155",
+      "summary": "Fine-tunes a language model on human demonstrations and then optimizes it against a reward model learned from human rankings.",
+      "published": "2022-03-04T00:00:00+00:00",
+      "origin": "arXiv cs.CL"
+    },
+    {
+      "source_type": "paper",
+      "title": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+      "url": "https://arxiv.org/abs/2201.11903",
+      "summary": "Shows that prompting with intermediate reasoning steps improves accuracy on arithmetic, commonsense and symbolic reasoning tasks.",
+      "published": "2022-01-28T00:00:00+00:00",
+      "origin": "arXiv cs.CL"
+    },
+    {
+      "source_type": "paper",
+      "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "url": "https://arxiv.org/abs/2106.09685",
+      "summary": "Freezes the pre-trained weights and injects trainable low-rank matrices, reducing the number of parameters updated during adaptation.",
+      "published": "2021-06-17T00:00:00+00:00",
+      "origin": "arXiv cs.CL"
+    },
+    {
+      "source_type": "paper",
+      "title": "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness",
+      "url": "https://arxiv.org/abs/2205.14135",
+      "summary": "Reorders the attention computation around the GPU memory hierarchy to cut reads and writes while keeping the result exact.",
+      "published": "2022-05-27T00:00:00+00:00",
+      "origin": "arXiv cs.LG"
+    },
+    {
+      "source_type": "paper",
+      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "url": "https://arxiv.org/abs/2005.11401",
+      "summary": "Combines a document retriever with a sequence-to-sequence generator so that knowledge lives in a swappable index rather than in the weights.",
+      "published": "2020-05-22T00:00:00+00:00",
+      "origin": "arXiv cs.CL"
+    },
+    {
+      "source_type": "paper",
+      "title": "LLaMA: Open and Efficient Foundation Language Models",
+      "url": "https://arxiv.org/abs/2302.13971",
+      "summary": "Reports a family of foundation language models trained exclusively on publicly available corpora.",
+      "published": "2023-02-27T00:00:00+00:00",
+      "origin": "arXiv cs.CL"
+    },
+    {
+      "source_type": "paper",
+      "title": "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity",
+      "url": "https://arxiv.org/abs/2101.03961",
+      "summary": "Routes each token to a single expert so that parameter count grows without a proportional increase in computation.",
+      "published": "2021-01-11T00:00:00+00:00",
+      "origin": "arXiv cs.LG"
+    }
+  ],
+  "build_report": {
+    "topics": [
+      {
+        "category": "基盤モデル",
+        "title": "注意機構のみで系列変換を行うアーキテクチャ",
+        "bullets": [
+          "再帰も畳み込みも用いず、注意機構だけで系列変換を構成している。",
+          "英独・英仏の機械翻訳で、当時の最高精度を更新したと報告している。",
+          "学習を並列化しやすく、訓練に要する時間を大きく短縮したとしている。",
+          "同じ構成を双方向に事前学習し、言語理解の各課題へ転用している。"
+        ],
+        "source_indexes": [0, 1]
+      },
+      {
+        "category": "スケーリング則",
+        "title": "パラメータ規模の拡大がもたらす能力の変化",
+        "bullets": [
+          "1750 億パラメータの自己回帰言語モデルを訓練したと述べている。",
+          "勾配更新を伴わず、文脈中の少数事例のみから課題を解けるとしている。",
+          "疎な専門家混合により、計算量を抑えたまま規模を拡大している。",
+          "公開データのみで訓練した基盤モデル群も併せて報告されている。"
+        ],
+        "source_indexes": [2, 9, 8]
+      },
+      {
+        "category": "指示追従",
+        "title": "人間の選好を用いた言語モデルの調整",
+        "bullets": [
+          "人手で作成した指示と応答の対で、事前学習済みモデルを微調整している。",
+          "人間による順位付けから報酬モデルを学習し、強化学習で最適化している。",
+          "13 億パラメータの調整済みモデルの出力が、1750 億の元モデルより好まれたとする。"
+        ],
+        "source_indexes": [3]
+      },
+      {
+        "category": "推論能力",
+        "title": "中間推論過程を促すプロンプト手法",
+        "bullets": [
+          "解答に至る中間手順を例示するプロンプトを与える手法を提案している。",
+          "算術・常識・記号推論の各課題で、正答率が向上したと報告している。",
+          "効果は十分な規模のモデルでのみ現れる性質だとしている。"
+        ],
+        "source_indexes": [4]
+      },
+      {
+        "category": "学習・推論効率",
+        "title": "低ランク適応と入出力を考慮した注意計算",
+        "bullets": [
+          "事前学習済みの重みを固定し、低ランク行列のみを学習する手法を示している。",
+          "更新するパラメータ数を大きく減らしつつ、精度は同等だとしている。",
+          "GPU のメモリ階層に合わせ、注意機構の読み書き回数を削減している。",
+          "近似を用いない厳密な計算のまま、高速化と省メモリを両立したとする。"
+        ],
+        "source_indexes": [5, 6]
+      },
+      {
+        "category": "検索拡張生成",
+        "title": "外部知識の検索と生成の組み合わせ",
+        "bullets": [
+          "文書検索器と系列生成モデルを結合した構成を提案している。",
+          "知識集約型の課題で、重みだけに知識を持つ手法を上回ったとしている。",
+          "索引を差し替えるだけで知識を更新できる点を利点として挙げている。"
+        ],
+        "source_indexes": [7]
+      }
+    ]
+  }
+}
