@@ -10,6 +10,27 @@ Every topic carries an illustration. The application first tries to obtain a rea
 
 The Claude API is only used for one stage: clustering, translating and classifying the collected entries into topics. Collection (arXiv, RSS/Atom) and every image path already run without an API key. Setting `SUMMARIZER_BACKEND=plain` removes the last dependency and runs the whole pipeline offline except for fetching the feeds themselves; see [Standalone use, no API key](#standalone-use-no-api-key).
 
+## Sample output
+
+The composite PNG written for one day. It is drawn with Pillow rather than screenshotted from the HTML, so the batch needs no headless browser:
+
+![Composite summary image of one day](doc/screenshots/summary.png)
+
+The same day in the Flask viewer, which shows the composite image first and then one card per topic, each with its category label, its bullet points and its sources:
+
+![Report page of the viewer](doc/screenshots/report-desktop.png)
+
+The archive index, the entry point of the viewer:
+
+![Archive index of the viewer](doc/screenshots/index-desktop.png)
+
+These pages come from the application's own renderers and from the real viewer, but the report behind them is a checked-in sample rather than a live run: its entries stand in for a collection, and its Japanese summaries were written by Claude and stored instead of being requested from the API on every rebuild. [`doc/sample/README.md`](doc/sample/README.md) states exactly what was substituted, and how to rebuild the screenshots from a run of your own:
+
+```sh
+python cli.py run                 # collects and calls the Claude API
+python tools/capture_screens.py   # captures the newest report
+```
+
 ## Features
 
 - **Daily pipeline in a single command**: collect, deduplicate, summarize, illustrate, render
@@ -319,12 +340,19 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 │       ├── compose_image.py        composite summary PNG
 │       ├── templates/              Jinja2 templates
 │       └── static/style.css
+├── tools/
+│   ├── make_sample_report.py       documentation sample, no API key needed
+│   └── capture_screens.py          screenshots of the viewer
 ├── data/reports/                   generated reports, not tracked
 └── doc/
+    ├── sample/                     input and provenance of the sample report
+    ├── screenshots/                images embedded in this README
     ├── LICENSE
     ├── COPYING
     └── COPYING.LESSER
 ```
+
+The two scripts under `tools/` are documentation helpers. They are not imported by the application, and `playwright`, which only `capture_screens.py` needs, is deliberately absent from `requirements.txt` so that neither the batch nor the viewer pulls in a browser.
 
 ## Contribution
 
