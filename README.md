@@ -10,29 +10,6 @@ Every topic carries an illustration. The application first tries to obtain a rea
 
 The Claude API is only used for one stage: clustering, translating and classifying the collected entries into topics. Collection (arXiv, RSS/Atom) and every image path already run without an API key. Setting `SUMMARIZER_BACKEND=plain` removes the last dependency and runs the whole pipeline offline except for fetching the feeds themselves; see [Standalone use, no API key](#standalone-use-no-api-key).
 
-## Sample output
-
-The composite PNG written for one day. It is drawn with Pillow rather than screenshotted from the HTML, so the batch needs no headless browser:
-
-![Composite summary image of one day](doc/screenshots/summary.png)
-
-The same day in the Flask viewer, which shows the composite image first and then one card per topic, each with its category label, its bullet points and its sources:
-
-![Report page of the viewer](doc/screenshots/report-desktop.png)
-
-The archive index, the entry point of the viewer:
-
-![Archive index of the viewer](doc/screenshots/index-desktop.png)
-
-These pages were captured from a demo run, so they can be reproduced without a key and without collecting anything:
-
-```sh
-python cli.py demo          # build the bundled sample report
-flask --app app run         # browse it at http://127.0.0.1:5000/
-```
-
-See [Demo mode](#demo-mode) below and [`doc/DEMO.md`](doc/DEMO.md), which states exactly which two stages the demo replaces and how it differs from a collected report.
-
 ## Features
 
 - **Daily pipeline in a single command**: collect, deduplicate, summarize, illustrate, render
@@ -183,24 +160,6 @@ In this mode:
 This trades the quality of the Japanese summary and the topic grouping for zero setup beyond `pip install -r requirements.txt`. Switch back to `SUMMARIZER_BACKEND=claude` (or unset it, since that is the default) whenever an API key becomes available again; both backends write the same `report.json` shape, and `cli.py render` works on reports produced by either one.
 
 ## Usage
-
-### Demo mode
-
-```sh
-python cli.py demo
-flask --app app run
-```
-
-The demo builds a report from the sample bundled in `ai_digest/demo/`. It collects nothing and calls no API, so it runs on a fresh clone with neither a key nor outbound access, and it is the quickest way to see what a finished report looks like. The result is a normal report under `data/reports/`, which the viewer lists next to the collected ones and marks with `"model": "demo"` in its statistics.
-
-```sh
-python cli.py demo --date 2026-08-01   # file it under another date
-python cli.py demo --input mine.json   # use another sample
-```
-
-The date defaults to the one recorded in the sample, so repeated runs overwrite the same directory. Delete `data/reports/<date>/` to remove the demo again. [`doc/DEMO.md`](doc/DEMO.md) describes what the demo replaces and how it differs from a collected report.
-
-This is not the same as `SUMMARIZER_BACKEND=plain`, which still collects from the network and only skips the API; see [Standalone use, no API key](#standalone-use-no-api-key).
 
 ### Generate today's report
 
@@ -376,6 +335,49 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 ```
 
 `tools/capture_screens.py` is a documentation helper. It is not imported by the application, and `playwright`, which only that script needs, is deliberately absent from `requirements.txt` so that neither the batch nor the viewer pulls in a browser.
+
+## Demo and sample output
+
+### Demo mode
+
+```sh
+python cli.py demo
+flask --app app run
+```
+
+The demo builds a report from the sample bundled in `ai_digest/demo/`. It collects nothing and calls no API, so it runs on a fresh clone with neither a key nor outbound access, and it is the quickest way to see what a finished report looks like. The result is a normal report under `data/reports/`, which the viewer lists next to the collected ones and marks with `"model": "demo"` in its statistics.
+
+```sh
+python cli.py demo --date 2026-08-01   # file it under another date
+python cli.py demo --input mine.json   # use another sample
+```
+
+The date defaults to the one recorded in the sample, so repeated runs overwrite the same directory. Delete `data/reports/<date>/` to remove the demo again. [`doc/DEMO.md`](doc/DEMO.md) describes what the demo replaces and how it differs from a collected report.
+
+This is not the same as `SUMMARIZER_BACKEND=plain`, which still collects from the network and only skips the API; see [Standalone use, no API key](#standalone-use-no-api-key).
+
+### Sample output
+
+The composite PNG written for one day. It is drawn with Pillow rather than screenshotted from the HTML, so the batch needs no headless browser:
+
+![Composite summary image of one day](doc/screenshots/summary.png)
+
+The same day in the Flask viewer, which shows the composite image first and then one card per topic, each with its category label, its bullet points and its sources:
+
+![Report page of the viewer](doc/screenshots/report-desktop.png)
+
+The archive index, the entry point of the viewer:
+
+![Archive index of the viewer](doc/screenshots/index-desktop.png)
+
+These pages were captured from a demo run, so they can be reproduced without a key and without collecting anything:
+
+```sh
+python cli.py demo          # build the bundled sample report
+flask --app app run         # browse it at http://127.0.0.1:5000/
+```
+
+See [Demo mode](#demo-mode) above and [`doc/DEMO.md`](doc/DEMO.md), which states exactly which two stages the demo replaces and how it differs from a collected report.
 
 ## Contribution
 
