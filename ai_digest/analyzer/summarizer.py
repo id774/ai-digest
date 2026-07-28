@@ -161,10 +161,13 @@ def _extract_tool_input(message: Any) -> Dict[str, Any]:
     raise RuntimeError("Claude did not return a build_report tool call.")
 
 
-def _to_topics(payload: Dict[str, Any], entries: List[Entry],
-               max_topics: int) -> List[Topic]:
+def to_topics(payload: Dict[str, Any], entries: List[Entry],
+              max_topics: int) -> List[Topic]:
     """
     Convert the raw tool arguments into Topic objects.
+
+    This is public because ai_digest.demo feeds a stored payload through
+    it, so that the demo report is validated exactly like a live one.
 
     Source indexes outside the input range are ignored, and topics
     without any usable source or bullet are dropped, so that a partial
@@ -253,7 +256,7 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         }],
     )
 
-    topics = _to_topics(_extract_tool_input(message), candidates, max_topics)
+    topics = to_topics(_extract_tool_input(message), candidates, max_topics)
     logger.info("summarized %d entries into %d topics",
                 len(candidates), len(topics))
     return topics

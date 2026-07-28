@@ -3,10 +3,10 @@ ai-digest Repository Version History
 
 v0.2 (Release Date: TBD)
 ------------------------
-- Document the output with screenshots of the composite image and of the
-  Flask viewer, add tools/make_sample_report.py which builds the sample
-  report behind them without an API key, and tools/capture_screens.py
-  which captures the viewer of any stored report.
+- Add the 'demo' command, which builds a report from the sample bundled
+  in ai_digest/demo without collecting anything or calling the API, and
+  document the output with screenshots captured from it by
+  tools/capture_screens.py.
 - Add SUMMARIZER_BACKEND=plain, letting the batch pipeline run without
   an Anthropic API key by building topics mechanically instead of
   calling the Claude API.

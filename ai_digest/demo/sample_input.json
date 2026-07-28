@@ -1,6 +1,6 @@
 {
   "date": "2026-07-28",
-  "note": "Sample input for tools/make_sample_report.py. 'entries' stands in for a collection run, 'build_report' stands in for the arguments of the build_report tool call returned by the Claude API. See doc/sample/README.md.",
+  "note": "Sample input of 'python cli.py demo'. 'entries' stands in for a collection run, 'build_report' stands in for the arguments of the build_report tool call returned by the Claude API. See doc/DEMO.md.",
   "entries": [
     {
       "source_type": "paper",

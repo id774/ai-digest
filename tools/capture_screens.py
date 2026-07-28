@@ -11,9 +11,10 @@
 #  per page into doc/screenshots/.
 #
 #  It reads whatever DATA_DIR contains, so the screenshots reflect a
-#  real batch run when one has been performed:
+#  real batch run when one has been performed, and the bundled demo
+#  otherwise:
 #
-#      python cli.py run                  # needs an API key
+#      python cli.py demo                 # or 'run', which needs a key
 #      python tools/capture_screens.py
 #
 #  The viewer never calls the Claude API, so this script needs no API
@@ -169,7 +170,7 @@ def main(argv=None):
 
     dates = list_dates(data_dir)
     if not dates:
-        logger.error("no report in %s; run 'python cli.py run' first",
+        logger.error("no report in %s; run 'python cli.py demo' first",
                      data_dir)
         return 1
     date = args.date or dates[0]

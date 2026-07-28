@@ -24,12 +24,14 @@ The archive index, the entry point of the viewer:
 
 ![Archive index of the viewer](doc/screenshots/index-desktop.png)
 
-These pages come from the application's own renderers and from the real viewer, but the report behind them is a checked-in sample rather than a live run: its entries stand in for a collection, and its Japanese summaries were written by Claude and stored instead of being requested from the API on every rebuild. [`doc/sample/README.md`](doc/sample/README.md) states exactly what was substituted, and how to rebuild the screenshots from a run of your own:
+These pages were captured from a demo run, so they can be reproduced without a key and without collecting anything:
 
 ```sh
-python cli.py run                 # collects and calls the Claude API
-python tools/capture_screens.py   # captures the newest report
+python cli.py demo          # build the bundled sample report
+flask --app app run         # browse it at http://127.0.0.1:5000/
 ```
+
+See [Demo mode](#demo-mode) below and [`doc/DEMO.md`](doc/DEMO.md), which states exactly which two stages the demo replaces and how it differs from a collected report.
 
 ## Features
 
@@ -182,6 +184,24 @@ This trades the quality of the Japanese summary and the topic grouping for zero 
 
 ## Usage
 
+### Demo mode
+
+```sh
+python cli.py demo
+flask --app app run
+```
+
+The demo builds a report from the sample bundled in `ai_digest/demo/`. It collects nothing and calls no API, so it runs on a fresh clone with neither a key nor outbound access, and it is the quickest way to see what a finished report looks like. The result is a normal report under `data/reports/`, which the viewer lists next to the collected ones and marks with `"model": "demo"` in its statistics.
+
+```sh
+python cli.py demo --date 2026-08-01   # file it under another date
+python cli.py demo --input mine.json   # use another sample
+```
+
+The date defaults to the one recorded in the sample, so repeated runs overwrite the same directory. Delete `data/reports/<date>/` to remove the demo again. [`doc/DEMO.md`](doc/DEMO.md) describes what the demo replaces and how it differs from a collected report.
+
+This is not the same as `SUMMARIZER_BACKEND=plain`, which still collects from the network and only skips the API; see [Standalone use, no API key](#standalone-use-no-api-key).
+
 ### Generate today's report
 
 ```sh
@@ -215,6 +235,7 @@ LOOKBACK_HOURS=72 python cli.py run   # widen the window instead of waiting
 ### Useful variants
 
 ```sh
+python cli.py demo                    # build the bundled sample, no key needed
 python cli.py run --date 2026-07-25   # file the report under another date
 python cli.py run --no-images         # skip scraping, generate every card
 python cli.py run --verbose           # debug level logging
@@ -332,6 +353,9 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 │   │   └── news_rss.py             RSS and Atom collector
 │   ├── analyzer/
 │   │   └── summarizer.py           Claude tool use call
+│   ├── demo/
+│   │   ├── __init__.py             bundled demo report
+│   │   └── sample_input.json       its entries and build_report payload
 │   ├── images/
 │   │   ├── resolver.py             ar5iv figure and Open Graph scraping
 │   │   └── fallback.py             locally generated topic cards
@@ -341,18 +365,17 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 │       ├── templates/              Jinja2 templates
 │       └── static/style.css
 ├── tools/
-│   ├── make_sample_report.py       documentation sample, no API key needed
 │   └── capture_screens.py          screenshots of the viewer
 ├── data/reports/                   generated reports, not tracked
 └── doc/
-    ├── sample/                     input and provenance of the sample report
+    ├── DEMO.md                     demo mode and the screenshots
     ├── screenshots/                images embedded in this README
     ├── LICENSE
     ├── COPYING
     └── COPYING.LESSER
 ```
 
-The two scripts under `tools/` are documentation helpers. They are not imported by the application, and `playwright`, which only `capture_screens.py` needs, is deliberately absent from `requirements.txt` so that neither the batch nor the viewer pulls in a browser.
+`tools/capture_screens.py` is a documentation helper. It is not imported by the application, and `playwright`, which only that script needs, is deliberately absent from `requirements.txt` so that neither the batch nor the viewer pulls in a browser.
 
 ## Contribution
 

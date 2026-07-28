@@ -18,6 +18,10 @@
 #  from the Flask viewer: the viewer only reads what this script wrote,
 #  so a failed run never takes the site down.
 #
+#  The 'demo' command stores a report built from the sample bundled in
+#  ai_digest/demo, skipping collection and summarization, so that the
+#  viewer has something to show before an API key is configured.
+#
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
@@ -31,6 +35,7 @@
 #
 #  Usage:
 #      python cli.py run [--date YYYY-MM-DD] [--no-images] [--verbose]
+#      python cli.py demo [--date YYYY-MM-DD] [--input FILE] [--verbose]
 #      python cli.py render DATE
 #      python cli.py list
 #      python cli.py -h | --help
@@ -39,13 +44,20 @@
 #  Options:
 #  - run
 #      Execute the whole pipeline and store a new report.
+#  - demo
+#      Store a report built from the sample shipped in ai_digest/demo,
+#      without collecting anything and without calling the API. Use it
+#      to see a finished report before configuring a key.
 #  - render DATE
 #      Rebuild the HTML and the summary image of a stored report,
 #      without collecting or calling the API again.
 #  - list
 #      Print the dates of the stored reports.
 #  - --date YYYY-MM-DD
-#      Date the report is filed under. Defaults to today, UTC.
+#      Date the report is filed under. Defaults to today, UTC, and to
+#      the date recorded in the sample for 'demo'.
+#  - --input FILE
+#      Sample used by 'demo' instead of the bundled one.
 #  - --no-images
 #      Skip the scraping stage and generate every topic card locally.
 #      Useful for a quick run or on a host without outbound access to
@@ -71,7 +83,7 @@ import sys
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from ai_digest import Entry, Topic, __version__
+from ai_digest import Entry, Topic, __version__, demo
 from ai_digest.analyzer import plain, summarizer
 from ai_digest.collectors import arxiv, news_rss
 from ai_digest.dedup import deduplicate
@@ -202,6 +214,37 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def command_demo(args: argparse.Namespace, config: Config) -> int:
+    """ Build the bundled demo report, without network or API key. """
+    try:
+        sample_date, topics, collected = demo.build_topics(config.max_topics,
+                                                           args.input)
+    except (KeyError, OSError, ValueError) as error:
+        logger.error("cannot read the demo sample: %s", error)
+        return 1
+    if not topics:
+        logger.error("the demo sample yielded no usable topic")
+        return 1
+
+    date = args.date or sample_date
+    report_dir = ensure_report_dir(config.data_dir, date)
+    # Scraping stays off, so that a demo run touches nothing but disk.
+    attach_images(topics, report_dir, config, scrape=False)
+
+    stats = {
+        "collected": collected,
+        "deduplicated": collected,
+        "topics": len(topics),
+        "model": "demo",
+        "generated_at": "{0}T00:00:00+00:00".format(date),
+    }
+    save_report(config.data_dir, date, topics, stats)
+    compose_image.compose(date, topics, report_dir, config.font_path)
+    build.write_report_html(report_dir, date, topics, stats)
+    logger.info("demo report for %s written to %s", date, report_dir)
+    return 0
+
+
 def command_render(args: argparse.Namespace, config: Config) -> int:
     """ Rebuild the artifacts of a stored report. """
     report = load_report(config.data_dir, args.date)
@@ -241,6 +284,15 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     run_parser.add_argument("--verbose", action="store_true",
                             help="log at debug level")
     run_parser.set_defaults(handler=command_run)
+
+    demo_parser = subparsers.add_parser(
+        "demo", help="build the bundled sample report, no API key needed")
+    demo_parser.add_argument("--date", help="report date, YYYY-MM-DD")
+    demo_parser.add_argument("--input", help="sample JSON to use instead "
+                                             "of the bundled one")
+    demo_parser.add_argument("--verbose", action="store_true",
+                             help="log at debug level")
+    demo_parser.set_defaults(handler=command_demo)
 
     render_parser = subparsers.add_parser(
         "render", help="rebuild the artifacts of a stored report")
