@@ -34,7 +34,7 @@
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ai_digest import Entry, Topic
 
@@ -195,8 +195,29 @@ def _to_topics(payload: Dict[str, Any], entries: List[Entry],
     return topics
 
 
-def summarize(entries: List[Entry], api_key: str, model: str,
-              max_topics: int) -> List[Topic]:
+def _build_client(api_key: Optional[str], auth_token: Optional[str],
+                  base_url: Optional[str]) -> Any:
+    """ Build a client for Anthropic or an Anthropic-compatible API. """
+    import anthropic
+
+    if api_key and auth_token:
+        raise RuntimeError("Configure either an API key or a Bearer token, not both.")
+    if not api_key and not auth_token:
+        raise RuntimeError("Anthropic authentication is not configured.")
+
+    options: Dict[str, str] = {}
+    if api_key:
+        options["api_key"] = api_key
+    else:
+        options["auth_token"] = auth_token or ""
+    if base_url:
+        options["base_url"] = base_url
+    return anthropic.Anthropic(**options)
+
+
+def summarize(entries: List[Entry], api_key: Optional[str], model: str,
+              max_topics: int, base_url: Optional[str] = None,
+              auth_token: Optional[str] = None) -> List[Topic]:
     """
     Cluster and summarize collected entries with the Claude API.
 
@@ -205,6 +226,8 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         api_key: Anthropic API key.
         model: Model identifier, e.g. 'claude-sonnet-4-5'.
         max_topics: Maximum number of topics to keep.
+        base_url: Optional Anthropic-compatible API base URL.
+        auth_token: Optional Bearer token used instead of an API key.
 
     Returns:
         Topics in decreasing order of importance, without images yet.
@@ -216,12 +239,8 @@ def summarize(entries: List[Entry], api_key: str, model: str,
     if not entries:
         return []
 
-    # Imported lazily so that the Flask viewer, which never summarizes,
-    # can run without the anthropic package installed.
-    import anthropic
-
     candidates = entries[:MAX_INPUT_ENTRIES]
-    client = anthropic.Anthropic(api_key=api_key)
+    client = _build_client(api_key, auth_token, base_url)
     message = client.messages.create(
         model=model,
         max_tokens=MAX_OUTPUT_TOKENS,

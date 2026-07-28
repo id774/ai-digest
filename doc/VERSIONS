@@ -6,6 +6,7 @@ v0.2 (Release Date: TBD)
 - Add SUMMARIZER_BACKEND=plain, letting the batch pipeline run without
   an Anthropic API key by building topics mechanically instead of
   calling the Claude API.
+- Support custom Anthropic-compatible API URLs and Bearer authentication.
 
 v0.1 (2026-07-26)
 -----------------

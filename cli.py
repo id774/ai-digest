@@ -155,10 +155,9 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
     """ Execute the whole pipeline for one date. """
     date = args.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     use_claude = config.summarizer_backend == "claude"
-    api_key = None
     if use_claude:
         try:
-            api_key = config.require_api_key()
+            config.validate_anthropic_auth()
         except RuntimeError as error:
             logger.error("%s", error)
             return 1
@@ -172,9 +171,11 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
     unique = deduplicate(collected)
     try:
         if use_claude:
-            topics = summarizer.summarize(unique, api_key,
+            topics = summarizer.summarize(unique, config.anthropic_api_key,
                                           config.anthropic_model,
-                                          config.max_topics)
+                                          config.max_topics,
+                                          config.anthropic_base_url,
+                                          config.anthropic_auth_token)
         else:
             topics = plain.summarize(unique, config.max_topics)
     except Exception as error:  # network, quota and protocol errors alike
