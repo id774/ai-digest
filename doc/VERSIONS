@@ -1,8 +1,8 @@
 ai-digest Repository Version History
 ====================================
 
-v0.2 (Release Date: TBD)
-------------------------
+v1.0 (2026-07-31)
+-----------------
 - Add the 'demo' command, which builds a report from the sample bundled
   in ai_digest/demo without collecting anything or calling the API, and
   document the output with screenshots captured from it by
