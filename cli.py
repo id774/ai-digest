@@ -76,7 +76,9 @@
 #  v1.1 2026-08-02
 #       Stop 'run' on an unknown SUMMARIZER_BACKEND value, and validate
 #       the thinking and tool choice settings before collecting
-#       anything, so that a bad value costs no API call.
+#       anything, so that a bad value costs no API call. Run the OpenAI
+#       compatible backend when it is selected, and pass the text JSON
+#       fallback and the retry budget to the summarizer.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -90,7 +92,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from ai_digest import Entry, Topic, __version__, demo
-from ai_digest.analyzer import plain, summarizer
+from ai_digest.analyzer import openai_compat, plain, summarizer
 from ai_digest.collectors import arxiv, news_rss
 from ai_digest.dedup import deduplicate
 from ai_digest.images import fallback, resolver
@@ -169,6 +171,15 @@ def attach_images(topics: List[Topic], report_dir: str, config: Config,
                     topic.image_credit)
 
 
+def _model_label(config: Config, use_claude: bool, use_openai: bool) -> str:
+    """ Name the model a report was built with, for its statistics. """
+    if use_claude:
+        return config.anthropic_model
+    if use_openai:
+        return config.openai_model
+    return "plain"
+
+
 def command_run(args: argparse.Namespace, config: Config) -> int:
     """ Execute the whole pipeline for one date. """
     date = args.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -179,13 +190,16 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         return 1
 
     use_claude = config.summarizer_backend == "claude"
-    if use_claude:
-        try:
+    use_openai = config.summarizer_backend == "openai"
+    try:
+        if use_claude:
             config.validate_anthropic_auth()
             config.validate_anthropic_options()
-        except RuntimeError as error:
-            logger.error("%s", error)
-            return 1
+        elif use_openai:
+            config.validate_openai_options()
+    except RuntimeError as error:
+        logger.error("%s", error)
+        return 1
 
     collected = collect_entries(config)
     if not collected:
@@ -205,6 +219,18 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
                 auth_token=config.anthropic_auth_token,
                 thinking_mode=config.anthropic_thinking_mode,
                 tool_choice_mode=config.anthropic_tool_choice_mode,
+                text_json_fallback=(
+                    config.anthropic_text_json_fallback == "enabled"),
+                max_retries=config.anthropic_max_retries,
+            )
+        elif use_openai:
+            topics = openai_compat.summarize(
+                unique,
+                api_key=config.openai_api_key or "",
+                model=config.openai_model,
+                max_topics=config.max_topics,
+                base_url=config.openai_base_url,
+                max_retries=config.anthropic_max_retries,
             )
         else:
             topics = plain.summarize(unique, config.max_topics)
@@ -222,7 +248,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         "collected": len(collected),
         "deduplicated": len(unique),
         "topics": len(topics),
-        "model": config.anthropic_model if use_claude else "plain",
+        "model": _model_label(config, use_claude, use_openai),
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     save_report(config.data_dir, date, topics, stats)

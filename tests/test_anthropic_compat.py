@@ -84,7 +84,9 @@ class ConfigRequestOptionTest(unittest.TestCase):
             loaded.validate_anthropic_options()
 
     def test_rejects_an_unknown_tool_choice_mode(self):
-        loaded = self.load({"ANTHROPIC_TOOL_CHOICE_MODE": "any"})
+        # 'any' used to stand for an unknown value here; it is a
+        # supported mode now, so the check needs a real typo.
+        loaded = self.load({"ANTHROPIC_TOOL_CHOICE_MODE": "always"})
 
         with self.assertRaisesRegex(RuntimeError,
                                     "ANTHROPIC_TOOL_CHOICE_MODE"):

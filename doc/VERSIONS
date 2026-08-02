@@ -24,6 +24,25 @@ v1.0.1 (Release Date: TBD)
   returns a tool_use block. The defaults leave the request Anthropic
   receives unchanged, and an unknown value stops the run before
   anything is collected.
+- Add 'any' to ANTHROPIC_TOOL_CHOICE_MODE, which demands a tool without
+  naming one, for an endpoint that drops a named tool_choice but
+  honours an unnamed demand; build_report being the only tool offered,
+  both reach the same place.
+- Add ANTHROPIC_TEXT_JSON_FALLBACK, which reads a report an endpoint
+  wrote as JSON text rather than as a tool call. It is off by default
+  and accepts only a text block parsing into an object with a topics
+  list, so that prose is never published as a report, and it names
+  itself in a warning whenever it is used.
+- Add ANTHROPIC_MAX_RETRIES, so that a run can be made to spend exactly
+  one request while two endpoint settings are compared, without
+  editing the summarizer as the earlier investigation did.
+- Add SUMMARIZER_BACKEND=openai, an OpenAI-compatible Chat Completions
+  path for a provider whose Anthropic-compatible endpoint returns no
+  usable tool call. It sends the same prompt and the same tool schema,
+  reads the answer from tool_calls[].function.arguments and validates
+  it through the same to_topics(), so a report does not differ by the
+  route it took. The openai package stays out of requirements.txt and
+  is imported only when that backend runs.
 - Name the stop reason and the content block types when the summarizer
   finds no build_report call, report a truncated or unparsable set of
   arguments as such instead of letting a partial report through as an
