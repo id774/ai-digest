@@ -86,9 +86,10 @@ Exported variables take precedence over `.env` values.
 ```sh
 python cli.py --version
 python cli.py list
+python -m unittest discover -s tests
 ```
 
-The first command prints the version, the second prints nothing on a fresh installation because no report exists yet.
+The first command prints the version, the second prints nothing on a fresh installation because no report exists yet. The third runs the test suite, which needs no network access, no API key and nothing beyond the standard library and the installed dependencies.
 
 ## Configuration
 
@@ -159,12 +160,12 @@ When no CJK font is found, the batch logs a warning once and keeps running with 
 Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without an Anthropic API key:
 
 ```sh
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 sed 's/^SUMMARIZER_BACKEND=.*/SUMMARIZER_BACKEND=plain/' .env > .env.new && mv .env.new .env
 python cli.py run
 ```
 
-`.env.example` already defines `SUMMARIZER_BACKEND=claude`, so rewrite that line rather than appending a second one: a file carrying the same key twice states two different intentions, and which one wins is a property of the parser rather than of the configuration. The command above is plain POSIX `sed` writing to a new file, because in-place editing is spelled `sed -i` on GNU and `sed -i ''` on BSD and macOS.
+The copy is guarded because step 4 already created `.env`, and an unconditional `cp` here would overwrite the key configured there. `.env.example` already defines `SUMMARIZER_BACKEND=claude`, so rewrite that line rather than appending a second one: a file carrying the same key twice states two different intentions, and which one wins is a property of the parser rather than of the configuration. The command above is plain POSIX `sed` writing to a new file, because in-place editing is spelled `sed -i` on GNU and `sed -i ''` on BSD and macOS.
 
 For a single run, setting the variable in the environment needs no edit at all, since exported variables take precedence over `.env`:
 
@@ -332,7 +333,8 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 │   │   ├── arxiv.py                arXiv Atom API collector
 │   │   └── news_rss.py             RSS and Atom collector
 │   ├── analyzer/
-│   │   └── summarizer.py           Claude tool use call
+│   │   ├── summarizer.py           Claude tool use call
+│   │   └── plain.py                API free mechanical summarizer
 │   ├── demo/
 │   │   ├── __init__.py             bundled demo report
 │   │   └── sample_input.json       its entries and build_report payload
@@ -346,6 +348,7 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 │       └── static/style.css
 ├── tools/
 │   └── capture_screens.py          screenshots of the viewer
+├── tests/                          unittest suite, standard library only
 ├── data/reports/                   generated reports, not tracked
 └── doc/
     ├── DEMO.md                     demo mode and the screenshots
