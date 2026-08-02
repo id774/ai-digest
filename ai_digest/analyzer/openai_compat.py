@@ -33,7 +33,7 @@
 #
 #  Version History:
 #  v1.0 2026-08-02
-#       Initial release.
+#       Initial release, with the output budget taken from the caller.
 #
 ########################################################################
 
@@ -138,7 +138,8 @@ def _extract_arguments(response: Any) -> Dict[str, Any]:
 
 def summarize(entries: List[Entry], api_key: str, model: str,
               max_topics: int, base_url: Optional[str] = None,
-              max_retries: Optional[int] = None) -> List[Topic]:
+              max_retries: Optional[int] = None,
+              max_output_tokens: int = MAX_OUTPUT_TOKENS) -> List[Topic]:
     """
     Cluster and summarize collected entries over Chat Completions.
 
@@ -150,6 +151,7 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         base_url: Base URL of the endpoint, including the version path.
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
+        max_output_tokens: Tokens the model may produce in one answer.
 
     Returns:
         Topics in decreasing order of importance, without images yet.
@@ -166,7 +168,7 @@ def summarize(entries: List[Entry], api_key: str, model: str,
     client = _build_client(api_key, base_url, max_retries)
     response = client.chat.completions.create(
         model=model,
-        max_tokens=MAX_OUTPUT_TOKENS,
+        max_tokens=max_output_tokens,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",

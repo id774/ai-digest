@@ -85,6 +85,12 @@
 #      Age limit, in hours, of collected entries.
 #  - MAX_TOPICS
 #      Maximum number of topics rendered in one daily report.
+#  - MAX_OUTPUT_TOKENS
+#      Tokens the model may produce in one answer, on either API
+#      backend. Defaults to 4000, which fits the report with room to
+#      spare. A model that thinks before answering draws on this same
+#      budget, so an endpoint whose thinking cannot be turned off may
+#      need more; raising it buys no tool call on its own.
 #  - AI_DIGEST_FONT_PATH
 #      Path of a CJK capable TrueType font used for image generation.
 #  - DATA_DIR
@@ -105,7 +111,8 @@
 #       ANTHROPIC_MAX_RETRIES, so that the request an
 #       Anthropic-compatible endpoint receives can be set explicitly.
 #       Add the OpenAI compatible backend with its key, base URL and
-#       model.
+#       model, and read MAX_OUTPUT_TOKENS from the environment instead
+#       of leaving it to the summarizer constant.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -228,6 +235,7 @@ class Config:
     anthropic_tool_choice_mode: str = "forced"
     anthropic_text_json_fallback: str = "disabled"
     anthropic_max_retries: int = 2
+    max_output_tokens: int = 4000
     openai_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None
     openai_model: str = ""
@@ -312,6 +320,22 @@ class Config:
                 )
             )
 
+    def validate_output_budget(self) -> None:
+        """
+        Raise when MAX_OUTPUT_TOKENS cannot shape a request.
+
+        Both API backends spend this budget, and the message a
+        truncated report prints tells the reader to raise it, so the
+        value has to be usable before a run starts rather than be
+        rejected by the endpoint after everything is collected.
+        """
+        if self.max_output_tokens < 1:
+            raise RuntimeError(
+                "MAX_OUTPUT_TOKENS is {0}; expected a positive number.".format(
+                    self.max_output_tokens
+                )
+            )
+
     def validate_openai_options(self) -> None:
         """
         Raise when the OpenAI compatible backend is not configured.
@@ -361,6 +385,7 @@ def load_config() -> Config:
             "ANTHROPIC_TEXT_JSON_FALLBACK", "disabled"
         ),
         anthropic_max_retries=_env_int("ANTHROPIC_MAX_RETRIES", 2),
+        max_output_tokens=_env_int("MAX_OUTPUT_TOKENS", 4000),
         openai_api_key=os.environ.get("OPENAI_API_KEY") or None,
         openai_base_url=os.environ.get("OPENAI_BASE_URL") or None,
         openai_model=os.environ.get("OPENAI_MODEL", "").strip(),

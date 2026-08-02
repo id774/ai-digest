@@ -37,12 +37,14 @@
 #
 #  Version History:
 #  v1.1 2026-08-02
-#       Let the caller disable the thinking output and choose between a
-#       named, an unnamed and an automatic tool choice, accept a report
-#       written as JSON text when asked to, cap the SDK retries at one
-#       request per run when asked to, so that an
+#       Let the caller shape the request, so that an
 #       Anthropic-compatible endpoint which returns no tool_use block
-#       can be configured to return one. Report the stop reason and the
+#       can be configured to return one: the thinking output can be
+#       disabled, the tool choice can be named, unnamed or automatic, a
+#       report written as JSON text can be accepted, the SDK retries can
+#       be capped at one request per run, and the output budget comes
+#       from the caller rather than the module constant. Report the
+#       stop reason and the
 #       block types when the tool call is missing, report a truncated or
 #       unparsable set of arguments as such, accept only a build_report
 #       block, summarize the response at info level and keep the full
@@ -65,8 +67,10 @@ MAX_INPUT_ENTRIES = 60
 # Characters of an abstract kept per entry in the prompt.
 SUMMARY_CHARS = 700
 
-# Upper bound on the response size. Six topics with four bullets each
-# fit comfortably below this limit.
+# Default upper bound on the response size. Six topics with four
+# bullets each fit comfortably below this limit. MAX_OUTPUT_TOKENS in
+# the environment overrides it, because a model that thinks before
+# answering draws on the same budget and may need more of it.
 MAX_OUTPUT_TOKENS = 4000
 
 SYSTEM_PROMPT = (
@@ -334,8 +338,9 @@ def _build_client(api_key: Optional[str], auth_token: Optional[str],
 
 
 def _build_request(candidates: List[Entry], model: str, max_topics: int,
-                   thinking_mode: str,
-                   tool_choice_mode: str) -> Dict[str, Any]:
+                   thinking_mode: str, tool_choice_mode: str,
+                   max_output_tokens: int = MAX_OUTPUT_TOKENS
+                   ) -> Dict[str, Any]:
     """
     Assemble the keyword arguments of one messages.create() call.
 
@@ -345,7 +350,7 @@ def _build_request(candidates: List[Entry], model: str, max_topics: int,
     """
     request: Dict[str, Any] = {
         "model": model,
-        "max_tokens": MAX_OUTPUT_TOKENS,
+        "max_tokens": max_output_tokens,
         "system": SYSTEM_PROMPT,
         "tools": [BUILD_REPORT_TOOL],
         "messages": [{
@@ -386,7 +391,8 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
               thinking_mode: str = "default",
               tool_choice_mode: str = "forced",
               text_json_fallback: bool = False,
-              max_retries: Optional[int] = None) -> List[Topic]:
+              max_retries: Optional[int] = None,
+              max_output_tokens: int = MAX_OUTPUT_TOKENS) -> List[Topic]:
     """
     Cluster and summarize collected entries with the Claude API.
 
@@ -406,6 +412,7 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
             no tool call came back.
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
+        max_output_tokens: Tokens the model may produce in one answer.
 
     Returns:
         Topics in decreasing order of importance, without images yet.
@@ -421,6 +428,7 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
     client = _build_client(api_key, auth_token, base_url, max_retries)
     message = client.messages.create(**_build_request(
         candidates, model, max_topics, thinking_mode, tool_choice_mode,
+        max_output_tokens,
     ))
 
     # Report the shape of the answer, not the answer itself: the body
