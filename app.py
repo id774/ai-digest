@@ -31,7 +31,7 @@
 #      gunicorn app:app --bind 0.0.0.0:${PORT}
 #
 #  Version History:
-#  v1.0.1 2026-08-02
+#  v1.1 2026-08-02
 #       Register the safe_url filter used by the source links.
 #  v1.0 2026-07-25
 #       Initial release.

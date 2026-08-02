@@ -28,7 +28,7 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
-#  v1.0.1 2026-08-02
+#  v1.1 2026-08-02
 #       Enforce the size limit while reading a response instead of
 #       after the whole body has been buffered, and request only http
 #       and https URLs.

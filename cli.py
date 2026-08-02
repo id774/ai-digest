@@ -72,7 +72,7 @@
 #       names an unknown backend.
 #
 #  Version History:
-#  v1.0.1 2026-08-02
+#  v1.1 2026-08-02
 #       Stop 'run' on an unknown SUMMARIZER_BACKEND value.
 #  v1.0 2026-07-25
 #       Initial release.

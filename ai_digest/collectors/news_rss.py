@@ -25,7 +25,7 @@
 #  - feedparser, requests
 #
 #  Version History:
-#  v1.0.1 2026-08-02
+#  v1.1 2026-08-02
 #       Drop entries whose link is not an http or https URL.
 #  v1.0 2026-07-25
 #       Initial release.

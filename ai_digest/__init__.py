@@ -28,7 +28,7 @@
 #  - Python Version: 3.9 or later
 #
 #  Version History:
-#  v1.0.1 2026-08-02
+#  v1.1 2026-08-02
 #       Add is_safe_url(), the shared link scheme guard.
 #  v1.0 2026-07-25
 #       Initial release.
@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
-__version__ = "1.0.1"
+__version__ = "1.1"
 
 # Schemes accepted for any link that ends up in a report. Collected
 # links come from third party feeds and are rendered as anchors, where

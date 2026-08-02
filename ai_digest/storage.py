@@ -27,7 +27,7 @@
 #  - Standard library only
 #
 #  Version History:
-#  v1.0.1 2026-08-02
+#  v1.1 2026-08-02
 #       Anchor the date pattern so that a trailing newline no longer
 #       passes validation.
 #  v1.0 2026-07-25

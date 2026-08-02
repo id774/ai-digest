@@ -66,7 +66,7 @@
 #      TCP port used by the development server.
 #
 #  Version History:
-#  v1.0.1 2026-08-02
+#  v1.1 2026-08-02
 #       Reject an unknown SUMMARIZER_BACKEND instead of falling back on
 #       the default, and drop the unused require_api_key().
 #  v1.0 2026-07-25
