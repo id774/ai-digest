@@ -25,10 +25,12 @@ v1.0.1 (Release Date: TBD)
   receives unchanged, and an unknown value stops the run before
   anything is collected.
 - Name the stop reason and the content block types when the summarizer
-  finds no build_report call, accept only a block named build_report
-  instead of the first tool call seen, log one summary line per
-  response instead of the whole body, and restore the default client
-  retries that the earlier investigation had disabled.
+  finds no build_report call, report a truncated or unparsable set of
+  arguments as such instead of letting a partial report through as an
+  empty one, accept only a block named build_report instead of the
+  first tool call seen, log one summary line per response instead of
+  the whole body, and restore the default client retries that the
+  earlier investigation had disabled.
 - Add doc/POLICY, the ai-digest implementation policy adapted for a
   single Python project from the shared id774/scripts policy.
 
