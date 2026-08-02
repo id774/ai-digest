@@ -38,9 +38,10 @@
 #       named and an automatic tool choice, so that an
 #       Anthropic-compatible endpoint which returns no tool_use block
 #       can be configured to return one. Report the stop reason and the
-#       block types when the tool call is missing, accept only a
-#       build_report block, summarize the response at info level and
-#       keep the full body for debug level.
+#       block types when the tool call is missing, report a truncated or
+#       unparsable set of arguments as such, accept only a build_report
+#       block, summarize the response at info level and keep the full
+#       body for debug level.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -175,21 +176,36 @@ def _extract_tool_input(message: Any) -> Dict[str, Any]:
     Only a block named build_report is accepted, so that a model which
     calls something else does not have its arguments read as a report.
 
-    A RuntimeError is raised when no such block is present. The message
-    names the stop reason and the block types, because the two failures
-    seen in practice need different answers: a model that used up
-    max_tokens while thinking has to be told not to think, whereas one
-    that ended its turn with text ignored the tool altogether.
+    A RuntimeError is raised otherwise, and the message says which of
+    the failures happened, because each needs a different answer. A
+    model that used up max_tokens while thinking has to be told not to
+    think; one that stopped in the middle of the arguments wrote a
+    report too long for the budget; one that ended its turn with text
+    ignored the tool altogether.
     """
+    stop_reason = getattr(message, "stop_reason", None)
     for block in getattr(message, "content", []):
         if (getattr(block, "type", "") == "tool_use"
                 and getattr(block, "name", "") == "build_report"):
+            # Arguments cut off mid-write parse into a partial report,
+            # or into nothing at all. Neither is worth publishing.
+            if stop_reason == "max_tokens":
+                raise RuntimeError(
+                    "Model hit max_tokens while writing the build_report "
+                    "arguments, so the report is truncated; lower "
+                    "MAX_TOPICS or raise MAX_OUTPUT_TOKENS."
+                )
             tool_input = getattr(block, "input", {})
             if isinstance(tool_input, str):
-                tool_input = json.loads(tool_input)
+                try:
+                    tool_input = json.loads(tool_input)
+                except ValueError as error:
+                    raise RuntimeError(
+                        "Model returned build_report arguments that are "
+                        "not valid JSON: {0}.".format(error)
+                    )
             return tool_input
 
-    stop_reason = getattr(message, "stop_reason", None)
     types = _block_types(message)
     if stop_reason == "max_tokens" and "thinking" in types:
         raise RuntimeError(

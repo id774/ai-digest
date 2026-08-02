@@ -183,6 +183,22 @@ class ResponseParsingTest(unittest.TestCase):
 
         self.assertEqual(payload, summarizer._extract_tool_input(message))
 
+    def test_reports_arguments_cut_off_by_the_budget(self):
+        message = self.message(
+            [self.tool_use("build_report", {"topics": [{"title": "Cut"}]})],
+            "max_tokens")
+
+        with self.assertRaisesRegex(RuntimeError, "report is truncated"):
+            summarizer._extract_tool_input(message)
+
+    def test_reports_arguments_that_are_not_valid_json(self):
+        message = self.message(
+            [self.tool_use("build_report", '{"topics": [{"category":')],
+            "tool_use")
+
+        with self.assertRaisesRegex(RuntimeError, "not valid JSON"):
+            summarizer._extract_tool_input(message)
+
     def test_ignores_a_call_to_another_tool(self):
         message = self.message([self.tool_use("other_tool", {"topics": []})],
                                "tool_use")
