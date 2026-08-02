@@ -27,6 +27,11 @@
 #  - anthropic
 #
 #  Version History:
+#  v1.1 2026-08-02
+#       Log the raw Messages API response and disable client retries, so
+#       that a single unretried response can be captured while
+#       investigating an Anthropic-compatible endpoint that returns no
+#       tool_use block.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -208,7 +213,9 @@ def _build_client(api_key: Optional[str], auth_token: Optional[str],
     if not api_key and not auth_token:
         raise RuntimeError("Anthropic authentication is not configured.")
 
-    options: Dict[str, str] = {}
+    options: Dict[str, Any] = {
+        "max_retries": 0,
+    }
     if api_key:
         options["api_key"] = api_key
     else:
@@ -254,6 +261,11 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
             "role": "user",
             "content": build_prompt(candidates, max_topics),
         }],
+    )
+
+    logger.info(
+        "raw API response:\n%s",
+        message.model_dump_json(indent=2),
     )
 
     topics = to_topics(_extract_tool_input(message), candidates, max_topics)
