@@ -100,7 +100,7 @@ All settings are read from environment variables, optionally through `.env`. The
 | `ANTHROPIC_AUTH_TOKEN` | none | Bearer token for an Anthropic-compatible API. |
 | `ANTHROPIC_BASE_URL` | none | Base URL for an Anthropic-compatible API. |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Model used for summarization. |
-| `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). |
+| `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). Any other value stops `cli.py run` before it collects anything, rather than falling back on `claude`. |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
 | `NEWS_FEED_URLS` | three AI blogs | RSS or Atom feeds to collect, comma separated. |
@@ -147,8 +147,16 @@ Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without an Anthropic AP
 
 ```sh
 cp .env.example .env
-echo "SUMMARIZER_BACKEND=plain" >> .env
+sed 's/^SUMMARIZER_BACKEND=.*/SUMMARIZER_BACKEND=plain/' .env > .env.new && mv .env.new .env
 python cli.py run
+```
+
+`.env.example` already defines `SUMMARIZER_BACKEND=claude`, so rewrite that line rather than appending a second one: a file carrying the same key twice states two different intentions, and which one wins is a property of the parser rather than of the configuration. The command above is plain POSIX `sed` writing to a new file, because in-place editing is spelled `sed -i` on GNU and `sed -i ''` on BSD and macOS.
+
+For a single run, setting the variable in the environment needs no edit at all, since exported variables take precedence over `.env`:
+
+```sh
+SUMMARIZER_BACKEND=plain python cli.py run
 ```
 
 In this mode:

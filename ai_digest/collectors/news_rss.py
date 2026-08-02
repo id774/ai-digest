@@ -25,6 +25,8 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.1 2026-08-02
+#       Drop entries whose link is not an http or https URL.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -40,7 +42,7 @@ from urllib.parse import urlparse
 import feedparser
 import requests
 
-from ai_digest import Entry
+from ai_digest import Entry, is_safe_url
 
 # Strip HTML markup from feed summaries; feeds mix plain text, escaped
 # HTML and full articles, and only the readable text is useful here.
@@ -120,6 +122,9 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
                 continue
             link = getattr(raw_entry, "link", "")
             if not link or link in seen_urls:
+                continue
+            if not is_safe_url(link):
+                logger.warning("dropping entry with unusable link %s", link)
                 continue
             seen_urls.add(link)
             summary = getattr(raw_entry, "summary", "")

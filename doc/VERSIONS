@@ -1,6 +1,23 @@
 ai-digest Repository Version History
 ====================================
 
+v1.0.1 (Release Date: TBD)
+--------------------------
+- Stop the batch on an unknown SUMMARIZER_BACKEND value instead of
+  falling back on the default, which turned a typo into a run against
+  the Claude API when an API-key-free run was intended, and remove the
+  unused Config.require_api_key() left beside that check.
+- Accept only http and https links from the collectors, and neutralize
+  the ones already stored when a report is rendered, so that a crafted
+  feed entry cannot place a javascript: URL in the report.
+- Enforce the image size limit while the response is being read rather
+  than after the whole body has been buffered, and request image
+  sources over http and https only.
+- Anchor the report date pattern with \A and \Z, since $ also matched
+  in front of a trailing newline.
+- Cover the configuration, the report paths, the link filtering, the
+  capped download and the plain backend with unit tests.
+
 v1.0 (2026-07-31)
 -----------------
 - Add the 'demo' command, which builds a report from the sample bundled

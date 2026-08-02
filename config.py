@@ -42,7 +42,8 @@
 #      translation and classification. 'plain' skips the API entirely
 #      and builds topics mechanically, so the batch can run without
 #      ANTHROPIC_API_KEY at the cost of translation and clustering
-#      quality.
+#      quality. Any other value stops the batch instead of selecting a
+#      backend that was not asked for.
 #  - ARXIV_CATEGORIES
 #      Comma separated arXiv categories to collect (e.g. cs.AI,cs.LG).
 #  - ARXIV_MAX_RESULTS
@@ -65,6 +66,9 @@
 #      TCP port used by the development server.
 #
 #  Version History:
+#  v1.1 2026-08-02
+#       Reject an unknown SUMMARIZER_BACKEND instead of falling back on
+#       the default, and drop the unused require_api_key().
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -127,12 +131,18 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-def _env_choice(name: str, default: str, choices: tuple) -> str:
-    """ Read a string environment variable constrained to choices. """
+def _env_token(name: str, default: str) -> str:
+    """
+    Read a lower case token environment variable.
+
+    An unset or empty variable yields the default. Any other value is
+    returned as it was configured, even when it is not a value the
+    application knows: silently replacing it with the default is how a
+    typo turns into a run that behaves nothing like the one intended.
+    Validation belongs to the caller, which can report the bad value.
+    """
     raw = os.environ.get(name, "").strip().lower()
-    if raw in choices:
-        return raw
-    return default
+    return raw or default
 
 
 def detect_font_path(explicit: Optional[str] = None) -> Optional[str]:
@@ -173,19 +183,21 @@ class Config:
     user_agent: str = "ai-digest/1.0 (+https://github.com/id774/ai-digest)"
     port: int = 5000
 
-    def require_api_key(self) -> str:
+    def validate_summarizer_backend(self) -> None:
         """
-        Return the Claude API key or raise when it is missing.
+        Raise when SUMMARIZER_BACKEND names an unknown backend.
 
-        The batch pipeline calls this before any network access so that
-        a misconfigured environment fails immediately instead of after
-        the collection stage.
+        The batch calls this before anything else. Falling back on the
+        default instead would send a run meant to stay offline through
+        the Claude API, spending API calls on a typo, so an
+        unrecognized value stops the run and names itself.
         """
-        if not self.anthropic_api_key:
+        if self.summarizer_backend not in SUMMARIZER_BACKENDS:
             raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set. Export it or place it in .env."
+                "SUMMARIZER_BACKEND is '{0}'; expected one of: {1}.".format(
+                    self.summarizer_backend, ", ".join(SUMMARIZER_BACKENDS)
+                )
             )
-        return self.anthropic_api_key
 
     def validate_anthropic_auth(self) -> None:
         """ Validate the configured Anthropic-compatible authentication. """
@@ -221,9 +233,7 @@ def load_config() -> Config:
         anthropic_base_url=os.environ.get("ANTHROPIC_BASE_URL") or None,
         anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5").strip()
         or "claude-sonnet-4-5",
-        summarizer_backend=_env_choice(
-            "SUMMARIZER_BACKEND", "claude", SUMMARIZER_BACKENDS
-        ),
+        summarizer_backend=_env_token("SUMMARIZER_BACKEND", "claude"),
         arxiv_categories=_split_csv(
             os.environ.get("ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)
         ),

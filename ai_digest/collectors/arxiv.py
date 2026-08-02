@@ -27,6 +27,8 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.1 2026-08-02
+#       Drop entries whose link is not an http or https URL.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -41,7 +43,7 @@ from urllib.parse import urlencode
 import feedparser
 import requests
 
-from ai_digest import Entry
+from ai_digest import Entry, is_safe_url
 
 API_ENDPOINT = "http://export.arxiv.org/api/query"
 
@@ -132,6 +134,9 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
                 break
             url = getattr(raw_entry, "link", "")
             if not url or url in seen_urls:
+                continue
+            if not is_safe_url(url):
+                logger.warning("dropping paper with unusable link %s", url)
                 continue
             seen_urls.add(url)
             entries.append(Entry(

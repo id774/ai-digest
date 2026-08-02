@@ -22,15 +22,23 @@
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
 #
+#  Usage:
+#      flask --app app run --debug
+#      gunicorn app:app --bind 0.0.0.0:${PORT}
+#      python app.py
+#
+#  Options:
+#  - None. The viewer takes no command line option; DATA_DIR and PORT
+#    configure it, through the environment or .env, like every other
+#    setting collected in config.py.
+#
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Flask 3.x
 #
-#  Usage:
-#      flask --app app run --debug
-#      gunicorn app:app --bind 0.0.0.0:${PORT}
-#
 #  Version History:
+#  v1.1 2026-08-02
+#       Register the safe_url filter used by the source links.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -40,7 +48,7 @@ import os
 
 from flask import Flask, abort, render_template, send_from_directory
 
-from ai_digest import category_color
+from ai_digest import category_color, safe_url
 from ai_digest.render import STATIC_DIR, TEMPLATE_DIR
 from ai_digest.storage import (is_valid_date, list_dates, load_report,
                                report_dir, summary_image_path)
@@ -51,9 +59,11 @@ config = load_config()
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 
 # Templates render both here and in the batch renderer, so the color
-# helper and the standalone switch have to be defined for both.
+# helper, the link guard and the standalone switch have to be defined
+# for both.
 app.jinja_env.globals["category_color"] = category_color
 app.jinja_env.globals["standalone"] = False
+app.jinja_env.filters["safe_url"] = safe_url
 
 
 @app.route("/")

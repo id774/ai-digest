@@ -27,12 +27,6 @@
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
 #
-#  Requirements:
-#  - Python Version: 3.9 or later
-#  - See requirements.txt
-#  - ANTHROPIC_API_KEY must be set for the 'run' command, unless
-#    SUMMARIZER_BACKEND=plain is used
-#
 #  Usage:
 #      python cli.py run [--date YYYY-MM-DD] [--no-images] [--verbose]
 #      python cli.py demo [--date YYYY-MM-DD] [--input FILE] [--verbose]
@@ -67,10 +61,19 @@
 #
 #  Exit Codes:
 #  - 0: The command completed.
-#  - 1: The command failed, for example because no topic could be built
-#       or because the API key is missing.
+#  - 1: The command failed, for example because no topic could be built,
+#       because the API key is missing or because SUMMARIZER_BACKEND
+#       names an unknown backend.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - See requirements.txt
+#  - ANTHROPIC_API_KEY must be set for the 'run' command, unless
+#    SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.1 2026-08-02
+#       Stop 'run' on an unknown SUMMARIZER_BACKEND value.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -166,6 +169,12 @@ def attach_images(topics: List[Topic], report_dir: str, config: Config,
 def command_run(args: argparse.Namespace, config: Config) -> int:
     """ Execute the whole pipeline for one date. """
     date = args.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        config.validate_summarizer_backend()
+    except RuntimeError as error:
+        logger.error("%s", error)
+        return 1
+
     use_claude = config.summarizer_backend == "claude"
     if use_claude:
         try:

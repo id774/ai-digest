@@ -28,6 +28,10 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
+#  v1.1 2026-08-02
+#       Enforce the size limit while reading a response instead of
+#       after the whole body has been buffered, and request only http
+#       and https URLs.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -43,6 +47,8 @@ import requests
 from bs4 import BeautifulSoup
 from PIL import Image, UnidentifiedImageError
 
+from ai_digest import is_safe_url
+
 # arXiv abstract, PDF and versioned URLs all embed the same identifier.
 ARXIV_ID_PATTERN = re.compile(r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})")
 
@@ -50,8 +56,17 @@ ARXIV_ID_PATTERN = re.compile(r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})")
 AR5IV_URL = "https://ar5iv.labs.arxiv.org/html/{0}"
 
 # Downloads larger than this are refused, so that a mislabeled video or
-# a huge poster cannot stall the batch.
+# a huge poster cannot stall the batch. The limit is applied while the
+# body is being read, because a remote host is free to announce one
+# size and send another, or to stream without ever announcing one.
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+# Same limit for the pages parsed to find an image. They are ordinary
+# article pages, so this is generous.
+MAX_PAGE_BYTES = 4 * 1024 * 1024
+
+# Size of the chunks read from a response body.
+CHUNK_BYTES = 64 * 1024
 
 # Images smaller than this in either dimension are usually logos,
 # tracking pixels or social badges rather than illustrations.
@@ -60,14 +75,47 @@ MIN_IMAGE_SIDE = 200
 logger = logging.getLogger(__name__)
 
 
-def _get(url: str, timeout: int, user_agent: str) -> Optional[requests.Response]:
-    """ Perform a GET request, returning None on any failure. """
+def _read_capped(response: requests.Response, limit: int) -> Optional[bytes]:
+    """
+    Read a response body, giving up once it exceeds limit bytes.
+
+    Returning None rather than the truncated bytes is deliberate: a
+    partial image is not worth publishing, and stopping the read is
+    what keeps an oversized or endless body out of memory.
+    """
+    chunks = []
+    total = 0
+    for chunk in response.iter_content(chunk_size=CHUNK_BYTES):
+        total += len(chunk)
+        if total > limit:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _fetch(url: str, timeout: int, user_agent: str,
+           limit: int) -> Optional[Tuple[bytes, str]]:
+    """
+    Fetch a URL, reading at most limit bytes of its body.
+
+    Returns the body together with the URL the response came from, so
+    that relative links can be resolved against it, or None on any
+    failure. Only http and https are requested: the candidate URLs come
+    from third party pages, and no other scheme has a meaning here.
+    """
+    if not is_safe_url(url):
+        logger.info("refusing non-http image source: %s", url)
+        return None
     try:
-        response = requests.get(
-            url, timeout=timeout, headers={"User-Agent": user_agent}
-        )
-        response.raise_for_status()
-        return response
+        with requests.get(url, timeout=timeout, stream=True,
+                          headers={"User-Agent": user_agent}) as response:
+            response.raise_for_status()
+            body = _read_capped(response, limit)
+            if body is None:
+                logger.info("response larger than %d bytes, skipped: %s",
+                            limit, url)
+                return None
+            return body, response.url
     except requests.RequestException as error:
         logger.info("image source unreachable %s: %s", url, error)
         return None
@@ -81,13 +129,10 @@ def _download_image(url: str, timeout: int,
     Returns the raw bytes together with a lower case file extension, or
     None when the resource is not a usable raster image.
     """
-    response = _get(url, timeout, user_agent)
-    if response is None:
+    fetched = _fetch(url, timeout, user_agent, MAX_IMAGE_BYTES)
+    if fetched is None:
         return None
-    content = response.content
-    if len(content) > MAX_IMAGE_BYTES:
-        logger.info("image too large, skipped: %s", url)
-        return None
+    content, _final_url = fetched
     try:
         with Image.open(io.BytesIO(content)) as image:
             image_format = (image.format or "").lower()
@@ -117,14 +162,15 @@ def arxiv_figure_url(url: str, timeout: int, user_agent: str) -> Optional[str]:
     if match is None:
         return None
     page_url = AR5IV_URL.format(match.group(1))
-    response = _get(page_url, timeout, user_agent)
-    if response is None:
+    fetched = _fetch(page_url, timeout, user_agent, MAX_PAGE_BYTES)
+    if fetched is None:
         return None
-    soup = BeautifulSoup(response.text, "html.parser")
+    body, final_url = fetched
+    soup = BeautifulSoup(body, "html.parser")
     for figure in soup.find_all("figure"):
         image = figure.find("img")
         if image is not None and image.get("src"):
-            return urljoin(response.url, image["src"])
+            return urljoin(final_url, image["src"])
     return None
 
 
@@ -136,15 +182,16 @@ def open_graph_image_url(url: str, timeout: int,
     The twitter:image meta tag is accepted as a second choice, since
     several publishers only provide that one.
     """
-    response = _get(url, timeout, user_agent)
-    if response is None:
+    fetched = _fetch(url, timeout, user_agent, MAX_PAGE_BYTES)
+    if fetched is None:
         return None
-    soup = BeautifulSoup(response.text, "html.parser")
+    body, final_url = fetched
+    soup = BeautifulSoup(body, "html.parser")
     for attribute, name in (("property", "og:image"),
                             ("name", "twitter:image")):
         tag = soup.find("meta", attrs={attribute: name})
         if tag is not None and tag.get("content"):
-            return urljoin(response.url, tag["content"])
+            return urljoin(final_url, tag["content"])
     return None
 
 
