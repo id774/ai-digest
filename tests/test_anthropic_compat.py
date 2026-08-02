@@ -66,7 +66,7 @@ class ClientConstructionTest(unittest.TestCase):
         client, constructor = self.build_client(api_key="key")
 
         self.assertIsNotNone(client)
-        constructor.assert_called_once_with(api_key="key")
+        constructor.assert_called_once_with(max_retries=0, api_key="key")
 
     def test_builds_compatible_api_client(self):
         client, constructor = self.build_client(
@@ -76,6 +76,7 @@ class ClientConstructionTest(unittest.TestCase):
 
         self.assertIsNotNone(client)
         constructor.assert_called_once_with(
+            max_retries=0,
             auth_token="uuid:secret",
             base_url="https://api.example.test",
         )

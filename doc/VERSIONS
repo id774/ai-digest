@@ -17,6 +17,12 @@ v1.0.1 (Release Date: TBD)
   in front of a trailing newline.
 - Cover the configuration, the report paths, the link filtering, the
   capped download and the plain backend with unit tests.
+- Log the raw Messages API response and disable Anthropic client
+  retries in the summarizer, so that a single unretried response can be
+  captured while investigating an Anthropic-compatible endpoint that
+  accepts the request but returns no tool_use block.
+- Add doc/POLICY, the ai-digest implementation policy adapted for a
+  single Python project from the shared id774/scripts policy.
 
 v1.0 (2026-07-31)
 -----------------

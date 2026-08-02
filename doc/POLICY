@@ -1,0 +1,174 @@
+# Implementation Policies
+
+This document defines the implementation policy for ai-digest. Unlike the
+multi-language policy of the id774/scripts repository, ai-digest is a single
+Python application, so the policy below is stated directly for Python instead
+of separating a shared common section from per-language sections.
+
+The intent is the same: minimize redundancy while making the design intent
+explicit and consistent for all contributors.
+
+---
+
+## General Policy
+
+### Design Philosophy
+- Prioritize clarity, portability, and explicit control over convenience.
+- Favor predictable behavior and long-term maintainability.
+- Avoid implicit behavior; make control flow, errors, and side effects explicit.
+- Keep the daily batch (`cli.py`) and the read-only viewer (`app.py`) independent,
+  so that a failed or slow batch never takes the site down.
+
+### Logging and Output
+- Use the standard `logging` module. Do not print status to standard output
+  from library modules; obtain a module logger with
+  `logging.getLogger(__name__)` and log through it.
+- Map severity to levels: `INFO` for normal progress, `WARNING` for a degraded
+  but recoverable condition (for example a dropped malformed topic or a failed
+  scrape that falls back to a generated card), and `ERROR` for a failure that
+  ends the current command.
+- Configure logging once, at the entry point, with `logging.basicConfig` writing
+  to standard error. The batch uses a fully structured, timestamped format
+  (`%(asctime)s %(levelname)s %(name)s: %(message)s`); this is the accepted
+  alternative to the `[INFO]`/`[WARN]`/`[ERROR]` prefix style used by shell
+  scripts, and is chosen because every message already carries a level and a
+  logger name.
+- Log messages must be human-readable and suitable for cron execution. Keep them
+  low-noise: a single unattended run must not flood the cron mail with per-item
+  output at the default level.
+- Quiet third-party loggers that add nothing (for example lowering `urllib3` to
+  `WARNING`) rather than raising the global level.
+
+### Control Flow Rules
+- Reserve explicit termination (`sys.exit`) for the process entry point.
+  Commands and helpers return their status; they do not call `sys.exit`.
+- Normal execution paths must return normally and propagate status explicitly.
+- Do not rely on implicit termination or language-specific shortcuts
+  (for example a bare `except:` that swallows every error). When a broad
+  `except Exception` is genuinely required, such as around a network call whose
+  failure modes are open-ended, log the reason before returning a failure code.
+
+### CLI Conventions
+- Command-line tools must provide consistent options:
+  - `-h`, `--help` to display usage information and exit with code `0`.
+  - `-v`, `--version` to display version information and exit with code `0`.
+- Build the parser with `argparse`; `-h`/`--help` is provided by it, and
+  `-v`/`--version` is declared explicitly.
+- Help or version output represents a successful, user-requested termination.
+- Invalid or unsupported options must result in usage output.
+- Exit codes must be consistent and documented in the module header.
+
+### Error Handling and Exit Codes
+- Detect command failures and unmet prerequisites early.
+- Always log the reason and the affected target when an error occurs.
+- Exit code semantics follow widely accepted UNIX/Linux conventions and remain
+  consistent across the repository.
+
+#### Exit Code Conventions
+- **0: Success**
+  The command completed successfully. This includes terminating after displaying
+  help or version information without encountering an error.
+- **1: General failure**
+  The default failure code. Use it for invalid arguments, missing resources,
+  processing errors, or any failure that does not require explicit classification
+  (for example a missing API key, no entry collected, or a summarization error).
+- **126, 127, 128 and above**
+  Reserved by the shell and by signal convention. Do not redefine them for
+  application errors.
+
+### Documentation and Versioning
+- Every module must contain a structured header, in this order:
+  `Description`, `Usage` and `Options` (executables and modules that take
+  options only), `Routes` (the viewer only), `Requirements`, `Version History`.
+- The header keeps the standard `Author`, `Source Code`, `License`, `Contact`
+  block used across the repository.
+- "Test Cases" belong in the test code under `tests/`, never in the application
+  modules.
+- Documentation must be updated in sync with behavior changes.
+
+#### When to Bump a Module Version
+- These rules apply to the `Version History` in each module header. Repository
+  release versions and Git tags follow the separate rules below.
+- Do not bump the version mechanically every time a file is touched. Decide
+  based on the nature of the change:
+  - Documentation-only changes (comments, help text, README/POLICY/VERSIONS
+    wording with no effect on behavior) do not bump the version.
+  - Any change that affects code behavior (bug fixes, new options, and refactors
+    that change observable behavior) bumps the version.
+  - Multiple updates on the same date are consolidated into a single version
+    entry; do not increment the version multiple times on the same date.
+
+#### Module Version Numbering
+- Versions use a two-level `major.minor` scheme.
+- When incrementing `minor` would reach `10`, roll over instead: increment
+  `major` by 1 and reset `minor` to `0` (for example `v0.9` -> `v1.0`,
+  `v1.9` -> `v2.0`).
+- Do not continue `minor` past `9` as in standard semantic versioning
+  (do not use `v1.10`, `v1.11`, ...).
+
+#### Repository Versioning
+- Repository release versions are independent of individual module versions.
+- Record repository release versions in `doc/VERSIONS` and use the same versions
+  for Git tags.
+- Repository release versions may use a three-level `major.minor.patch` scheme.
+- The package version exposed by `ai_digest.__version__` and `cli.py --version`
+  tracks the application, and is bumped when a release warrants it, not on every
+  change.
+
+#### doc/VERSIONS Structure
+- `doc/VERSIONS` reads as a version-level summary of overall changes, not a raw
+  commit log:
+  - When multiple changes to the same file within one version are really one
+    coherent change, merge them into a single bullet.
+  - When changes are independent, place entries that touch the same file or
+    feature near each other, so that each version reads as a coherent whole.
+- Use UTF-8.
+
+### Comments and Language
+- Comments must be written in English only.
+- Comments must be imperative, concise, and action-oriented
+  (for example `# Validate input`, `# Initialize environment`), avoiding
+  redundant lead-ins such as `# Function to ...`.
+
+### Testing and Operation
+- Tests live under `tests/` as `test_*.py` and run with
+  `python -m unittest discover -s tests`.
+- Use only the standard library for tests: `unittest` and `unittest.mock`.
+- Tests must not perform network access or call the Claude API; stub the client
+  and feed collectors fixed input instead.
+- Assume cron execution by default; the batch reads its configuration from the
+  environment or `.env`, so required variables are defined explicitly there.
+
+---
+
+## Python Implementation Policy
+
+### Supported Versions and Compatibility
+- Target Python 3.9 or later, and state `Python Version: 3.9 or later` in module
+  headers. Do not state a minimum higher than the code actually requires.
+- Type hints are used throughout and are part of the house style; they are not
+  avoided for backward compatibility, because the supported floor is 3.9.
+- Prefer `str.format()` over f-strings, consistent with the existing code base.
+
+### Header Formatting Rules
+- The shebang must be `#!/usr/bin/env python`. Do not use `python3`.
+- Include the encoding header:
+  `# -*- coding: utf-8 -*-`
+
+### Program Structure
+- Define `main() -> int` as the entry point of an executable and terminate with
+  `sys.exit(main())`.
+- Use early returns to simplify control flow.
+- Keep configuration in `config.py`: settings are read from environment
+  variables (optionally from `.env`), and the config module performs no network
+  or file access beyond reading `.env`.
+
+### Dependencies and I/O
+- Runtime dependencies are declared and version-pinned in `requirements.txt`
+  with compatible ranges, so that a future major release cannot break an
+  unattended cron run. Add a dependency only when it earns its place; prefer the
+  standard library otherwise.
+- Always pass `encoding="utf-8"` for text file operations.
+- Treat scraping and every external fetch as best effort: enforce timeouts and
+  size limits, and fall back rather than failing the whole run when a single
+  source misbehaves.
