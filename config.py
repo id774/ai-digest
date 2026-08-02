@@ -37,6 +37,16 @@
 #  - ANTHROPIC_MODEL
 #      Model name used for summarization. Defaults to a Claude Sonnet
 #      model; override it when a different model is preferred.
+#  - ANTHROPIC_THINKING_MODE
+#      'default' (default) sends no thinking parameter and leaves the
+#      provider default in place. 'disabled' asks the endpoint to turn
+#      the thinking output off. Anthropic-compatible endpoints differ in
+#      how much they think before answering, and a model that spends the
+#      whole output budget on thinking never reaches the tool call.
+#  - ANTHROPIC_TOOL_CHOICE_MODE
+#      'forced' (default) names build_report in tool_choice. 'auto' lets
+#      the model pick the tool and disables parallel tool use, for
+#      endpoints that do not honour a named tool.
 #  - SUMMARIZER_BACKEND
 #      'claude' (default) calls the Claude API for clustering,
 #      translation and classification. 'plain' skips the API entirely
@@ -68,7 +78,10 @@
 #  Version History:
 #  v1.1 2026-08-02
 #       Reject an unknown SUMMARIZER_BACKEND instead of falling back on
-#       the default, and drop the unused require_api_key().
+#       the default, and drop the unused require_api_key(). Add
+#       ANTHROPIC_THINKING_MODE and ANTHROPIC_TOOL_CHOICE_MODE, so that
+#       the thinking output and the tool selection of an
+#       Anthropic-compatible endpoint can be set explicitly.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -89,6 +102,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Valid values of SUMMARIZER_BACKEND. 'claude' calls the Claude API;
 # 'plain' builds topics mechanically and needs no API key.
 SUMMARIZER_BACKENDS = ("claude", "plain")
+
+# Valid values of ANTHROPIC_THINKING_MODE. 'default' keeps the provider
+# default; 'disabled' asks the endpoint to answer without thinking.
+ANTHROPIC_THINKING_MODES = ("default", "disabled")
+
+# Valid values of ANTHROPIC_TOOL_CHOICE_MODE. 'forced' names the tool to
+# call; 'auto' leaves the choice to the model.
+ANTHROPIC_TOOL_CHOICE_MODES = ("forced", "auto")
 
 # Default arXiv categories: artificial intelligence, machine learning
 # and computation and language.
@@ -171,6 +192,8 @@ class Config:
     anthropic_auth_token: Optional[str] = None
     anthropic_base_url: Optional[str] = None
     anthropic_model: str = "claude-sonnet-4-5"
+    anthropic_thinking_mode: str = "default"
+    anthropic_tool_choice_mode: str = "forced"
     summarizer_backend: str = "claude"
     arxiv_categories: List[str] = field(default_factory=list)
     arxiv_max_results: int = 60
@@ -211,6 +234,32 @@ class Config:
                 "Export one or place it in .env."
             )
 
+    def validate_anthropic_options(self) -> None:
+        """
+        Raise when a thinking or tool choice value is unknown.
+
+        These two settings decide what the request looks like, so a typo
+        would silently send the default request to an endpoint that
+        needs the other one, and the run would fail much later with a
+        message about a missing tool call.
+        """
+        if self.anthropic_thinking_mode not in ANTHROPIC_THINKING_MODES:
+            raise RuntimeError(
+                "ANTHROPIC_THINKING_MODE is '{0}'; expected one of: "
+                "{1}.".format(
+                    self.anthropic_thinking_mode,
+                    ", ".join(ANTHROPIC_THINKING_MODES),
+                )
+            )
+        if self.anthropic_tool_choice_mode not in ANTHROPIC_TOOL_CHOICE_MODES:
+            raise RuntimeError(
+                "ANTHROPIC_TOOL_CHOICE_MODE is '{0}'; expected one of: "
+                "{1}.".format(
+                    self.anthropic_tool_choice_mode,
+                    ", ".join(ANTHROPIC_TOOL_CHOICE_MODES),
+                )
+            )
+
 
 def load_config() -> Config:
     """
@@ -233,6 +282,12 @@ def load_config() -> Config:
         anthropic_base_url=os.environ.get("ANTHROPIC_BASE_URL") or None,
         anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5").strip()
         or "claude-sonnet-4-5",
+        anthropic_thinking_mode=_env_token(
+            "ANTHROPIC_THINKING_MODE", "default"
+        ),
+        anthropic_tool_choice_mode=_env_token(
+            "ANTHROPIC_TOOL_CHOICE_MODE", "forced"
+        ),
         summarizer_backend=_env_token("SUMMARIZER_BACKEND", "claude"),
         arxiv_categories=_split_csv(
             os.environ.get("ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)

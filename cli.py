@@ -62,8 +62,9 @@
 #  Exit Codes:
 #  - 0: The command completed.
 #  - 1: The command failed, for example because no topic could be built,
-#       because the API key is missing or because SUMMARIZER_BACKEND
-#       names an unknown backend.
+#       because the API key is missing or because SUMMARIZER_BACKEND,
+#       ANTHROPIC_THINKING_MODE or ANTHROPIC_TOOL_CHOICE_MODE holds an
+#       unknown value.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -73,7 +74,9 @@
 #
 #  Version History:
 #  v1.1 2026-08-02
-#       Stop 'run' on an unknown SUMMARIZER_BACKEND value.
+#       Stop 'run' on an unknown SUMMARIZER_BACKEND value, and validate
+#       the thinking and tool choice settings before collecting
+#       anything, so that a bad value costs no API call.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -179,6 +182,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
     if use_claude:
         try:
             config.validate_anthropic_auth()
+            config.validate_anthropic_options()
         except RuntimeError as error:
             logger.error("%s", error)
             return 1
@@ -192,11 +196,16 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
     unique = deduplicate(collected)
     try:
         if use_claude:
-            topics = summarizer.summarize(unique, config.anthropic_api_key,
-                                          config.anthropic_model,
-                                          config.max_topics,
-                                          config.anthropic_base_url,
-                                          config.anthropic_auth_token)
+            topics = summarizer.summarize(
+                unique,
+                api_key=config.anthropic_api_key,
+                model=config.anthropic_model,
+                max_topics=config.max_topics,
+                base_url=config.anthropic_base_url,
+                auth_token=config.anthropic_auth_token,
+                thinking_mode=config.anthropic_thinking_mode,
+                tool_choice_mode=config.anthropic_tool_choice_mode,
+            )
         else:
             topics = plain.summarize(unique, config.max_topics)
     except Exception as error:  # network, quota and protocol errors alike

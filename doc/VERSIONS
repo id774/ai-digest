@@ -17,10 +17,18 @@ v1.0.1 (Release Date: TBD)
   in front of a trailing newline.
 - Cover the configuration, the report paths, the link filtering, the
   capped download and the plain backend with unit tests.
-- Log the raw Messages API response and disable Anthropic client
-  retries in the summarizer, so that a single unretried response can be
-  captured while investigating an Anthropic-compatible endpoint that
-  accepts the request but returns no tool_use block.
+- Add ANTHROPIC_THINKING_MODE and ANTHROPIC_TOOL_CHOICE_MODE, which
+  turn the thinking output off and let the model pick the tool, for an
+  Anthropic-compatible endpoint that accepts the request but answers
+  with thinking alone until the output budget is gone and so never
+  returns a tool_use block. The defaults leave the request Anthropic
+  receives unchanged, and an unknown value stops the run before
+  anything is collected.
+- Name the stop reason and the content block types when the summarizer
+  finds no build_report call, accept only a block named build_report
+  instead of the first tool call seen, log one summary line per
+  response instead of the whole body, and restore the default client
+  retries that the earlier investigation had disabled.
 - Add doc/POLICY, the ai-digest implementation policy adapted for a
   single Python project from the shared id774/scripts policy.
 

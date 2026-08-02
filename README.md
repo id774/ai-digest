@@ -100,6 +100,8 @@ All settings are read from environment variables, optionally through `.env`. The
 | `ANTHROPIC_AUTH_TOKEN` | none | Bearer token for an Anthropic-compatible API. |
 | `ANTHROPIC_BASE_URL` | none | Base URL for an Anthropic-compatible API. |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Model used for summarization. |
+| `ANTHROPIC_THINKING_MODE` | `default` | `default` sends no thinking parameter and keeps the provider default. `disabled` sends `thinking.type=disabled`, for a model that would otherwise think until the output budget is gone. |
+| `ANTHROPIC_TOOL_CHOICE_MODE` | `forced` | `forced` names `build_report` in `tool_choice`. `auto` lets the model choose the tool and disables parallel tool use. |
 | `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). Any other value stops `cli.py run` before it collects anything, rather than falling back on `claude`. |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
@@ -122,11 +124,22 @@ ANTHROPIC_API_KEY=
 ANTHROPIC_AUTH_TOKEN=<UUID>:<secret>
 ANTHROPIC_BASE_URL=https://api.ai.sakura.ad.jp
 ANTHROPIC_MODEL=preview/Kimi-K2.6
+ANTHROPIC_THINKING_MODE=disabled
+ANTHROPIC_TOOL_CHOICE_MODE=auto
 SUMMARIZER_BACKEND=claude
 ```
 
 Do not set `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` together.
-The provider must support `tools`, forced `tool_choice`, and `tool_use` responses.
+The provider must support `tools` and `tool_use` responses.
+
+Being compatible with the Messages API does not mean behaving like Anthropic.
+Support for a named `tool_choice` and for the thinking output varies from one
+model to the next, which is what the two settings above are for. When a run
+fails and the log shows `stop_reason=max_tokens` together with
+`content_types=thinking`, the model used the whole output budget thinking and
+never reached the tool call. Set `ANTHROPIC_THINKING_MODE=disabled` before
+raising the `MAX_OUTPUT_TOKENS` constant of the summarizer: more budget only
+buys more thinking, it does not buy a tool call.
 
 ### Japanese font
 
