@@ -22,13 +22,19 @@
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
 #
-#  Requirements:
-#  - Python Version: 3.9 or later
-#  - Flask 3.x
-#
 #  Usage:
 #      flask --app app run --debug
 #      gunicorn app:app --bind 0.0.0.0:${PORT}
+#      python app.py
+#
+#  Options:
+#  - None. The viewer takes no command line option; DATA_DIR and PORT
+#    configure it, through the environment or .env, like every other
+#    setting collected in config.py.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Flask 3.x
 #
 #  Version History:
 #  v1.1 2026-08-02

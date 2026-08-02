@@ -27,12 +27,6 @@
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
 #
-#  Requirements:
-#  - Python Version: 3.9 or later
-#  - See requirements.txt
-#  - ANTHROPIC_API_KEY must be set for the 'run' command, unless
-#    SUMMARIZER_BACKEND=plain is used
-#
 #  Usage:
 #      python cli.py run [--date YYYY-MM-DD] [--no-images] [--verbose]
 #      python cli.py demo [--date YYYY-MM-DD] [--input FILE] [--verbose]
@@ -70,6 +64,12 @@
 #  - 1: The command failed, for example because no topic could be built,
 #       because the API key is missing or because SUMMARIZER_BACKEND
 #       names an unknown backend.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - See requirements.txt
+#  - ANTHROPIC_API_KEY must be set for the 'run' command, unless
+#    SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
 #  v1.1 2026-08-02

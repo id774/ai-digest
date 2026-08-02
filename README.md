@@ -100,7 +100,7 @@ All settings are read from environment variables, optionally through `.env`. The
 | `ANTHROPIC_AUTH_TOKEN` | none | Bearer token for an Anthropic-compatible API. |
 | `ANTHROPIC_BASE_URL` | none | Base URL for an Anthropic-compatible API. |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Model used for summarization. |
-| `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). |
+| `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). Any other value stops `cli.py run` before it collects anything, rather than falling back on `claude`. |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
 | `NEWS_FEED_URLS` | three AI blogs | RSS or Atom feeds to collect, comma separated. |
