@@ -32,11 +32,6 @@
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
 #
-#  Requirements:
-#  - Python Version: 3.9 or later
-#  - See requirements.txt
-#  - playwright, and a Chromium downloaded by it
-#
 #  Usage:
 #      python tools/capture_screens.py [--data-dir DIR] [--date DATE]
 #                                      [--output DIR] [--port PORT]
@@ -62,6 +57,11 @@
 #  Exit Codes:
 #  - 0: The screenshots were written.
 #  - 1: The archive holds no report, or the viewer did not come up.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - See requirements.txt
+#  - playwright, and a Chromium downloaded by it
 #
 #  Version History:
 #  v1.0 2026-07-28
