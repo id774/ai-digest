@@ -21,7 +21,10 @@
 #  Some ignore a named tool_choice, and some spend the whole output
 #  budget on thinking before they ever call the tool. The thinking_mode
 #  and tool_choice_mode arguments shape the request for those, and the
-#  defaults keep the request Anthropic sees unchanged.
+#  defaults keep the request Anthropic sees unchanged. An endpoint that
+#  writes the report as JSON text instead of calling the tool is read
+#  by text_json_fallback, which stays off until a raw response has
+#  shown that it really does answer that way.
 #
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
@@ -35,7 +38,9 @@
 #  Version History:
 #  v1.1 2026-08-02
 #       Let the caller disable the thinking output and choose between a
-#       named and an automatic tool choice, so that an
+#       named, an unnamed and an automatic tool choice, accept a report
+#       written as JSON text when asked to, cap the SDK retries at one
+#       request per run when asked to, so that an
 #       Anthropic-compatible endpoint which returns no tool_use block
 #       can be configured to return one. Report the stop reason and the
 #       block types when the tool call is missing, report a truncated or
@@ -169,7 +174,43 @@ def _block_types(message: Any) -> List[str]:
     ]
 
 
-def _extract_tool_input(message: Any) -> Dict[str, Any]:
+def _text_json_report(message: Any) -> Optional[Dict[str, Any]]:
+    """
+    Read a report written as JSON text instead of as a tool call.
+
+    Returns None unless a text block parses into an object holding a
+    'topics' list. That condition is the whole safety of this path: an
+    endpoint explaining itself in prose, or answering with some other
+    JSON, must not be mistaken for a report. A fenced block is unwrapped
+    first, since models routinely wrap JSON in Markdown.
+    """
+    for block in getattr(message, "content", []):
+        if getattr(block, "type", "") != "text":
+            continue
+        text = (getattr(block, "text", "") or "").strip()
+        if text.startswith("```"):
+            fenced = text.split("```")
+            if len(fenced) < 3:
+                continue
+            text = fenced[1]
+            if text.lower().startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            continue
+        try:
+            payload = json.loads(text[start:end + 1])
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and isinstance(payload.get("topics"),
+                                                    list):
+            return payload
+    return None
+
+
+def _extract_tool_input(message: Any,
+                        text_json_fallback: bool = False) -> Dict[str, Any]:
     """
     Return the build_report arguments contained in an API response.
 
@@ -205,6 +246,13 @@ def _extract_tool_input(message: Any) -> Dict[str, Any]:
                         "not valid JSON: {0}.".format(error)
                     )
             return tool_input
+
+    if text_json_fallback:
+        payload = _text_json_report(message)
+        if payload is not None:
+            logger.warning("no tool call; read the report from a text block "
+                           "because ANTHROPIC_TEXT_JSON_FALLBACK=enabled")
+            return payload
 
     types = _block_types(message)
     if stop_reason == "max_tokens" and "thinking" in types:
@@ -256,8 +304,16 @@ def to_topics(payload: Dict[str, Any], entries: List[Entry],
 
 
 def _build_client(api_key: Optional[str], auth_token: Optional[str],
-                  base_url: Optional[str]) -> Any:
-    """ Build a client for Anthropic or an Anthropic-compatible API. """
+                  base_url: Optional[str],
+                  max_retries: Optional[int] = None) -> Any:
+    """
+    Build a client for Anthropic or an Anthropic-compatible API.
+
+    max_retries is passed through when given. Setting it to 0 makes a
+    run spend exactly one request, which is what comparing two endpoint
+    settings needs: the SDK otherwise retries some errors on its own
+    and two runs are no longer one request each.
+    """
     import anthropic
 
     if api_key and auth_token:
@@ -266,6 +322,8 @@ def _build_client(api_key: Optional[str], auth_token: Optional[str],
         raise RuntimeError("Anthropic authentication is not configured.")
 
     options: Dict[str, Any] = {}
+    if max_retries is not None:
+        options["max_retries"] = max_retries
     if api_key:
         options["api_key"] = api_key
     else:
@@ -301,6 +359,11 @@ def _build_request(candidates: List[Entry], model: str, max_topics: int,
             "type": "auto",
             "disable_parallel_tool_use": True,
         }
+    elif tool_choice_mode == "any":
+        # No name is sent, which is unambiguous because build_report is
+        # the only tool offered. An endpoint that drops a named
+        # tool_choice may still honour this one.
+        request["tool_choice"] = {"type": "any"}
     else:
         request["tool_choice"] = {
             "type": "tool",
@@ -321,7 +384,9 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
               max_topics: int, base_url: Optional[str] = None,
               auth_token: Optional[str] = None,
               thinking_mode: str = "default",
-              tool_choice_mode: str = "forced") -> List[Topic]:
+              tool_choice_mode: str = "forced",
+              text_json_fallback: bool = False,
+              max_retries: Optional[int] = None) -> List[Topic]:
     """
     Cluster and summarize collected entries with the Claude API.
 
@@ -334,8 +399,13 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         auth_token: Optional Bearer token used instead of an API key.
         thinking_mode: 'default' sends no thinking parameter,
             'disabled' asks the endpoint to answer without thinking.
-        tool_choice_mode: 'forced' names build_report, 'auto' lets the
-            model choose and disables parallel tool use.
+        tool_choice_mode: 'forced' names build_report, 'any' demands
+            some tool without naming it, 'auto' lets the model choose
+            and disables parallel tool use.
+        text_json_fallback: Accept a report written as JSON text when
+            no tool call came back.
+        max_retries: Retries the SDK may spend on one request. None
+            keeps the SDK default; 0 spends exactly one request.
 
     Returns:
         Topics in decreasing order of importance, without images yet.
@@ -348,7 +418,7 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         return []
 
     candidates = entries[:MAX_INPUT_ENTRIES]
-    client = _build_client(api_key, auth_token, base_url)
+    client = _build_client(api_key, auth_token, base_url, max_retries)
     message = client.messages.create(**_build_request(
         candidates, model, max_topics, thinking_mode, tool_choice_mode,
     ))
@@ -370,7 +440,8 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         logger.debug("raw API response:\n%s",
                      message.model_dump_json(indent=2))
 
-    topics = to_topics(_extract_tool_input(message), candidates, max_topics)
+    topics = to_topics(_extract_tool_input(message, text_json_fallback),
+                       candidates, max_topics)
     logger.info("summarized %d entries into %d topics",
                 len(candidates), len(topics))
     return topics

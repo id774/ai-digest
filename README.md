@@ -102,8 +102,13 @@ All settings are read from environment variables, optionally through `.env`. The
 | `ANTHROPIC_BASE_URL` | none | Base URL for an Anthropic-compatible API. |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Model used for summarization. |
 | `ANTHROPIC_THINKING_MODE` | `default` | `default` sends no thinking parameter and keeps the provider default. `disabled` sends `thinking.type=disabled`, for a model that would otherwise think until the output budget is gone. |
-| `ANTHROPIC_TOOL_CHOICE_MODE` | `forced` | `forced` names `build_report` in `tool_choice`. `auto` lets the model choose the tool and disables parallel tool use. |
-| `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). Any other value stops `cli.py run` before it collects anything, rather than falling back on `claude`. |
+| `ANTHROPIC_TOOL_CHOICE_MODE` | `forced` | `forced` names `build_report` in `tool_choice`. `any` demands a tool without naming one. `auto` lets the model choose the tool and disables parallel tool use. |
+| `ANTHROPIC_TEXT_JSON_FALLBACK` | `disabled` | `enabled` also accepts a report written as JSON text when no tool call came back; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
+| `ANTHROPIC_MAX_RETRIES` | `2` | Retries the Anthropic SDK may spend on one request. `0` spends exactly one request per run. |
+| `OPENAI_API_KEY` | none | Key of the OpenAI-compatible endpoint. Required by `SUMMARIZER_BACKEND=openai`. |
+| `OPENAI_BASE_URL` | none | Base URL of that endpoint, including the version path. |
+| `OPENAI_MODEL` | none | Model asked for on that endpoint. Required by `SUMMARIZER_BACKEND=openai`. |
+| `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). `openai` calls an OpenAI-compatible Chat Completions API; see [OpenAI-compatible endpoints](#openai-compatible-endpoints). Any other value stops `cli.py run` before it collects anything, rather than falling back on `claude`. |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
 | `NEWS_FEED_URLS` | three AI blogs | RSS or Atom feeds to collect, comma separated. |
@@ -141,6 +146,55 @@ fails and the log shows `stop_reason=max_tokens` together with
 never reached the tool call. Set `ANTHROPIC_THINKING_MODE=disabled` before
 raising the `MAX_OUTPUT_TOKENS` constant of the summarizer: more budget only
 buys more thinking, it does not buy a tool call.
+
+### When the endpoint returns no tool call
+
+`summarization failed: Model returned no build_report tool call` means the
+request was accepted and the answer carried no `tool_use` block. Change one
+setting per run, so that the run which succeeds says which setting did it, and
+read the `api response:` line the summarizer logs for `stop_reason` and
+`content_types`. `--verbose` additionally dumps the whole response body.
+
+1. `ANTHROPIC_TOOL_CHOICE_MODE=any` — the endpoint may drop a named
+   `tool_choice` and still honour a demand for some tool. `build_report` is the
+   only tool offered, so this reaches the same place.
+2. `ANTHROPIC_TOOL_CHOICE_MODE=auto` — leaves the choice to the model. The
+   system prompt already tells it to call `build_report`, but nothing forces it.
+3. `ANTHROPIC_THINKING_MODE=disabled` — for `content_types=thinking` with
+   `stop_reason=max_tokens`.
+4. `ANTHROPIC_TEXT_JSON_FALLBACK=enabled` — only once a raw response has shown
+   the endpoint answering with the right JSON as text. The report is then read
+   from a text block that parses into an object with a `topics` list; anything
+   else is still refused, and the run logs a warning naming this setting.
+5. `SUMMARIZER_BACKEND=openai` — when the Anthropic-compatible route stays
+   unreliable, below.
+
+`ANTHROPIC_MAX_RETRIES=0` makes each attempt cost exactly one request, which
+matters when the endpoint bills per request and two settings are being compared.
+
+### OpenAI-compatible endpoints
+
+`SUMMARIZER_BACKEND=openai` sends the same prompt and the same tool schema to an
+OpenAI-compatible Chat Completions API, reading the answer from
+`tool_calls[].function.arguments`. It is a second explicit path rather than a
+fallback: both backends validate the parsed arguments identically, so a report
+does not differ by the route it took.
+
+```env
+SUMMARIZER_BACKEND=openai
+OPENAI_API_KEY=<UUID>:<secret>
+OPENAI_BASE_URL=https://api.ai.sakura.ad.jp/v1
+OPENAI_MODEL=preview/Kimi-K2.6
+```
+
+`OPENAI_BASE_URL` includes the version path, unlike `ANTHROPIC_BASE_URL`. This
+backend needs the `openai` package, which is deliberately absent from
+`requirements.txt` so that a default installation carries one API client rather
+than two:
+
+```sh
+pip install openai
+```
 
 ### Japanese font
 
@@ -334,6 +388,7 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 │   │   └── news_rss.py             RSS and Atom collector
 │   ├── analyzer/
 │   │   ├── summarizer.py           Claude tool use call
+│   │   ├── openai_compat.py        OpenAI compatible tool call
 │   │   └── plain.py                API free mechanical summarizer
 │   ├── demo/
 │   │   ├── __init__.py             bundled demo report

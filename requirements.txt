@@ -9,3 +9,8 @@ beautifulsoup4>=4.12,<5.0
 Pillow>=10.0,<12.0
 python-dotenv>=1.0,<2.0
 gunicorn>=21.2,<24.0
+
+# SUMMARIZER_BACKEND=openai additionally needs the openai package. It is
+# left out on purpose: only that backend uses it, and the default
+# installation should carry one API client rather than two.
+#   pip install openai
