@@ -33,6 +33,12 @@ v1.0.1 (Release Date: TBD)
   and accepts only a text block parsing into an object with a topics
   list, so that prose is never published as a report, and it names
   itself in a warning whenever it is used.
+- Read MAX_OUTPUT_TOKENS from the environment. It was a constant in the
+  summarizer, so a value placed in .env was loaded and then ignored,
+  while the message a truncated report prints told the reader to raise
+  exactly that name. Both API backends take the budget from the
+  configuration now, and a value below 1 stops the run before anything
+  is collected.
 - Add ANTHROPIC_MAX_RETRIES, so that a run can be made to spend exactly
   one request while two endpoint settings are compared, without
   editing the summarizer as the earlier investigation did.

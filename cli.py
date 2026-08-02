@@ -78,7 +78,8 @@
 #       the thinking and tool choice settings before collecting
 #       anything, so that a bad value costs no API call. Run the OpenAI
 #       compatible backend when it is selected, and pass the text JSON
-#       fallback and the retry budget to the summarizer.
+#       fallback, the retry budget and the output budget to the
+#       summarizer.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -195,8 +196,10 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         if use_claude:
             config.validate_anthropic_auth()
             config.validate_anthropic_options()
+            config.validate_output_budget()
         elif use_openai:
             config.validate_openai_options()
+            config.validate_output_budget()
     except RuntimeError as error:
         logger.error("%s", error)
         return 1
@@ -222,6 +225,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
                 text_json_fallback=(
                     config.anthropic_text_json_fallback == "enabled"),
                 max_retries=config.anthropic_max_retries,
+                max_output_tokens=config.max_output_tokens,
             )
         elif use_openai:
             topics = openai_compat.summarize(
@@ -231,6 +235,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
                 max_topics=config.max_topics,
                 base_url=config.openai_base_url,
                 max_retries=config.anthropic_max_retries,
+                max_output_tokens=config.max_output_tokens,
             )
         else:
             topics = plain.summarize(unique, config.max_topics)

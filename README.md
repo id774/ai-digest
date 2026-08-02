@@ -114,6 +114,7 @@ All settings are read from environment variables, optionally through `.env`. The
 | `NEWS_FEED_URLS` | three AI blogs | RSS or Atom feeds to collect, comma separated. |
 | `LOOKBACK_HOURS` | `24` | Age limit of the collected entries. |
 | `MAX_TOPICS` | `6` | Maximum topics per report. Six fills the summary image grid. |
+| `MAX_OUTPUT_TOKENS` | `4000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
 | `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. |
 | `DATA_DIR` | `data/reports` | Directory holding the generated reports. |
 | `HTTP_TIMEOUT` | `15` | Timeout in seconds of every outgoing HTTP request. |
@@ -144,8 +145,8 @@ model to the next, which is what the two settings above are for. When a run
 fails and the log shows `stop_reason=max_tokens` together with
 `content_types=thinking`, the model used the whole output budget thinking and
 never reached the tool call. Set `ANTHROPIC_THINKING_MODE=disabled` before
-raising the `MAX_OUTPUT_TOKENS` constant of the summarizer: more budget only
-buys more thinking, it does not buy a tool call.
+raising `MAX_OUTPUT_TOKENS`: more budget only buys more thinking, it does not
+buy a tool call.
 
 ### When the endpoint returns no tool call
 
