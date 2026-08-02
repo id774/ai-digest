@@ -27,6 +27,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.0.1 2026-08-02
+#       Anchor the date pattern so that a trailing newline no longer
+#       passes validation.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -39,8 +42,11 @@ from typing import Any, Dict, List, Optional
 
 from ai_digest import Topic
 
-# Report directories are named after their date and nothing else.
-DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Report directories are named after their date and nothing else. The
+# pattern is anchored with \A and \Z rather than ^ and $, because $ also
+# matches in front of a trailing newline, which would let a date built
+# from a URL segment name a directory of its own.
+DATE_PATTERN = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 
 REPORT_FILENAME = "report.json"
 SUMMARY_FILENAME = "summary.png"

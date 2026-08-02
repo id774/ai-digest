@@ -28,6 +28,8 @@
 #  - Python Version: 3.9 or later
 #
 #  Version History:
+#  v1.0.1 2026-08-02
+#       Add is_safe_url(), the shared link scheme guard.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -35,8 +37,16 @@
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
-__version__ = "1.0"
+__version__ = "1.0.1"
+
+# Schemes accepted for any link that ends up in a report. Collected
+# links come from third party feeds and are rendered as anchors, where
+# 'javascript:' and 'data:' would execute in the reader's browser;
+# autoescaping does not help there, since the value is a valid
+# attribute, not markup.
+SAFE_URL_SCHEMES = ("http", "https")
 
 # Palette used to colorize categories. Categories are produced freely by
 # the language model, so a color is derived from the category name hash
@@ -52,6 +62,35 @@ CATEGORY_PALETTE = (
     "#7a3b6b",
     "#3c4a5a",
 )
+
+
+def is_safe_url(url: str) -> bool:
+    """
+    Return True when a URL may be published as a link.
+
+    Only absolute http and https URLs pass. Everything else is refused,
+    including relative references, since a link stored in a report is
+    rendered both by the viewer and by the standalone HTML, where the
+    document it is opened from is not a reliable base.
+    """
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError:  # malformed IPv6 literals and the like
+        return False
+    return parsed.scheme.lower() in SAFE_URL_SCHEMES and bool(parsed.netloc)
+
+
+def safe_url(url: str) -> str:
+    """
+    Return a URL safe to place in an href, or '#' when it is not.
+
+    This is the rendering side of is_safe_url(): reports written before
+    the collectors started filtering links, or edited by hand, are
+    neutralized at display time instead of being trusted.
+    """
+    return url if is_safe_url(url) else "#"
 
 
 def category_color(category: str) -> str:

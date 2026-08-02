@@ -32,7 +32,7 @@
 </ul>
 <ul class="sources">
 {% for source in topic.sources %}
-<li><a href="{{ source.url }}" rel="noopener noreferrer" target="_blank">{{ source.title }}</a></li>
+<li><a href="{{ source.url|safe_url }}" rel="noopener noreferrer" target="_blank">{{ source.title }}</a></li>
 {% endfor %}
 </ul>
 </article>

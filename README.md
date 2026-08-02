@@ -147,11 +147,17 @@ Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without an Anthropic AP
 
 ```sh
 cp .env.example .env
-sed -i 's/^SUMMARIZER_BACKEND=.*/SUMMARIZER_BACKEND=plain/' .env
+sed 's/^SUMMARIZER_BACKEND=.*/SUMMARIZER_BACKEND=plain/' .env > .env.new && mv .env.new .env
 python cli.py run
 ```
 
-`.env.example` already defines `SUMMARIZER_BACKEND=claude`, so rewrite that line rather than appending a second one; a duplicated key leaves the file ambiguous and the run may still take the `claude` path and fail on the missing API key.
+`.env.example` already defines `SUMMARIZER_BACKEND=claude`, so rewrite that line rather than appending a second one: a file carrying the same key twice states two different intentions, and which one wins is a property of the parser rather than of the configuration. The command above is plain POSIX `sed` writing to a new file, because in-place editing is spelled `sed -i` on GNU and `sed -i ''` on BSD and macOS.
+
+For a single run, setting the variable in the environment needs no edit at all, since exported variables take precedence over `.env`:
+
+```sh
+SUMMARIZER_BACKEND=plain python cli.py run
+```
 
 In this mode:
 

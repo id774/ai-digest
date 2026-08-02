@@ -25,6 +25,8 @@
 #  - Jinja2 (installed together with Flask)
 #
 #  Version History:
+#  v1.0.1 2026-08-02
+#       Register the safe_url filter used by the source links.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -37,7 +39,7 @@ from typing import Any, Dict, List
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from ai_digest import Topic, category_color
+from ai_digest import Topic, category_color, safe_url
 from ai_digest.render import STATIC_DIR, TEMPLATE_DIR
 
 logger = logging.getLogger(__name__)
@@ -48,13 +50,16 @@ def create_environment() -> Environment:
     Return the Jinja2 environment shared by every renderer.
 
     Autoescaping is enabled because topic titles and bullets come from
-    a language model reading arbitrary web pages.
+    a language model reading arbitrary web pages. Escaping alone does
+    not make a source link safe to click, so the safe_url filter is
+    registered here and applied to every href the templates emit.
     """
     environment = Environment(
         loader=FileSystemLoader(TEMPLATE_DIR),
         autoescape=select_autoescape(["html"]),
     )
     environment.globals["category_color"] = category_color
+    environment.filters["safe_url"] = safe_url
     return environment
 
 
