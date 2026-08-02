@@ -147,9 +147,11 @@ Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without an Anthropic AP
 
 ```sh
 cp .env.example .env
-echo "SUMMARIZER_BACKEND=plain" >> .env
+sed -i 's/^SUMMARIZER_BACKEND=.*/SUMMARIZER_BACKEND=plain/' .env
 python cli.py run
 ```
+
+`.env.example` already defines `SUMMARIZER_BACKEND=claude`, so rewrite that line rather than appending a second one; a duplicated key leaves the file ambiguous and the run may still take the `claude` path and fail on the missing API key.
 
 In this mode:
 
