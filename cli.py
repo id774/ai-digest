@@ -73,6 +73,9 @@
 #    SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.2 2026-08-03
+#       Pass the look back window to the summarizers and to the summary
+#       image, so that both describe the period actually collected.
 #  v1.1 2026-08-02
 #       Stop 'run' on an unknown SUMMARIZER_BACKEND value, and validate
 #       the thinking and tool choice settings before collecting
@@ -226,6 +229,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
                     config.anthropic_text_json_fallback == "enabled"),
                 max_retries=config.anthropic_max_retries,
                 max_output_tokens=config.max_output_tokens,
+                lookback_hours=config.lookback_hours,
             )
         elif use_openai:
             topics = openai_compat.summarize(
@@ -236,6 +240,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
                 base_url=config.openai_base_url,
                 max_retries=config.anthropic_max_retries,
                 max_output_tokens=config.max_output_tokens,
+                lookback_hours=config.lookback_hours,
             )
         else:
             topics = plain.summarize(unique, config.max_topics)
@@ -257,7 +262,8 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     save_report(config.data_dir, date, topics, stats)
-    compose_image.compose(date, topics, report_dir, config.font_path)
+    compose_image.compose(date, topics, report_dir, config.font_path,
+                          config.lookback_hours)
     build.write_report_html(report_dir, date, topics, stats)
     logger.info("report for %s written to %s", date, report_dir)
     return 0
@@ -288,7 +294,8 @@ def command_demo(args: argparse.Namespace, config: Config) -> int:
         "generated_at": "{0}T00:00:00+00:00".format(date),
     }
     save_report(config.data_dir, date, topics, stats)
-    compose_image.compose(date, topics, report_dir, config.font_path)
+    compose_image.compose(date, topics, report_dir, config.font_path,
+                          config.lookback_hours)
     build.write_report_html(report_dir, date, topics, stats)
     logger.info("demo report for %s written to %s", date, report_dir)
     return 0
@@ -302,7 +309,7 @@ def command_render(args: argparse.Namespace, config: Config) -> int:
         return 1
     report_dir = ensure_report_dir(config.data_dir, args.date)
     compose_image.compose(args.date, report["topics"], report_dir,
-                          config.font_path)
+                          config.font_path, config.lookback_hours)
     build.write_report_html(report_dir, args.date, report["topics"],
                             report["stats"])
     return 0

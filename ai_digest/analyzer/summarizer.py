@@ -36,6 +36,9 @@
 #  - anthropic
 #
 #  Version History:
+#  v1.2 2026-08-03
+#       Name the configured look back window in the prompt instead of
+#       always announcing 24 hours.
 #  v1.1 2026-08-02
 #       Let the caller shape the request, so that an
 #       Anthropic-compatible endpoint which returns no tool_use block
@@ -72,6 +75,10 @@ SUMMARY_CHARS = 700
 # the environment overrides it, because a model that thinks before
 # answering draws on the same budget and may need more of it.
 MAX_OUTPUT_TOKENS = 4000
+
+# Look back window named in the prompt when the caller does not say
+# which one the collectors used. It matches LOOKBACK_HOURS in config.py.
+DEFAULT_LOOKBACK_HOURS = 24
 
 SYSTEM_PROMPT = (
     "あなたは AI 技術と機械学習研究の動向を追う専門アナリストです。"
@@ -142,16 +149,20 @@ BUILD_REPORT_TOOL = {
 logger = logging.getLogger(__name__)
 
 
-def build_prompt(entries: List[Entry], max_topics: int) -> str:
+def build_prompt(entries: List[Entry], max_topics: int,
+                 lookback_hours: int = DEFAULT_LOOKBACK_HOURS) -> str:
     """
     Render the user prompt listing every candidate entry.
 
     Entries are numbered so that the model can reference them in
     source_indexes instead of repeating titles and URLs, which keeps
-    the response short and the citations exact.
+    the response short and the citations exact. The window is named as
+    it was configured, since a prompt announcing 24 hours while the
+    collector kept a week describes material the model cannot see.
     """
     lines = [
-        "以下は過去 24 時間に公開された AI 関連の論文とニュースの一覧です。",
+        "以下は過去 {0} 時間に公開された AI 関連の論文とニュースの"
+        "一覧です。".format(lookback_hours),
         "内容が重複する項目はひとつのトピックにまとめ、"
         "重要度の高い順に最大 {0} 件のトピックを作成してください。".format(
             max_topics
@@ -339,7 +350,8 @@ def _build_client(api_key: Optional[str], auth_token: Optional[str],
 
 def _build_request(candidates: List[Entry], model: str, max_topics: int,
                    thinking_mode: str, tool_choice_mode: str,
-                   max_output_tokens: int = MAX_OUTPUT_TOKENS
+                   max_output_tokens: int = MAX_OUTPUT_TOKENS,
+                   lookback_hours: int = DEFAULT_LOOKBACK_HOURS
                    ) -> Dict[str, Any]:
     """
     Assemble the keyword arguments of one messages.create() call.
@@ -355,7 +367,7 @@ def _build_request(candidates: List[Entry], model: str, max_topics: int,
         "tools": [BUILD_REPORT_TOOL],
         "messages": [{
             "role": "user",
-            "content": build_prompt(candidates, max_topics),
+            "content": build_prompt(candidates, max_topics, lookback_hours),
         }],
     }
 
@@ -392,7 +404,8 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
               tool_choice_mode: str = "forced",
               text_json_fallback: bool = False,
               max_retries: Optional[int] = None,
-              max_output_tokens: int = MAX_OUTPUT_TOKENS) -> List[Topic]:
+              max_output_tokens: int = MAX_OUTPUT_TOKENS,
+              lookback_hours: int = DEFAULT_LOOKBACK_HOURS) -> List[Topic]:
     """
     Cluster and summarize collected entries with the Claude API.
 
@@ -413,6 +426,8 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
+        lookback_hours: Age limit the collectors applied, named in the
+            prompt so that it matches the material actually sent.
 
     Returns:
         Topics in decreasing order of importance, without images yet.
@@ -428,7 +443,7 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
     client = _build_client(api_key, auth_token, base_url, max_retries)
     message = client.messages.create(**_build_request(
         candidates, model, max_topics, thinking_mode, tool_choice_mode,
-        max_output_tokens,
+        max_output_tokens, lookback_hours,
     ))
 
     # Report the shape of the answer, not the answer itself: the body

@@ -31,6 +31,20 @@ def _response(arguments='{"topics": []}', name="build_report",
     )
 
 
+class PromptWindowTest(unittest.TestCase):
+
+    def test_passes_the_window_through(self):
+        client = mock.Mock()
+        client.chat.completions.create.return_value = _response()
+        with mock.patch.object(openai_compat, "_build_client",
+                               return_value=client):
+            openai_compat.summarize([_entry()], api_key="k", model="m",
+                                    max_topics=6, lookback_hours=72)
+
+        request = client.chat.completions.create.call_args.kwargs
+        self.assertIn("過去 72 時間", request["messages"][1]["content"])
+
+
 class FunctionToolTest(unittest.TestCase):
 
     def test_reuses_the_anthropic_schema(self):

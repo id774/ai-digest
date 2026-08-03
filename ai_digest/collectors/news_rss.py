@@ -25,6 +25,9 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.2 2026-08-03
+#       Read the parsed timestamps as UTC, which is what feedparser
+#       returns, instead of as local time.
 #  v1.1 2026-08-02
 #       Drop entries whose link is not an http or https URL.
 #  v1.0 2026-07-25
@@ -32,9 +35,9 @@
 #
 ########################################################################
 
+import calendar
 import logging
 import re
-import time
 from datetime import datetime, timedelta, timezone
 from typing import List
 from urllib.parse import urlparse
@@ -64,15 +67,19 @@ def _entry_datetime(raw_entry) -> datetime:
     """
     Return the publication time of a feed entry as an aware datetime.
 
-    Feeds that omit both published and updated timestamps are treated
-    as epoch old, which makes the age filter drop them.
+    feedparser exposes the parsed struct_time in UTC, so it is turned
+    into an epoch with calendar.timegm(). time.mktime() would read it as
+    local time and shift every entry by the offset of the host, which
+    narrows or widens the look back window. Feeds that omit both
+    published and updated timestamps are treated as epoch old, which
+    makes the age filter drop them.
     """
     parsed = getattr(raw_entry, "published_parsed", None)
     if parsed is None:
         parsed = getattr(raw_entry, "updated_parsed", None)
     if parsed is None:
         return datetime.fromtimestamp(0, tz=timezone.utc)
-    return datetime.fromtimestamp(time.mktime(parsed), tz=timezone.utc)
+    return datetime.fromtimestamp(calendar.timegm(parsed), tz=timezone.utc)
 
 
 def _feed_origin(parsed_feed, url: str) -> str:

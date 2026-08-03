@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest import mock
 
@@ -22,6 +23,49 @@ def _feed_entry(link):
         summary="Summary sentence.",
         published_parsed=_recent_struct_time(),
     )
+
+
+@unittest.skipUnless(hasattr(time, "tzset"), "requires time.tzset")
+class LookBackWindowTest(unittest.TestCase):
+    """ The age filter must not depend on the timezone of the host. """
+
+    def setUp(self):
+        self.saved_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "Asia/Tokyo"
+        time.tzset()
+
+    def tearDown(self):
+        if self.saved_tz is None:
+            del os.environ["TZ"]
+        else:
+            os.environ["TZ"] = self.saved_tz
+        time.tzset()
+
+    def entry(self, hours_ago):
+        moment = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
+        return SimpleNamespace(
+            link="https://example.test/a",
+            title="Title",
+            summary="Summary sentence.",
+            published_parsed=moment.timetuple(),
+        )
+
+    def test_reads_the_timestamp_as_utc(self):
+        moment = datetime(2026, 8, 3, 6, 0, tzinfo=timezone.utc)
+        raw_entry = SimpleNamespace(published_parsed=moment.timetuple())
+
+        for module in (arxiv, news_rss):
+            self.assertEqual(moment, module._entry_datetime(raw_entry))
+
+    def test_keeps_an_entry_inside_the_window(self):
+        # Read as local time, an entry 20 hours old looks 29 hours old
+        # in Asia/Tokyo and falls out of the 24 hour window.
+        raw_entry = self.entry(20)
+
+        for module in (arxiv, news_rss):
+            published = module._entry_datetime(raw_entry)
+            age = datetime.now(timezone.utc) - published
+            self.assertLess(age, timedelta(hours=24))
 
 
 class NewsLinkFilterTest(unittest.TestCase):
