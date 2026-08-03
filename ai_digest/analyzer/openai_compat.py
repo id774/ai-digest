@@ -32,6 +32,9 @@
 #  - openai, installed separately: pip install openai
 #
 #  Version History:
+#  v1.1 2026-08-03
+#       Name the configured look back window in the prompt, like the
+#       Anthropic path.
 #  v1.0 2026-08-02
 #       Initial release, with the output budget taken from the caller.
 #
@@ -43,6 +46,7 @@ from typing import Any, Dict, List, Optional
 
 from ai_digest import Entry, Topic
 from ai_digest.analyzer.summarizer import (BUILD_REPORT_TOOL,
+                                           DEFAULT_LOOKBACK_HOURS,
                                            MAX_INPUT_ENTRIES,
                                            MAX_OUTPUT_TOKENS, SYSTEM_PROMPT,
                                            build_prompt, to_topics)
@@ -139,7 +143,8 @@ def _extract_arguments(response: Any) -> Dict[str, Any]:
 def summarize(entries: List[Entry], api_key: str, model: str,
               max_topics: int, base_url: Optional[str] = None,
               max_retries: Optional[int] = None,
-              max_output_tokens: int = MAX_OUTPUT_TOKENS) -> List[Topic]:
+              max_output_tokens: int = MAX_OUTPUT_TOKENS,
+              lookback_hours: int = DEFAULT_LOOKBACK_HOURS) -> List[Topic]:
     """
     Cluster and summarize collected entries over Chat Completions.
 
@@ -152,6 +157,8 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
+        lookback_hours: Age limit the collectors applied, named in the
+            prompt so that it matches the material actually sent.
 
     Returns:
         Topics in decreasing order of importance, without images yet.
@@ -172,7 +179,8 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",
-             "content": build_prompt(candidates, max_topics)},
+             "content": build_prompt(candidates, max_topics,
+                                     lookback_hours)},
         ],
         tools=[build_function_tool()],
         tool_choice={

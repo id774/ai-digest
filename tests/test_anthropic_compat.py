@@ -225,6 +225,40 @@ class ResponseParsingTest(unittest.TestCase):
             summarizer._extract_tool_input(message)
 
 
+class PromptWindowTest(unittest.TestCase):
+
+    def entry(self):
+        return Entry(source_type="news", title="Title",
+                     url="https://example.test/a", summary="Summary.",
+                     published="2026-08-02T00:00:00+00:00", origin="Feed")
+
+    def test_announces_the_default_window(self):
+        prompt = summarizer.build_prompt([self.entry()], 6)
+
+        self.assertIn("過去 24 時間", prompt)
+
+    def test_announces_the_configured_window(self):
+        prompt = summarizer.build_prompt([self.entry()], 6, 72)
+
+        self.assertIn("過去 72 時間", prompt)
+        self.assertNotIn("過去 24 時間", prompt)
+
+    def test_summarize_passes_the_window_through(self):
+        client = mock.Mock()
+        client.messages.create.return_value = types.SimpleNamespace(
+            content=[types.SimpleNamespace(type="tool_use",
+                                           name="build_report",
+                                           input={"topics": []})],
+            stop_reason="tool_use", usage=None, id="m-1", model="m")
+        with mock.patch.object(summarizer, "_build_client",
+                               return_value=client):
+            summarizer.summarize([self.entry()], api_key="k", model="m",
+                                 max_topics=6, lookback_hours=72)
+
+        request = client.messages.create.call_args.kwargs
+        self.assertIn("過去 72 時間", request["messages"][0]["content"])
+
+
 class EmptyInputTest(unittest.TestCase):
 
     def test_does_not_call_the_api_without_entries(self):

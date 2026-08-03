@@ -1,6 +1,16 @@
 ai-digest Repository Version History
 ====================================
 
+v1.1.1 (Release Date: TBD)
+--------------------------
+- Read the feed timestamps as UTC, which is what feedparser returns.
+  time.mktime() read them as local time, so on a host east of UTC every
+  entry looked older than it was and the look back window silently lost
+  the difference; in Asia/Tokyo a run covered 15 hours instead of 24.
+- Name the configured look back window in the prompt and in the summary
+  image instead of always announcing 24 hours, so that LOOKBACK_HOURS
+  and what the report says about itself cannot disagree.
+
 v1.1 (2026-08-02)
 -----------------
 - Stop the batch on an unknown SUMMARIZER_BACKEND value instead of

@@ -34,6 +34,9 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.1 2026-08-03
+#       Name the configured look back window in the header and the
+#       footer instead of always announcing 24 hours.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -67,10 +70,11 @@ TEXT_COLOR = "#1a1a1a"
 SUBTEXT_COLOR = "#4a5560"
 
 LABEL_TEXT = "AI DIGEST"
-HEADER_SUBTITLE = "過去 24 時間の AI 関連論文・ニュースを AI により要約・分類"
+HEADER_SUBTITLE = "過去 {0} 時間の AI 関連論文・ニュースを AI により要約・分類"
+PERIOD_TEXT = "過去 {0} 時間"
 FOOTER_ITEMS = (
     ("データソース", "arXiv・公開ニュース"),
-    ("対象期間", "過去 24 時間"),
+    ("対象期間", PERIOD_TEXT),
     ("分析手法", "AI による要約・分類"),
     ("目的", "研究・技術動向の把握"),
 )
@@ -78,6 +82,10 @@ DISCLAIMER = (
     "留意事項: 本資料は公開情報を AI により要約・分類した参考情報です。"
     "重要な判断に際しては、原典となる一次情報を確認してください。"
 )
+
+# Look back window announced when the caller does not say which one the
+# collectors used. It matches LOOKBACK_HOURS in config.py.
+DEFAULT_LOOKBACK_HOURS = 24
 
 # Height of the strip at the bottom of a card that carries the source
 # URL, so that a reader can reach the original material from the image
@@ -100,7 +108,8 @@ def _display_url(url: str) -> str:
 
 
 def _draw_header(draw: ImageDraw.ImageDraw, date: str,
-                 topics: List[Topic], font_path: Optional[str]) -> None:
+                 topics: List[Topic], font_path: Optional[str],
+                 lookback_hours: int) -> None:
     """ Draw the title, the subtitle and the category legend. """
     title_font = load_font(font_path, 40)
     subtitle_font = load_font(font_path, 18)
@@ -110,9 +119,10 @@ def _draw_header(draw: ImageDraw.ImageDraw, date: str,
     year, month, day = date.split("-")
     title = "{0}年{1}月{2}日 AI ダイジェスト".format(year, month, day)
     draw.text((MARGIN, MARGIN - 4), title, font=title_font, fill=TEXT_COLOR)
-    draw.text((MARGIN, MARGIN + 48), HEADER_SUBTITLE, font=subtitle_font,
+    subtitle = HEADER_SUBTITLE.format(lookback_hours)
+    draw.text((MARGIN, MARGIN + 48), subtitle, font=subtitle_font,
               fill=SUBTEXT_COLOR)
-    subtitle_end = MARGIN + text_size(draw, HEADER_SUBTITLE, subtitle_font)[0]
+    subtitle_end = MARGIN + text_size(draw, subtitle, subtitle_font)[0]
 
     # Label badge in the upper right corner.
     label_width, label_height = text_size(draw, LABEL_TEXT, label_font)
@@ -146,7 +156,8 @@ def _draw_header(draw: ImageDraw.ImageDraw, date: str,
                   fill=SUBTEXT_COLOR)
 
 
-def _draw_footer(draw: ImageDraw.ImageDraw, font_path: Optional[str]) -> None:
+def _draw_footer(draw: ImageDraw.ImageDraw, font_path: Optional[str],
+                 lookback_hours: int) -> None:
     """ Draw the metadata strip and the disclaimer. """
     label_font = load_font(font_path, 16)
     value_font = load_font(font_path, 18)
@@ -160,7 +171,10 @@ def _draw_footer(draw: ImageDraw.ImageDraw, font_path: Optional[str]) -> None:
     for index, (label, value) in enumerate(FOOTER_ITEMS):
         left = MARGIN + index * column_width + 20
         draw.text((left, top + 8), label, font=label_font, fill=SUBTEXT_COLOR)
-        draw.text((left, top + 30), value, font=value_font, fill=TEXT_COLOR)
+        # Only the period carries a placeholder; the others format to
+        # themselves.
+        draw.text((left, top + 30), value.format(lookback_hours),
+                  font=value_font, fill=TEXT_COLOR)
         if index > 0:
             divider = MARGIN + index * column_width
             draw.line([(divider, top + 8), (divider, top + 50)],
@@ -276,7 +290,8 @@ def _draw_card(canvas: Image.Image, draw: ImageDraw.ImageDraw, topic: Topic,
 
 
 def compose(date: str, topics: List[Topic], report_dir: str,
-            font_path: Optional[str] = None) -> str:
+            font_path: Optional[str] = None,
+            lookback_hours: int = DEFAULT_LOOKBACK_HOURS) -> str:
     """
     Render the composite summary image of one report.
 
@@ -286,6 +301,8 @@ def compose(date: str, topics: List[Topic], report_dir: str,
         report_dir: Directory holding the topic images; the composite
             image is written there as summary.png.
         font_path: Path of a CJK capable font, or None.
+        lookback_hours: Age limit the collectors applied, announced in
+            the header and the footer.
 
     Returns:
         The path of the written PNG file.
@@ -293,7 +310,7 @@ def compose(date: str, topics: List[Topic], report_dir: str,
     canvas = Image.new("RGB", (CANVAS_WIDTH, CANVAS_HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(canvas)
 
-    _draw_header(draw, date, topics, font_path)
+    _draw_header(draw, date, topics, font_path, lookback_hours)
 
     grid_top = HEADER_HEIGHT
     grid_bottom = CANVAS_HEIGHT - FOOTER_HEIGHT - MARGIN
@@ -311,7 +328,7 @@ def compose(date: str, topics: List[Topic], report_dir: str,
                    (left, top, left + card_width, top + card_height),
                    report_dir, font_path)
 
-    _draw_footer(draw, font_path)
+    _draw_footer(draw, font_path, lookback_hours)
 
     output_path = os.path.join(report_dir, "summary.png")
     canvas.save(output_path, format="PNG")
