@@ -6,10 +6,13 @@
 #
 #  Description:
 #  This subpackage gathers the raw material of a daily report. Each
-#  module exposes a single collect() function which returns a list of
-#  ai_digest.Entry objects and never raises on network errors: a source
-#  that cannot be reached simply contributes nothing, so one broken feed
-#  does not abort the daily batch.
+#  module exposes a single collect() function which returns an
+#  ai_digest.CollectionResult and never raises on network errors: a
+#  source that cannot be reached simply contributes nothing, so one
+#  broken feed does not abort the daily batch. The result carries the
+#  entries together with the per source outcome, so that an empty run
+#  can be reported as unreachable sources or as an empty window rather
+#  than as both at once.
 #
 #  Modules:
 #      arxiv     - arXiv Atom API, filtered by category and age

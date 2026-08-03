@@ -10,6 +10,12 @@ v1.1.1 (Release Date: TBD)
 - Name the configured look back window in the prompt and in the summary
   image instead of always announcing 24 hours, so that LOOKBACK_HOURS
   and what the report says about itself cannot disagree.
+- Say why a run collected nothing. The collectors now return the per
+  source outcome next to their entries, so an empty run is reported as
+  unreachable sources, as sources that answered with nothing published
+  inside the window, or as no source configured, instead of one message
+  that listed every possible cause at once. A run that loses only some
+  of its sources continues and says so.
 
 v1.1 (2026-08-02)
 -----------------

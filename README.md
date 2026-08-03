@@ -248,23 +248,31 @@ The command collects the last 24 hours, summarizes them, writes `data/reports/<t
 
 #### "no entry collected"
 
+The error names the cause, so a quiet day and a broken network never look alike. Every source that answered normally but had nothing recent to offer:
+
 ```
-INFO ai_digest.collectors.arxiv: collected 0 arXiv papers
-INFO ai_digest.collectors.news_rss: collected 0 news articles
-ERROR ai_digest.cli: no entry collected; check ARXIV_CATEGORIES and NEWS_FEED_URLS, or the network connection
+INFO ai_digest.collectors.arxiv: collected 0 arXiv papers from 3 of 3 categories (150 papers offered, look back 24 hours)
+INFO ai_digest.collectors.news_rss: collected 0 news articles from 3 of 3 feeds (60 articles offered, look back 24 hours)
+ERROR ai_digest.cli: no entry collected: 6 of 6 sources answered and offered 210 items, none of them published within the last 24 hours; raise LOOKBACK_HOURS or review ARXIV_CATEGORIES and NEWS_FEED_URLS
 ```
 
-When this happens with no `WARNING ... request failed` lines above it, every request actually succeeded; there was simply nothing published in the last `LOOKBACK_HOURS` (24 by default). This is expected, not a bug, and it is unrelated to `SUMMARIZER_BACKEND`, since it happens before summarization runs. Two causes are common:
+Nothing reachable at all:
+
+```
+WARNING ai_digest.collectors.arxiv: arXiv request failed for cs.AI: HTTPConnectionPool(host='export.arxiv.org', port=80): Max retries exceeded
+ERROR ai_digest.cli: no entry collected: all 6 sources failed, so nothing was read at all; check the network connection, the proxy settings and the configured URLs (arXiv cs.AI: ...)
+```
+
+An empty window is expected, not a bug, and it is unrelated to `SUMMARIZER_BACKEND`, since collection happens before summarization runs. Two causes are common:
 
 - **arXiv does not announce papers on weekends.** Friday through Sunday submissions are all announced on Monday, so `cli.py run` on a Saturday or Sunday routinely collects 0 arXiv papers.
 - **The configured news feeds do not publish every day.** The default feeds (OpenAI, Google AI Blog, Hugging Face Blog) can go a day or more between posts.
 
-A `WARNING ... request failed` line, by contrast, does indicate a real problem (DNS, TLS, a proxy, or a timeout) and is unrelated to the lack of new content described above.
+When only some sources fail, the run continues with the rest and logs a `WARNING ... continuing with N of M sources` line, so a single broken feed neither hides the report nor passes unnoticed.
 
-To confirm which case applies or to work around a quiet day:
+To work around a quiet day:
 
 ```sh
-python cli.py run --verbose     # logs how many entries were fetched vs. dropped as too old
 LOOKBACK_HOURS=72 python cli.py run   # widen the window instead of waiting
 ```
 
