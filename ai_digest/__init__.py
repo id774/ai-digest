@@ -10,13 +10,15 @@
 #  Japanese with the Claude API, resolves an illustration for every
 #  topic and renders both an HTML report and a single composite PNG.
 #
-#  This module keeps the package level metadata and the two dataclasses
+#  This module keeps the package level metadata and the dataclasses
 #  shared by the collectors, the analyzer and the renderers:
 #
-#      Entry  - one collected item (paper or news article)
-#      Topic  - one curated block of the daily report
+#      Entry            - one collected item (paper or news article)
+#      Topic            - one curated block of the daily report
+#      CollectionResult - what one collector obtained, and from how
+#                         many sources it failed to obtain it
 #
-#  Both dataclasses provide to_dict()/from_dict() so that reports can be
+#  Entry and Topic provide to_dict()/from_dict() so that reports can be
 #  serialized as plain JSON without any external dependency.
 #
 #  Author: id774 (More info: http://id774.net)
@@ -28,6 +30,9 @@
 #  - Python Version: 3.9 or later
 #
 #  Version History:
+#  v1.2 2026-08-03
+#       Add CollectionResult, which carries the per source outcome of a
+#       collector next to its entries.
 #  v1.1 2026-08-02
 #       Add is_safe_url(), the shared link scheme guard.
 #  v1.0 2026-07-25
@@ -150,6 +155,50 @@ class Entry:
             summary=data.get("summary", ""),
             published=data.get("published", ""),
             origin=data.get("origin", ""),
+        )
+
+
+@dataclass
+class CollectionResult:
+    """
+    Outcome of one collection pass, entries plus how they were obtained.
+
+    An empty entry list has several causes that a caller must be able to
+    tell apart: no source configured, every source unreachable, or
+    sources that answered normally with nothing recent to offer. The
+    counters below record which of these happened.
+
+    Attributes:
+        entries: The entries kept, newest first.
+        sources_total: Sources the collector was asked to read.
+        sources_failed: Sources that could not be read or parsed.
+        items_seen: Items the readable sources offered, before filtering.
+        items_outside_window: Items dropped for being too old.
+        failures: One 'source: reason' line per unreadable source.
+    """
+
+    entries: List[Entry] = field(default_factory=list)
+    sources_total: int = 0
+    sources_failed: int = 0
+    items_seen: int = 0
+    items_outside_window: int = 0
+    failures: List[str] = field(default_factory=list)
+
+    @property
+    def sources_read(self) -> int:
+        """ Return the number of sources that answered and parsed. """
+        return self.sources_total - self.sources_failed
+
+    def merge(self, other: "CollectionResult") -> "CollectionResult":
+        """ Return the combined outcome of two collection passes. """
+        return CollectionResult(
+            entries=self.entries + other.entries,
+            sources_total=self.sources_total + other.sources_total,
+            sources_failed=self.sources_failed + other.sources_failed,
+            items_seen=self.items_seen + other.items_seen,
+            items_outside_window=(self.items_outside_window
+                                  + other.items_outside_window),
+            failures=self.failures + other.failures,
         )
 
 

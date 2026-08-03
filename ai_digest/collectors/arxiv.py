@@ -15,7 +15,10 @@
 #  collector issues a single request per category and sleeps in between.
 #
 #  Network and parsing failures are logged and swallowed: a failing
-#  category yields no entries instead of aborting the daily batch.
+#  category yields no entries instead of aborting the daily batch. The
+#  returned CollectionResult records how many categories failed and how
+#  many papers the readable ones offered, so that the caller can tell an
+#  unreachable API from a window that simply holds nothing.
 #
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
@@ -29,7 +32,9 @@
 #  Version History:
 #  v1.2 2026-08-03
 #       Read the parsed timestamps as UTC, which is what feedparser
-#       returns, instead of as local time.
+#       returns, instead of as local time. Return a CollectionResult
+#       describing the outcome of every category instead of a bare
+#       entry list.
 #  v1.1 2026-08-02
 #       Drop entries whose link is not an http or https URL.
 #  v1.0 2026-07-25
@@ -41,13 +46,13 @@ import calendar
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Tuple
 from urllib.parse import urlencode
 
 import feedparser
 import requests
 
-from ai_digest import Entry, is_safe_url
+from ai_digest import CollectionResult, Entry, is_safe_url
 
 API_ENDPOINT = "http://export.arxiv.org/api/query"
 
@@ -83,12 +88,15 @@ def _entry_datetime(raw_entry) -> datetime:
 
 
 def _fetch_category(category: str, max_results: int, timeout: int,
-                    user_agent: str) -> List:
+                    user_agent: str) -> Tuple[List, str]:
     """
     Fetch the newest entries of a single arXiv category.
 
-    An empty list is returned when the request fails, so that the
-    caller can continue with the remaining categories.
+    Returns:
+        The raw feed entries and an empty string, or an empty list and
+        the reason the category could not be read, so that the caller
+        can continue with the remaining categories and still report why
+        this one contributed nothing.
     """
     query = urlencode({
         "search_query": "cat:{0}".format(category),
@@ -105,12 +113,18 @@ def _fetch_category(category: str, max_results: int, timeout: int,
         response.raise_for_status()
     except requests.RequestException as error:
         logger.warning("arXiv request failed for %s: %s", category, error)
-        return []
-    return feedparser.parse(response.content).entries
+        return [], "{0}".format(error)
+    parsed = feedparser.parse(response.content)
+    if not parsed.entries and getattr(parsed, "bozo", 0):
+        error = getattr(parsed, "bozo_exception", "unknown parse error")
+        logger.warning("arXiv response unusable for %s: %s", category, error)
+        return [], "unparsable response: {0}".format(error)
+    return parsed.entries, ""
 
 
 def collect(categories: List[str], max_results: int, lookback_hours: int,
-            timeout: int = 15, user_agent: str = "ai-digest") -> List[Entry]:
+            timeout: int = 15,
+            user_agent: str = "ai-digest") -> CollectionResult:
     """
     Collect recent arXiv papers.
 
@@ -122,22 +136,32 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
         user_agent: User-Agent header sent to arXiv.
 
     Returns:
-        A list of Entry objects with source_type 'paper', newest first.
-        Papers cross listed in several requested categories appear once.
+        A CollectionResult whose entries have source_type 'paper' and
+        are ordered newest first. Papers cross listed in several
+        requested categories appear once. The counters tell how many
+        categories failed and how many papers the readable ones offered.
     """
     threshold = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    result = CollectionResult(sources_total=len(categories))
     entries: List[Entry] = []
     seen_urls = set()
 
     for index, category in enumerate(categories):
         if index > 0:
             time.sleep(REQUEST_INTERVAL)
-        for raw_entry in _fetch_category(category, max_results, timeout,
-                                         user_agent):
+        raw_entries, failure = _fetch_category(category, max_results, timeout,
+                                               user_agent)
+        if failure:
+            result.sources_failed += 1
+            result.failures.append("arXiv {0}: {1}".format(category, failure))
+            continue
+        result.items_seen += len(raw_entries)
+        for position, raw_entry in enumerate(raw_entries):
             published = _entry_datetime(raw_entry)
             if published < threshold:
                 # Entries are sorted newest first, so everything that
                 # follows in this category is older as well.
+                result.items_outside_window += len(raw_entries) - position
                 break
             url = getattr(raw_entry, "link", "")
             if not url or url in seen_urls:
@@ -156,5 +180,9 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
             ))
 
     entries.sort(key=lambda item: item.published, reverse=True)
-    logger.info("collected %d arXiv papers", len(entries))
-    return entries
+    result.entries = entries
+    logger.info("collected %d arXiv papers from %d of %d categories "
+                "(%d papers offered, look back %d hours)", len(entries),
+                result.sources_read, result.sources_total, result.items_seen,
+                lookback_hours)
+    return result

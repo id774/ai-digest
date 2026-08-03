@@ -61,7 +61,8 @@
 #
 #  Exit Codes:
 #  - 0: The command completed.
-#  - 1: The command failed, for example because no topic could be built,
+#  - 1: The command failed, for example because no entry was collected,
+#       because no topic could be built,
 #       because the API key is missing or because SUMMARIZER_BACKEND,
 #       ANTHROPIC_THINKING_MODE or ANTHROPIC_TOOL_CHOICE_MODE holds an
 #       unknown value.
@@ -76,6 +77,8 @@
 #  v1.2 2026-08-03
 #       Pass the look back window to the summarizers and to the summary
 #       image, so that both describe the period actually collected.
+#       Report why a run collected nothing, distinguishing sources that
+#       could not be reached from sources that offered nothing recent.
 #  v1.1 2026-08-02
 #       Stop 'run' on an unknown SUMMARIZER_BACKEND value, and validate
 #       the thinking and tool choice settings before collecting
@@ -95,7 +98,7 @@ import sys
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from ai_digest import Entry, Topic, __version__, demo
+from ai_digest import CollectionResult, Topic, __version__, demo
 from ai_digest.analyzer import openai_compat, plain, summarizer
 from ai_digest.collectors import arxiv, news_rss
 from ai_digest.dedup import deduplicate
@@ -119,7 +122,7 @@ def configure_logging(verbose: bool) -> None:
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
-def collect_entries(config: Config) -> List[Entry]:
+def collect_entries(config: Config) -> CollectionResult:
     """
     Collect papers and news, papers first.
 
@@ -134,7 +137,47 @@ def collect_entries(config: Config) -> List[Entry]:
         config.news_feed_urls, config.lookback_hours,
         config.http_timeout, config.user_agent,
     )
-    return papers + news
+    return papers.merge(news)
+
+
+def describe_empty_collection(result: CollectionResult,
+                              lookback_hours: int) -> str:
+    """
+    Explain why a collection pass produced no entry.
+
+    An empty run has three distinct causes, and a single message that
+    lists every possible one leaves the reader to guess which applies.
+    The counters of the pass separate them: nothing configured, nothing
+    reachable, or sources that answered and had nothing recent to offer.
+    The failure reasons of the unreachable sources are appended, since
+    they say whether the host, the URL or the network is at fault.
+    """
+    if result.sources_total == 0:
+        return ("no source configured; set ARXIV_CATEGORIES or "
+                "NEWS_FEED_URLS")
+
+    detail = "; ".join(result.failures)
+    if result.sources_failed == result.sources_total:
+        return ("no entry collected: all {0} sources failed, so nothing "
+                "was read at all; check the network connection, the "
+                "proxy settings and the configured URLs ({1})".format(
+                    result.sources_total, detail))
+
+    if result.items_seen == 0:
+        reached = ("{0} of {1} sources answered but returned no item at "
+                   "all; check ARXIV_CATEGORIES and NEWS_FEED_URLS".format(
+                       result.sources_read, result.sources_total))
+    else:
+        reached = ("{0} of {1} sources answered and offered {2} items, none "
+                   "of them published within the last {3} hours; raise "
+                   "LOOKBACK_HOURS or review ARXIV_CATEGORIES and "
+                   "NEWS_FEED_URLS".format(
+                       result.sources_read, result.sources_total,
+                       result.items_seen, lookback_hours))
+    if result.sources_failed:
+        return ("no entry collected: {0}; the remaining {1} could not be "
+                "read ({2})".format(reached, result.sources_failed, detail))
+    return "no entry collected: {0}".format(reached)
 
 
 def attach_images(topics: List[Topic], report_dir: str, config: Config,
@@ -207,11 +250,17 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         logger.error("%s", error)
         return 1
 
-    collected = collect_entries(config)
+    collection = collect_entries(config)
+    collected = collection.entries
     if not collected:
-        logger.error("no entry collected; check ARXIV_CATEGORIES and "
-                     "NEWS_FEED_URLS, or the network connection")
+        logger.error("%s", describe_empty_collection(collection,
+                                                     config.lookback_hours))
         return 1
+    if collection.sources_failed:
+        logger.warning("continuing with %d of %d sources; %d failed (%s)",
+                       collection.sources_read, collection.sources_total,
+                       collection.sources_failed,
+                       "; ".join(collection.failures))
 
     unique = deduplicate(collected)
     try:
