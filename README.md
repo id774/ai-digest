@@ -89,7 +89,7 @@ python cli.py list
 python -m unittest discover -s tests
 ```
 
-The first command prints the version, the second prints nothing on a fresh installation because no report exists yet. The third runs the test suite, which needs no network access, no API key and nothing beyond the standard library and the installed dependencies.
+The first command prints the version, the second prints nothing on a fresh installation because no report exists yet. The third runs the whole test suite, which needs no network access, no API key and nothing beyond the standard library and the installed dependencies; see [Tests](#tests).
 
 ## Configuration
 
@@ -318,6 +318,46 @@ data/reports/2026-07-25/
 ```
 
 `index.html` is self contained, so a day can also be published by copying its directory to any static web server.
+
+## Tests
+
+The suite lives in `tests/` and uses `unittest` from the standard library, so there is nothing to install beyond `requirements.txt`. Every test stubs the network and the API clients: no outbound access, no API key and no `.env` are needed, and nothing under `data/` is touched.
+
+Run everything at once, from the repository root, with the virtual environment active:
+
+```sh
+python -m unittest discover -s tests
+```
+
+The command discovers every `tests/test_*.py` and reports one summary for all of them. It exits with status 0 only when all tests pass, which is what a cron job or a CI step should check.
+
+The repository root must be the working directory, because the tests import the top level modules (`config`, `cli`, `ai_digest`) from there. Running a file directly as `python tests/test_config.py` fails with `ModuleNotFoundError`, since then only `tests/` lands on the import path; always go through `python -m unittest`.
+
+Narrower selections use the same runner:
+
+```sh
+python -m unittest discover -s tests -v                          # name every test as it runs
+python -m unittest tests.test_config                             # one module
+python -m unittest tests.test_config.SummarizerBackendTest       # one class
+python -m unittest tests.test_config.SummarizerBackendTest.test_accepts_plain
+python -m unittest discover -s tests -p "test_c*.py"             # modules matching a pattern
+```
+
+| Module | Subject |
+|---|---|
+| `test_config.py` | environment driven settings and backend validation |
+| `test_collectors.py` | arXiv and RSS collection, look back window, partial source failures |
+| `test_storage.py` | report persistence, date validation, path traversal refusal |
+| `test_urls.py` | accepted URL schemes and neutralization of unsafe stored links |
+| `test_plain.py` | API free mechanical summarizer |
+| `test_anthropic_compat.py` | Claude tool use call and its response parsing |
+| `test_openai_compat.py` | OpenAI compatible tool call path |
+| `test_tool_choice_and_fallback.py` | `ANTHROPIC_TOOL_CHOICE_MODE` and the fallback chain |
+| `test_output_budget.py` | output token budget and truncated answers |
+| `test_resolver.py` | ar5iv figure and Open Graph scraping |
+| `test_demo.py` | bundled demo report build |
+
+A passing suite says nothing about the feeds or the API being reachable; those are exercised only by an actual `python cli.py run`.
 
 ## Deployment
 
