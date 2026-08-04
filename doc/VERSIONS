@@ -34,6 +34,11 @@ v1.1.1 (Release Date: TBD)
   right until the row was full, so a day with long category names lost
   the entries of its most important topics rather than of its least
   important ones.
+- Draw a card instead of ending the run when an image is refused as a
+  decompression bomb. Such a picture compresses to far less than the
+  byte limit stops, and Pillow reports it outside OSError, so the error
+  escaped the resolver and ended the batch with a traceback after the
+  summarization had already been paid for.
 
 v1.1 (2026-08-02)
 -----------------

@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import io
 import unittest
 from unittest import mock
+
+from PIL import Image
 
 from ai_digest.images import resolver
 
@@ -111,6 +114,22 @@ class DownloadImageTest(unittest.TestCase):
                                      5, "ai-digest")
 
         self.assertEqual(resolver.MAX_IMAGE_BYTES, fetcher.call_args.args[3])
+
+    def test_a_decompression_bomb_yields_none_instead_of_raising(self):
+        # A picture of this many pixels compresses to a few hundred
+        # kilobytes, so MAX_IMAGE_BYTES lets it through and Pillow
+        # refuses it on open. The caller must be able to draw a card.
+        side = int((2 * Image.MAX_IMAGE_PIXELS) ** 0.5) + 1000
+        buffer = io.BytesIO()
+        Image.new("L", (side, side)).save(buffer, format="PNG")
+        self.assertLess(len(buffer.getvalue()), resolver.MAX_IMAGE_BYTES)
+
+        with mock.patch.object(resolver, "_fetch",
+                               return_value=(buffer.getvalue(),
+                                             "https://example.test/i.png")):
+            self.assertIsNone(
+                resolver._download_image("https://example.test/i.png",
+                                         5, "ai-digest"))
 
 
 if __name__ == "__main__":
