@@ -20,6 +20,15 @@ v1.1.1 (Release Date: TBD)
   from tools/capture_screens.py, so that refreshing the images embedded
   in the README is one command instead of four captures plus a manual
   copy of summary.png.
+- Accept every setting as a command line option on cli.py, each named
+  after the variable it replaces, so that a one off run states what it
+  wants, as in 'cli.py run --lookback-hours 72', instead of needing the
+  environment edited or a variable prefixed. An option left out changes
+  nothing, so an existing cron entry behaves as before; the values a run
+  replaced are logged, and a number the pipeline cannot use is refused
+  by the parser before anything is collected. The three credentials
+  deliberately have no option, because a command line is readable by
+  every user of the host.
 
 v1.1 (2026-08-02)
 -----------------
