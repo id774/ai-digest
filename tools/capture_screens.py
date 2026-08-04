@@ -8,7 +8,9 @@
 #  This script captures the screenshots embedded in the README. It
 #  starts the read only Flask viewer on a loopback port, drives a
 #  headless Chromium over the archive already on disk and writes one PNG
-#  per page into doc/screenshots/.
+#  per page and viewport into doc/screenshots/. The composite image of
+#  the captured report is copied there as well, so that every image the
+#  README embeds is refreshed by this one command.
 #
 #  It reads whatever DATA_DIR contains, so the screenshots reflect a
 #  real batch run when one has been performed, and the bundled demo
@@ -64,6 +66,8 @@
 #  - playwright, and a Chromium downloaded by it
 #
 #  Version History:
+#  v1.1 2026-08-03
+#       Copy the composite image of the captured report as well.
 #  v1.0 2026-07-28
 #       Initial release.
 #
@@ -72,6 +76,7 @@
 import argparse
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -83,7 +88,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from ai_digest.storage import list_dates  # noqa: E402
+from ai_digest.storage import (SUMMARY_FILENAME, list_dates,  # noqa: E402
+                               summary_image_path)
 from config import load_config            # noqa: E402
 
 DEFAULT_OUTPUT = os.path.join(BASE_DIR, "doc", "screenshots")
@@ -157,6 +163,26 @@ def capture(page_url, output_path, browser, width, scale):
     logger.info("wrote %s", output_path)
 
 
+def copy_summary_image(data_dir, date, output_dir):
+    """
+    Copy the composite image of one report next to the screenshots.
+
+    The image is drawn by the batch rather than by the viewer, so it is
+    taken from the archive instead of being captured from a page.
+
+    Returns:
+        True when the image was copied, False when the report holds none.
+    """
+    source = summary_image_path(data_dir, date)
+    if source is None:
+        logger.warning("no composite image stored for %s", date)
+        return False
+    destination = os.path.join(output_dir, SUMMARY_FILENAME)
+    shutil.copyfile(source, destination)
+    logger.info("wrote %s", destination)
+    return True
+
+
 def main(argv=None):
     """ Entry point returning the process exit code. """
     logging.basicConfig(
@@ -216,6 +242,7 @@ def main(argv=None):
                                 browser, width, args.scale)
             finally:
                 browser.close()
+        copy_summary_image(data_dir, date, args.output)
     finally:
         process.terminate()
         try:
