@@ -48,6 +48,12 @@ v1.1.1 (Release Date: TBD)
   reads an empty value as unset, so a line reading 'USER_AGENT=' in
   .env was the one way to send an empty header to arXiv and to the
   feed and publisher hosts, which are free to refuse it.
+- Apply the line limit of wrap_text() to an explicit line break as
+  well. A break added a line without counting it, so a text carrying
+  one could be given more lines than the card reserves room for and
+  run over the illustration below it. Nothing produces such a text
+  today, since titles and bullets have their whitespace collapsed
+  before they are drawn, and the limit now holds whatever arrives.
 
 v1.1 (2026-08-02)
 -----------------
