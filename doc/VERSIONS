@@ -1,8 +1,8 @@
 ai-digest Repository Version History
 ====================================
 
-v1.1.1 (Release Date: TBD)
---------------------------
+v1.1.1 (2026-08-04)
+-------------------
 - Read the feed timestamps as UTC, which is what feedparser returns.
   time.mktime() read them as local time, so on a host east of UTC every
   entry looked older than it was and the look back window silently lost
