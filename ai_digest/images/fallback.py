@@ -30,6 +30,9 @@
 #  - A CJK capable TrueType font, e.g. the fonts-noto-cjk package
 #
 #  Version History:
+#  v1.1 2026-08-04
+#       Apply the line limit of wrap_text() to an explicit line break
+#       as well, which returned more lines than the caller asked for.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -108,19 +111,26 @@ def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont,
     dropped = ""
     for position, char in enumerate(text):
         if char == "\n":
+            # An explicit break ends the line wherever it stands, and
+            # is consumed rather than carried over to the next one.
             lines.append(current)
-            current = ""
-            continue
-        candidate = current + char
-        if text_size(draw, candidate, font)[0] <= max_width or not current:
-            current = candidate
-            continue
-        lines.append(current)
+            remainder = text[position + 1:]
+        else:
+            candidate = current + char
+            if (text_size(draw, candidate, font)[0] <= max_width
+                    or not current):
+                current = candidate
+                continue
+            lines.append(current)
+            remainder = text[position:]
+        # The limit is checked on both paths. Counting only the lines a
+        # width overflow produced let a text carrying breaks return more
+        # of them than the caller reserved room for.
         if max_lines and len(lines) >= max_lines:
-            dropped = text[position:]
+            dropped = remainder
             current = ""
             break
-        current = char
+        current = "" if char == "\n" else char
     if current:
         lines.append(current)
     # Mark the truncation, unless the dropped remainder is a single

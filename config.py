@@ -106,6 +106,8 @@
 #  v1.2 2026-08-04
 #       Expose the comma separated list parser as split_csv(), so that
 #       the command line reads a list exactly as the environment does.
+#       Fall back on the default User-Agent when USER_AGENT is set but
+#       empty, as every other string setting already does.
 #  v1.1 2026-08-02
 #       Reject an unknown SUMMARIZER_BACKEND instead of falling back on
 #       the default, and drop the unused require_api_key(). Add
@@ -156,6 +158,11 @@ ANTHROPIC_TEXT_JSON_FALLBACK_MODES = ("disabled", "enabled")
 # Default arXiv categories: artificial intelligence, machine learning
 # and computation and language.
 DEFAULT_ARXIV_CATEGORIES = "cs.AI,cs.LG,cs.CL"
+
+# Identity sent to arXiv and to the feed and publisher hosts. It names
+# the project so that an operator reading their logs can tell who is
+# calling and where to complain.
+DEFAULT_USER_AGENT = "ai-digest/1.0 (+https://github.com/id774/ai-digest)"
 
 # Default news feeds. They are deliberately few and stable; extend the
 # list through NEWS_FEED_URLS instead of editing this constant.
@@ -256,7 +263,7 @@ class Config:
     font_path: Optional[str] = None
     data_dir: str = os.path.join(BASE_DIR, "data", "reports")
     http_timeout: int = 15
-    user_agent: str = "ai-digest/1.0 (+https://github.com/id774/ai-digest)"
+    user_agent: str = DEFAULT_USER_AGENT
     port: int = 5000
 
     def validate_summarizer_backend(self) -> None:
@@ -410,9 +417,7 @@ def load_config() -> Config:
         font_path=detect_font_path(os.environ.get("AI_DIGEST_FONT_PATH")),
         data_dir=os.path.abspath(data_dir),
         http_timeout=_env_int("HTTP_TIMEOUT", 15),
-        user_agent=os.environ.get(
-            "USER_AGENT",
-            "ai-digest/1.0 (+https://github.com/id774/ai-digest)",
-        ),
+        user_agent=(os.environ.get("USER_AGENT", "").strip()
+                    or DEFAULT_USER_AGENT),
         port=_env_int("PORT", 5000),
     )

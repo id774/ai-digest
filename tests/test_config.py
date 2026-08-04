@@ -59,5 +59,27 @@ class SummarizerBackendTest(unittest.TestCase):
         self.assertFalse(hasattr(config.Config, "require_api_key"))
 
 
+class UserAgentTest(unittest.TestCase):
+
+    def load(self, environment):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with mock.patch.object(config, "load_dotenv", None):
+                return config.load_config()
+
+    def test_defaults_when_unset(self):
+        self.assertEqual(config.DEFAULT_USER_AGENT,
+                         self.load({}).user_agent)
+
+    def test_defaults_when_empty(self):
+        # 'USER_AGENT=' in .env used to send an empty header, which the
+        # feed hosts are free to refuse.
+        self.assertEqual(config.DEFAULT_USER_AGENT,
+                         self.load({"USER_AGENT": "   "}).user_agent)
+
+    def test_keeps_a_configured_identity(self):
+        self.assertEqual("mine/2.0",
+                         self.load({"USER_AGENT": " mine/2.0 "}).user_agent)
+
+
 if __name__ == "__main__":
     unittest.main()
