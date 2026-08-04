@@ -16,6 +16,10 @@ v1.1.1 (Release Date: TBD)
   inside the window, or as no source configured, instead of one message
   that listed every possible cause at once. A run that loses only some
   of its sources continues and says so.
+- Copy the composite image of the captured report into doc/screenshots
+  from tools/capture_screens.py, so that refreshing the images embedded
+  in the README is one command instead of four captures plus a manual
+  copy of summary.png.
 
 v1.1 (2026-08-02)
 -----------------

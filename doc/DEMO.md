@@ -70,9 +70,12 @@ image draw Japanese text; see [Japanese font](../README.md#japanese-font).
 
 ## Screenshots
 
-The images under [`doc/screenshots/`](screenshots) were captured from a
+The images under [`doc/screenshots/`](screenshots) were produced from a
 demo run by `tools/capture_screens.py`, which starts the read only
-viewer on a loopback port and drives a headless Chromium over it.
+viewer on a loopback port and drives a headless Chromium over it. The
+composite image is drawn by the batch rather than by a page, so the
+script copies `summary.png` out of the report instead of capturing it;
+one command therefore refreshes every image the README embeds.
 Playwright is not in `requirements.txt`, because neither the batch nor
 the viewer needs a browser:
 
