@@ -114,7 +114,9 @@
 #  v1.3 2026-08-04
 #       Accept every setting except the credentials as an option, so
 #       that a one off run needs neither the environment edited nor a
-#       variable prefixed.
+#       variable prefixed. Record the look back window a run used in
+#       its statistics, so that 'render' redraws the summary image with
+#       the period the report was built from.
 #  v1.2 2026-08-03
 #       Pass the look back window to the summarizers and to the summary
 #       image, so that both describe the period actually collected.
@@ -432,6 +434,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         "deduplicated": len(unique),
         "topics": len(topics),
         "model": _model_label(config, use_claude, use_openai),
+        "lookback_hours": config.lookback_hours,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     save_report(config.data_dir, date, topics, stats)
@@ -464,6 +467,7 @@ def command_demo(args: argparse.Namespace, config: Config) -> int:
         "deduplicated": collected,
         "topics": len(topics),
         "model": "demo",
+        "lookback_hours": config.lookback_hours,
         "generated_at": "{0}T00:00:00+00:00".format(date),
     }
     save_report(config.data_dir, date, topics, stats)
@@ -475,16 +479,25 @@ def command_demo(args: argparse.Namespace, config: Config) -> int:
 
 
 def command_render(args: argparse.Namespace, config: Config) -> int:
-    """ Rebuild the artifacts of a stored report. """
+    """
+    Rebuild the artifacts of a stored report.
+
+    The summary image announces the window the run collected, which the
+    statistics of the report carry. Reading it from the configuration
+    instead would make a report rebuilt after LOOKBACK_HOURS changed
+    describe a period it was never built from. Reports stored before
+    the window was recorded fall back on the configured one.
+    """
     report = load_report(config.data_dir, args.date)
     if report is None:
         logger.error("no stored report for %s", args.date)
         return 1
+    stats = report["stats"]
     report_dir = ensure_report_dir(config.data_dir, args.date)
     compose_image.compose(args.date, report["topics"], report_dir,
-                          config.font_path, config.lookback_hours)
-    build.write_report_html(report_dir, args.date, report["topics"],
-                            report["stats"])
+                          config.font_path,
+                          stats.get("lookback_hours", config.lookback_hours))
+    build.write_report_html(report_dir, args.date, report["topics"], stats)
     return 0
 
 

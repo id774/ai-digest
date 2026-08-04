@@ -39,6 +39,10 @@ v1.1.1 (Release Date: TBD)
   byte limit stops, and Pillow reports it outside OSError, so the error
   escaped the resolver and ended the batch with a traceback after the
   summarization had already been paid for.
+- Record the look back window a run collected in the statistics of its
+  report, so that 'cli.py render' redraws the summary image with the
+  period the report was built from instead of whatever LOOKBACK_HOURS
+  holds at the time of the rebuild.
 
 v1.1 (2026-08-02)
 -----------------
