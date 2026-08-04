@@ -27,11 +27,19 @@
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
 #
+#  Every setting of config.py except the three credentials and PORT,
+#  which only the viewer reads, can also be given as an option, which
+#  overrides the environment and .env for one invocation:
+#
+#      python cli.py run --lookback-hours 72
+#
 #  Usage:
-#      python cli.py run [--date YYYY-MM-DD] [--no-images] [--verbose]
-#      python cli.py demo [--date YYYY-MM-DD] [--input FILE] [--verbose]
-#      python cli.py render DATE
-#      python cli.py list
+#      python cli.py run [--date YYYY-MM-DD] [--no-images] [OVERRIDE ...]
+#                        [--verbose]
+#      python cli.py demo [--date YYYY-MM-DD] [--input FILE]
+#                         [OVERRIDE ...] [--verbose]
+#      python cli.py render DATE [OVERRIDE ...] [--verbose]
+#      python cli.py list [--data-dir DIR] [--verbose]
 #      python cli.py -h | --help
 #      python cli.py -v | --version
 #
@@ -59,6 +67,33 @@
 #  - --verbose
 #      Log at debug level instead of info.
 #
+#  Setting overrides, each naming the variable it replaces:
+#  - Any command: --data-dir DIR (DATA_DIR)
+#  - 'run', 'demo' and 'render': --font-path PATH (AI_DIGEST_FONT_PATH)
+#  - 'run' and 'demo': --max-topics N (MAX_TOPICS)
+#  - 'run' only:
+#      --lookback-hours N (LOOKBACK_HOURS)
+#      --arxiv-categories LIST (ARXIV_CATEGORIES)
+#      --arxiv-max-results N (ARXIV_MAX_RESULTS)
+#      --news-feed-urls LIST (NEWS_FEED_URLS)
+#      --summarizer-backend NAME (SUMMARIZER_BACKEND)
+#      --anthropic-model NAME (ANTHROPIC_MODEL)
+#      --anthropic-base-url URL (ANTHROPIC_BASE_URL)
+#      --anthropic-thinking-mode MODE (ANTHROPIC_THINKING_MODE)
+#      --anthropic-tool-choice-mode MODE (ANTHROPIC_TOOL_CHOICE_MODE)
+#      --anthropic-text-json-fallback MODE
+#          (ANTHROPIC_TEXT_JSON_FALLBACK)
+#      --anthropic-max-retries N (ANTHROPIC_MAX_RETRIES)
+#      --openai-model NAME (OPENAI_MODEL)
+#      --openai-base-url URL (OPENAI_BASE_URL)
+#      --max-output-tokens N (MAX_OUTPUT_TOKENS)
+#      --http-timeout SECONDS (HTTP_TIMEOUT)
+#      --user-agent STRING (USER_AGENT)
+#
+#  ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN and OPENAI_API_KEY have no
+#  option on purpose: a command line is readable by every user of the
+#  host, so a credential belongs in the environment or in .env.
+#
 #  Exit Codes:
 #  - 0: The command completed.
 #  - 1: The command failed, for example because no entry was collected,
@@ -66,6 +101,8 @@
 #       because the API key is missing or because SUMMARIZER_BACKEND,
 #       ANTHROPIC_THINKING_MODE or ANTHROPIC_TOOL_CHOICE_MODE holds an
 #       unknown value.
+#  - 2: The command line was rejected, for example because an option
+#       expecting a positive number received something else.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -74,6 +111,10 @@
 #    SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.3 2026-08-04
+#       Accept every setting except the credentials as an option, so
+#       that a one off run needs neither the environment edited nor a
+#       variable prefixed.
 #  v1.2 2026-08-03
 #       Pass the look back window to the summarizers and to the summary
 #       image, so that both describe the period actually collected.
@@ -95,8 +136,9 @@ import argparse
 import logging
 import os
 import sys
+from dataclasses import replace
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from ai_digest import CollectionResult, Topic, __version__, demo
 from ai_digest.analyzer import openai_compat, plain, summarizer
@@ -106,9 +148,37 @@ from ai_digest.images import fallback, resolver
 from ai_digest.render import build, compose_image
 from ai_digest.storage import (ensure_report_dir, list_dates, load_report,
                                save_report)
-from config import Config, load_config
+from config import (ANTHROPIC_TEXT_JSON_FALLBACK_MODES,
+                    ANTHROPIC_THINKING_MODES, ANTHROPIC_TOOL_CHOICE_MODES,
+                    SUMMARIZER_BACKENDS, Config, detect_font_path,
+                    load_config, split_csv)
 
 logger = logging.getLogger("ai_digest.cli")
+
+# Config fields an option may replace. Every option is named after the
+# field it sets, so argparse stores it under that name and no table of
+# its own is needed; an option left out stays None and changes nothing.
+OVERRIDABLE_FIELDS = (
+    "anthropic_base_url",
+    "anthropic_model",
+    "anthropic_thinking_mode",
+    "anthropic_tool_choice_mode",
+    "anthropic_text_json_fallback",
+    "anthropic_max_retries",
+    "max_output_tokens",
+    "openai_base_url",
+    "openai_model",
+    "summarizer_backend",
+    "arxiv_categories",
+    "arxiv_max_results",
+    "news_feed_urls",
+    "lookback_hours",
+    "max_topics",
+    "font_path",
+    "data_dir",
+    "http_timeout",
+    "user_agent",
+)
 
 
 def configure_logging(verbose: bool) -> None:
@@ -120,6 +190,60 @@ def configure_logging(verbose: bool) -> None:
     )
     # The HTTP stack is chatty at debug level and adds nothing here.
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
+def positive_int(value: str) -> int:
+    """ Parse an option that accepts a number of one or more. """
+    return bounded_int(value, 1)
+
+
+def non_negative_int(value: str) -> int:
+    """ Parse an option that also accepts zero. """
+    return bounded_int(value, 0)
+
+
+def bounded_int(value: str, minimum: int) -> int:
+    """ Parse an integer option, rejecting anything below minimum. """
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            "'{0}' is not a whole number".format(value))
+    if number < minimum:
+        raise argparse.ArgumentTypeError(
+            "{0} is below the minimum of {1}".format(number, minimum))
+    return number
+
+
+def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
+    """
+    Replace the settings the command line gave, and only those.
+
+    An option left out is None and keeps whatever the environment or
+    .env configured, so an invocation without overrides behaves as it
+    did before they existed. The replacements are logged, because a
+    report has to stay explainable from the run that wrote it.
+    """
+    given = vars(args)
+    overrides: Dict[str, Any] = {}
+    for name in OVERRIDABLE_FIELDS:
+        value = given.get(name)
+        if value is not None:
+            overrides[name] = value
+    if not overrides:
+        return config
+
+    if "data_dir" in overrides:
+        overrides["data_dir"] = os.path.abspath(overrides["data_dir"])
+    # A path naming no file is probed as AI_DIGEST_FONT_PATH is, rather
+    # than left to fail later in the image generators.
+    if "font_path" in overrides:
+        overrides["font_path"] = detect_font_path(overrides["font_path"])
+
+    logger.info("command line overrides: %s", ", ".join(
+        "{0}={1}".format(name, overrides[name])
+        for name in sorted(overrides)))
+    return replace(config, **overrides)
 
 
 def collect_entries(config: Config) -> CollectionResult:
@@ -170,8 +294,8 @@ def describe_empty_collection(result: CollectionResult,
     else:
         reached = ("{0} of {1} sources answered and offered {2} items, none "
                    "of them published within the last {3} hours; raise "
-                   "LOOKBACK_HOURS or review ARXIV_CATEGORIES and "
-                   "NEWS_FEED_URLS".format(
+                   "--lookback-hours or LOOKBACK_HOURS, or review "
+                   "ARXIV_CATEGORIES and NEWS_FEED_URLS".format(
                        result.sources_read, result.sources_total,
                        result.items_seen, lookback_hours))
     if result.sources_failed:
@@ -371,11 +495,92 @@ def command_list(_args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def add_common_options(parser: argparse.ArgumentParser) -> None:
+    """ Add the options every subcommand accepts. """
+    parser.add_argument("--data-dir",
+                        help="directory holding the reports (DATA_DIR)")
+    parser.add_argument("--verbose", action="store_true",
+                        help="log at debug level")
+
+
+def add_topics_option(parser: argparse.ArgumentParser) -> None:
+    """ Add the option capping how many topics a report holds. """
+    parser.add_argument("--max-topics", type=positive_int,
+                        help="topics rendered in one report (MAX_TOPICS)")
+
+
+def add_font_option(parser: argparse.ArgumentParser) -> None:
+    """ Add the font option, for the subcommands that draw images. """
+    parser.add_argument("--font-path",
+                        help="CJK font used for the images "
+                             "(AI_DIGEST_FONT_PATH)")
+
+
+def add_collection_options(parser: argparse.ArgumentParser) -> None:
+    """ Add the options shaping what 'run' collects. """
+    parser.add_argument("--lookback-hours", type=positive_int,
+                        help="age limit of the collected entries, in hours "
+                             "(LOOKBACK_HOURS)")
+    parser.add_argument("--arxiv-categories", type=split_csv,
+                        help="comma separated arXiv categories "
+                             "(ARXIV_CATEGORIES)")
+    parser.add_argument("--arxiv-max-results", type=positive_int,
+                        help="entries fetched per arXiv category "
+                             "(ARXIV_MAX_RESULTS)")
+    parser.add_argument("--news-feed-urls", type=split_csv,
+                        help="comma separated RSS or Atom feeds "
+                             "(NEWS_FEED_URLS)")
+    parser.add_argument("--http-timeout", type=positive_int,
+                        help="timeout of every request, in seconds "
+                             "(HTTP_TIMEOUT)")
+    parser.add_argument("--user-agent",
+                        help="User-Agent sent with every request "
+                             "(USER_AGENT)")
+
+
+def add_summarizer_options(parser: argparse.ArgumentParser) -> None:
+    """ Add the options shaping how 'run' summarizes. """
+    parser.add_argument("--summarizer-backend", choices=SUMMARIZER_BACKENDS,
+                        help="summarizer to use (SUMMARIZER_BACKEND)")
+    parser.add_argument("--anthropic-model",
+                        help="model asked for on the Anthropic API "
+                             "(ANTHROPIC_MODEL)")
+    parser.add_argument("--anthropic-base-url",
+                        help="base URL of an Anthropic-compatible API "
+                             "(ANTHROPIC_BASE_URL)")
+    parser.add_argument("--anthropic-thinking-mode",
+                        choices=ANTHROPIC_THINKING_MODES,
+                        help="thinking parameter sent with the request "
+                             "(ANTHROPIC_THINKING_MODE)")
+    parser.add_argument("--anthropic-tool-choice-mode",
+                        choices=ANTHROPIC_TOOL_CHOICE_MODES,
+                        help="how the tool is demanded "
+                             "(ANTHROPIC_TOOL_CHOICE_MODE)")
+    parser.add_argument("--anthropic-text-json-fallback",
+                        choices=ANTHROPIC_TEXT_JSON_FALLBACK_MODES,
+                        help="accept a report written as JSON text "
+                             "(ANTHROPIC_TEXT_JSON_FALLBACK)")
+    parser.add_argument("--anthropic-max-retries", type=non_negative_int,
+                        help="retries the SDK may spend on one request "
+                             "(ANTHROPIC_MAX_RETRIES)")
+    parser.add_argument("--openai-model",
+                        help="model asked for on the OpenAI-compatible API "
+                             "(OPENAI_MODEL)")
+    parser.add_argument("--openai-base-url",
+                        help="base URL of that API, with the version path "
+                             "(OPENAI_BASE_URL)")
+    parser.add_argument("--max-output-tokens", type=positive_int,
+                        help="tokens the model may produce in one answer "
+                             "(MAX_OUTPUT_TOKENS)")
+
+
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     """ Build the command line parser and parse the arguments. """
     parser = argparse.ArgumentParser(
         prog="cli.py",
-        description="Generate the daily AI digest report.",
+        description="Generate the daily AI digest report. Every setting "
+                    "except the credentials can be given as an option, "
+                    "which overrides the environment and .env.",
     )
     parser.add_argument("-v", "--version", action="version",
                         version="ai-digest {0}".format(__version__))
@@ -386,8 +591,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     run_parser.add_argument("--date", help="report date, YYYY-MM-DD")
     run_parser.add_argument("--no-images", action="store_true",
                             help="never scrape, generate every card")
-    run_parser.add_argument("--verbose", action="store_true",
-                            help="log at debug level")
+    add_topics_option(run_parser)
+    add_collection_options(run_parser)
+    add_summarizer_options(run_parser)
+    add_font_option(run_parser)
+    add_common_options(run_parser)
     run_parser.set_defaults(handler=command_run)
 
     demo_parser = subparsers.add_parser(
@@ -395,20 +603,20 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     demo_parser.add_argument("--date", help="report date, YYYY-MM-DD")
     demo_parser.add_argument("--input", help="sample JSON to use instead "
                                              "of the bundled one")
-    demo_parser.add_argument("--verbose", action="store_true",
-                             help="log at debug level")
+    add_topics_option(demo_parser)
+    add_font_option(demo_parser)
+    add_common_options(demo_parser)
     demo_parser.set_defaults(handler=command_demo)
 
     render_parser = subparsers.add_parser(
         "render", help="rebuild the artifacts of a stored report")
     render_parser.add_argument("date", help="report date, YYYY-MM-DD")
-    render_parser.add_argument("--verbose", action="store_true",
-                               help="log at debug level")
+    add_font_option(render_parser)
+    add_common_options(render_parser)
     render_parser.set_defaults(handler=command_render)
 
     list_parser = subparsers.add_parser("list", help="list stored reports")
-    list_parser.add_argument("--verbose", action="store_true",
-                             help="log at debug level")
+    add_common_options(list_parser)
     list_parser.set_defaults(handler=command_list)
 
     return parser.parse_args(argv)
@@ -418,7 +626,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     """ Entry point returning the process exit code. """
     args = parse_args(argv)
     configure_logging(getattr(args, "verbose", False))
-    return args.handler(args, load_config())
+    return args.handler(args, apply_overrides(load_config(), args))
 
 
 if __name__ == "__main__":

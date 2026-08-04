@@ -93,7 +93,7 @@ The first command prints the version, the second prints nothing on a fresh insta
 
 ## Configuration
 
-All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`.
+All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Every one of them except the three credentials and `PORT`, which only the viewer reads, also has a command line option on `cli.py` that overrides the environment for one invocation; see [Overriding a setting for one run](#overriding-a-setting-for-one-run).
 
 | Variable | Default | Description |
 |---|---|---|
@@ -253,7 +253,7 @@ The error names the cause, so a quiet day and a broken network never look alike.
 ```
 INFO ai_digest.collectors.arxiv: collected 0 arXiv papers from 3 of 3 categories (150 papers offered, look back 24 hours)
 INFO ai_digest.collectors.news_rss: collected 0 news articles from 3 of 3 feeds (60 articles offered, look back 24 hours)
-ERROR ai_digest.cli: no entry collected: 6 of 6 sources answered and offered 210 items, none of them published within the last 24 hours; raise LOOKBACK_HOURS or review ARXIV_CATEGORIES and NEWS_FEED_URLS
+ERROR ai_digest.cli: no entry collected: 6 of 6 sources answered and offered 210 items, none of them published within the last 24 hours; raise --lookback-hours or LOOKBACK_HOURS, or review ARXIV_CATEGORIES and NEWS_FEED_URLS
 ```
 
 Nothing reachable at all:
@@ -273,7 +273,7 @@ When only some sources fail, the run continues with the rest and logs a `WARNING
 To work around a quiet day:
 
 ```sh
-LOOKBACK_HOURS=72 python cli.py run   # widen the window instead of waiting
+python cli.py run --lookback-hours 72   # widen the window instead of waiting
 ```
 
 ### Useful variants
@@ -288,6 +288,24 @@ python cli.py list                    # print the stored report dates
 ```
 
 `render` never calls the API, so it is the cheap way to try a layout change on an existing report.
+
+### Overriding a setting for one run
+
+Every setting listed under [Configuration](#configuration), except the credentials and `PORT`, can be given as an option named after its variable, which wins over the environment and `.env` for that invocation only:
+
+```sh
+python cli.py run --lookback-hours 72 --max-topics 4
+python cli.py run --summarizer-backend plain --no-images
+python cli.py run --anthropic-model claude-opus-4-1 --max-output-tokens 8000
+python cli.py render 2026-07-25 --font-path /usr/share/fonts/truetype/vlgothic/VL-Gothic-Regular.ttf
+python cli.py list --data-dir /srv/ai-digest/reports
+```
+
+Which options a subcommand takes follows from what it does: `--data-dir` is accepted everywhere, the collection and summarization settings by `run`, and `--font-path` by the three subcommands that draw images. `cli.py run --help` lists them with the variable each one replaces, and a run that overrides anything logs what it replaced, so the log of a report says how it was produced.
+
+`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and `OPENAI_API_KEY` deliberately have no option: a command line is readable by every user of the host, through `ps`, so a credential stays in the environment or in `.env`.
+
+Values are validated by the parser, which refuses a look back window of `0` or a model name given to `--summarizer-backend`, and exits with status 2 without collecting anything.
 
 ### Browse the reports
 

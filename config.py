@@ -103,6 +103,9 @@
 #      TCP port used by the development server.
 #
 #  Version History:
+#  v1.2 2026-08-04
+#       Expose the comma separated list parser as split_csv(), so that
+#       the command line reads a list exactly as the environment does.
 #  v1.1 2026-08-02
 #       Reject an unknown SUMMARIZER_BACKEND instead of falling back on
 #       the default, and drop the unused require_api_key(). Add
@@ -175,8 +178,13 @@ CJK_FONT_CANDIDATES = (
 )
 
 
-def _split_csv(value: str) -> List[str]:
-    """ Split a comma separated environment value into a clean list. """
+def split_csv(value: str) -> List[str]:
+    """
+    Split a comma separated setting into a clean list.
+
+    Shared with the command line parser, so that a list given as an
+    option is read exactly like the same list given in the environment.
+    """
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
@@ -390,11 +398,11 @@ def load_config() -> Config:
         openai_base_url=os.environ.get("OPENAI_BASE_URL") or None,
         openai_model=os.environ.get("OPENAI_MODEL", "").strip(),
         summarizer_backend=_env_token("SUMMARIZER_BACKEND", "claude"),
-        arxiv_categories=_split_csv(
+        arxiv_categories=split_csv(
             os.environ.get("ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)
         ),
         arxiv_max_results=_env_int("ARXIV_MAX_RESULTS", 60),
-        news_feed_urls=_split_csv(
+        news_feed_urls=split_csv(
             os.environ.get("NEWS_FEED_URLS", DEFAULT_NEWS_FEED_URLS)
         ),
         lookback_hours=_env_int("LOOKBACK_HOURS", 24),
