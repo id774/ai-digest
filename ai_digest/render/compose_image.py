@@ -34,6 +34,10 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.2 2026-08-04
+#       Choose the legend entries before drawing them, so that a row
+#       too narrow for every category drops the trailing ones instead
+#       of the leading, most important ones.
 #  v1.1 2026-08-03
 #       Name the configured look back window in the header and the
 #       footer instead of always announcing 24 hours.
@@ -45,7 +49,7 @@
 import logging
 import os
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from PIL import Image, ImageDraw
 
@@ -92,6 +96,11 @@ DEFAULT_LOOKBACK_HOURS = 24
 # alone.
 SOURCE_STRIP_HEIGHT = 26
 
+# Categories the legend lists at most, and the space one entry needs
+# beyond its label for the color swatch and the gap after it.
+LEGEND_MAX_ENTRIES = 6
+LEGEND_ENTRY_PADDING = 44
+
 logger = logging.getLogger(__name__)
 
 
@@ -105,6 +114,27 @@ def _display_url(url: str) -> str:
     """
     shortened = re.sub(r"^https?://(www\.)?", "", url.strip())
     return shortened.rstrip("/")
+
+
+def _legend_entries(draw: ImageDraw.ImageDraw, categories: List[str],
+                    font, right: int,
+                    left_limit: int) -> List[Tuple[str, int]]:
+    """
+    Return the legend entries that fit, each with its width.
+
+    The row is right aligned, so which entries fit has to be decided
+    before the first one is drawn. Laying them out from the right and
+    stopping once the row is full drops the leading categories, and
+    those belong to the most important topics of the day, so the
+    trailing ones are removed instead.
+    """
+    shown = list(categories[:LEGEND_MAX_ENTRIES])
+    widths = [text_size(draw, name, font)[0] + LEGEND_ENTRY_PADDING
+              for name in shown]
+    while shown and right - sum(widths) < left_limit:
+        shown.pop()
+        widths.pop()
+    return list(zip(shown, widths))
 
 
 def _draw_header(draw: ImageDraw.ImageDraw, date: str,
@@ -141,14 +171,12 @@ def _draw_header(draw: ImageDraw.ImageDraw, date: str,
         if topic.category not in categories:
             categories.append(topic.category)
 
-    # Entries are laid out right to left and stop before the subtitle,
-    # so a day with many categories drops the least important ones
-    # instead of overprinting the text on its left.
+    # Entries are drawn right to left and stop before the subtitle, so
+    # a day with many categories drops the least important ones instead
+    # of overprinting the text on its left.
     cursor = badge_right
-    for category in reversed(categories[:6]):
-        width = text_size(draw, category, legend_font)[0] + 44
-        if cursor - width < subtitle_end + 24:
-            break
+    for category, width in reversed(_legend_entries(
+            draw, categories, legend_font, badge_right, subtitle_end + 24)):
         cursor -= width
         draw.rectangle([(cursor, MARGIN + 54), (cursor + 16, MARGIN + 70)],
                        fill=category_color(category))

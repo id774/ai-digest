@@ -28,6 +28,10 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
+#  v1.2 2026-08-04
+#       Treat an image refused as a decompression bomb like any other
+#       undecodable one. Pillow raises that error outside OSError, so
+#       it escaped and ended the daily run instead of yielding a card.
 #  v1.1 2026-08-02
 #       Enforce the size limit while reading a response instead of
 #       after the whole body has been buffered, and request only http
@@ -137,7 +141,13 @@ def _download_image(url: str, timeout: int,
         with Image.open(io.BytesIO(content)) as image:
             image_format = (image.format or "").lower()
             width, height = image.size
-    except (UnidentifiedImageError, OSError) as error:
+    except (UnidentifiedImageError, Image.DecompressionBombError,
+            OSError) as error:
+        # A picture whose pixel count would exhaust the memory of the
+        # host compresses to far less than MAX_IMAGE_BYTES, so the byte
+        # limit does not catch it and Pillow refuses it here. That error
+        # derives from Exception rather than from OSError, so it has to
+        # be named: unnamed, it left the module and ended the batch.
         logger.info("undecodable image %s: %s", url, error)
         return None
     if width < MIN_IMAGE_SIDE or height < MIN_IMAGE_SIDE:
