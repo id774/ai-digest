@@ -29,6 +29,11 @@ v1.1.1 (Release Date: TBD)
   by the parser before anything is collected. The three credentials
   deliberately have no option, because a command line is readable by
   every user of the host.
+- Keep the categories of the leading topics in the legend of the
+  summary image. The legend is right aligned and was drawn from the
+  right until the row was full, so a day with long category names lost
+  the entries of its most important topics rather than of its least
+  important ones.
 
 v1.1 (2026-08-02)
 -----------------
