@@ -10,6 +10,11 @@ Every topic carries an illustration. The application first tries to obtain a rea
 
 The Claude API is only used for one stage: clustering, translating and classifying the collected entries into topics. Collection (arXiv, RSS/Atom) and every image path already run without an API key. Setting `SUMMARIZER_BACKEND=plain` removes the last dependency and runs the whole pipeline offline except for fetching the feeds themselves; see [Standalone use, no API key](#standalone-use-no-api-key).
 
+- Debian and nginx deployment: [doc/DEPLOYMENT.md](doc/DEPLOYMENT.md)
+- Demo mode and the screenshots: [doc/DEMO.md](doc/DEMO.md)
+- Implementation policy: [doc/POLICY](doc/POLICY)
+- Repository version history: [doc/VERSIONS](doc/VERSIONS)
+
 ## Features
 
 - **Daily pipeline in a single command**: collect, deduplicate, summarize, illustrate, render
@@ -19,7 +24,7 @@ The Claude API is only used for one stage: clustering, translating and classifyi
 - **Resilient image handling**: scraping is attempted first and falls back to locally generated cards
 - **One image per day**: a composite PNG summarizing the whole report, drawn with Pillow, without a headless browser
 - **No database**: reports are plain JSON and PNG files under one directory per day
-- **Deployable as is**: `gunicorn` and a `Procfile` for Heroku, `systemd` and `cron` for a VPS
+- **Deployable as is**: `systemd`, `nginx` and `cron` examples in [deploy/](deploy), a `Procfile` for Heroku
 
 ## Requirements
 
@@ -114,12 +119,13 @@ All settings are read from environment variables, optionally through `.env`. The
 | `NEWS_FEED_URLS` | three AI blogs | RSS or Atom feeds to collect, comma separated. |
 | `LOOKBACK_HOURS` | `24` | Age limit of the collected entries. |
 | `MAX_TOPICS` | `6` | Maximum topics per report. Six fills the summary image grid. |
-| `MAX_OUTPUT_TOKENS` | `4000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
+| `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
+| `SUMMARIZER_TIMEOUT` | `180` | Seconds allowed for one summarization request, on either API backend. Each retry spends it again; see [Timeouts](#timeouts). |
 | `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. |
 | `DATA_DIR` | `data/reports` | Directory holding the generated reports. |
-| `HTTP_TIMEOUT` | `15` | Timeout in seconds of every outgoing HTTP request. |
+| `HTTP_TIMEOUT` | `60` | Timeout in seconds of every collector and scraper request. The summarization request uses `SUMMARIZER_TIMEOUT`. |
 | `USER_AGENT` | `ai-digest/1.0 ...` | User-Agent sent with every outgoing request. |
-| `PORT` | `5000` | Port of the development server and of gunicorn. |
+| `PORT` | `3000` | Port of the development server and of gunicorn. |
 
 ### Anthropic-compatible APIs
 
@@ -196,6 +202,33 @@ than two:
 ```sh
 pip install openai
 ```
+
+### Timeouts
+
+Two limits bound the outgoing requests, and they measure different things:
+
+| Setting | Default | Bounds |
+|---|---|---|
+| `HTTP_TIMEOUT` | 60s | One collector or scraper request: an arXiv page, a feed, an article, an image |
+| `SUMMARIZER_TIMEOUT` | 180s | One summarization request, on either API backend |
+
+The summarization request is the longer of the two because it is not streamed:
+the client waits until the last token of the answer exists, so what is being
+waited for is the writing rather than the network. A day's worth of entries
+condensed into `MAX_TOPICS` topics is the same work whether the feeds were busy
+or quiet, and raising `MAX_OUTPUT_TOKENS` lengthens it.
+
+Retries widen the window, because the SDK spends the timeout again on each one:
+
+```text
+worst case wait = SUMMARIZER_TIMEOUT x (ANTHROPIC_MAX_RETRIES + 1)
+```
+
+At the defaults that is nine minutes. Keep it well inside the interval between
+two cron runs, so that a hung run has ended before the next one starts. Neither
+setting may be zero or negative; `cli.py run` refuses such a value before it
+collects anything, rather than letting the SDK reject it after a whole
+collection has been spent.
 
 ### Japanese font
 
@@ -310,10 +343,12 @@ Values are validated by the parser, which refuses a look back window of `0` or a
 ### Browse the reports
 
 ```sh
-flask --app app run --debug
+python app.py
 ```
 
-Then open `http://127.0.0.1:5000/`. The routes are:
+Then open `http://127.0.0.1:3000/`. `app.py` binds `127.0.0.1` and reads `PORT`,
+so the development server and gunicorn answer on the same address. The routes
+are:
 
 | Route | Content |
 |---|---|
@@ -336,6 +371,77 @@ data/reports/2026-07-25/
 ```
 
 `index.html` is self contained, so a day can also be published by copying its directory to any static web server.
+
+## When something fails
+
+The batch reports a failure and exits with a status; nothing is retried behind
+your back and no half written report is left in the archive. The viewer keeps
+serving what is already stored, because it never depends on a run having
+succeeded.
+
+### Exit codes of `cli.py`
+
+| Code | Meaning |
+|---|---|
+| `0` | The command completed. `--help` and `--version` also end here |
+| `1` | The command failed: nothing was collected, no topic could be built, a credential is missing, or a setting holds a value no backend can serve |
+| `2` | The command line itself was rejected by the parser, for example a count that is not a positive whole number. Nothing was collected and no request was spent |
+
+A cron entry that mails on non-zero output turns these into the only monitoring
+the batch needs. `deploy/ai-digest.cron` sets `MAILTO` for that reason.
+
+### What a failure says
+
+Every failure names its cause at `ERROR` level and ends the run:
+
+| Log line | Usually means |
+|---|---|
+| `SUMMARIZER_BACKEND is 'X'; expected one of: ...` | A typo in a setting. The run stops before collecting, so no request is spent on it |
+| `MAX_OUTPUT_TOKENS is 0; expected a positive number.` | Same, for the output budget; `SUMMARIZER_TIMEOUT` is refused the same way |
+| `ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is required.` | No credential is configured, and `SUMMARIZER_BACKEND` is not `plain` |
+| `no entry collected: ...` | The window held nothing, or the sources could not be reached. The message distinguishes the two; see ["no entry collected"](#no-entry-collected) |
+| `summarization failed: ...` | The request was made and produced no report. The `api response:` line logged beside it says what came back |
+| `Model returned no build_report tool call` | The endpoint answered without calling the tool; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call) |
+| `... so the report is truncated; lower MAX_TOPICS or raise MAX_OUTPUT_TOKENS` | The answer was cut off mid-object. A truncated report is refused rather than published in part |
+| `the model returned no usable topic` | The answer arrived and validated into nothing. `--verbose` dumps the whole response body |
+| `no stored report for DATE` | `render` was given a date the archive does not hold |
+
+A degraded source is a `WARNING`, not a failure. An unreachable feed, a page
+that does not scrape and an image that is refused each fall back and the run
+continues: `continuing with 5 of 6 sources; 1 failed (...)` is a report that was
+still written.
+
+The viewer answers `404` for an address it does not serve, for a date that is
+not a date, and for a date the archive does not hold. All three are the same
+answer on purpose: whether a report exists is not something an unauthenticated
+request needs distinguished for it.
+
+### The shape of a log line
+
+Both entry points configure logging once, to standard error, with the same
+format:
+
+```text
+%(asctime)s %(levelname)s %(name)s: %(message)s
+```
+
+so a failure reproduced by hand reads exactly like the one cron mailed:
+
+```text
+2026-08-05 06:30:14,882 INFO ai_digest.collectors.arxiv: collected 24 arXiv papers from 3 of 3 categories (150 papers offered, look back 24 hours)
+2026-08-05 06:30:52,410 INFO ai_digest.analyzer.summarizer: api response: id=msg_01 model=claude-sonnet-4-5 stop_reason=tool_use content_types=tool_use input_tokens=8123 output_tokens=2044
+2026-08-05 06:30:52,415 INFO ai_digest.analyzer.summarizer: summarized 41 entries into 6 topics
+```
+
+The `api response:` line is the one to read when a run fails: `stop_reason` and
+`content_types` say whether the model called the tool, wrote text instead, or
+spent the budget thinking. The response body itself is logged at `DEBUG` only,
+which `--verbose` turns on, because it runs into thousands of tokens and would
+swamp a cron mail.
+
+No credential appears at any level. A missing key is reported as missing, never
+quoted, and neither the key nor the token is included in a message that names a
+setting.
 
 ## Tests
 
@@ -372,6 +478,7 @@ python -m unittest discover -s tests -p "test_c*.py"             # modules match
 | `test_openai_compat.py` | OpenAI compatible tool call path |
 | `test_tool_choice_and_fallback.py` | `ANTHROPIC_TOOL_CHOICE_MODE` and the fallback chain |
 | `test_output_budget.py` | output token budget and truncated answers |
+| `test_request_timeout.py` | the summarization timeout: its default, its refusal of a non-positive value, and that it reaches both SDKs |
 | `test_resolver.py` | ar5iv figure and Open Graph scraping |
 | `test_demo.py` | bundled demo report build |
 
@@ -381,47 +488,27 @@ A passing suite says nothing about the feeds or the API being reachable; those a
 
 ### VPS
 
-Run the viewer under gunicorn and the batch under cron. The two share only the data directory.
+The viewer runs under gunicorn and systemd; the batch runs from cron. The two
+share nothing but `DATA_DIR`, which is what keeps yesterday's report on the site
+while a batch fails. gunicorn listens on `127.0.0.1` only, and nginx provides
+HTTPS and access control.
 
-`/etc/systemd/system/ai-digest.service`:
+[doc/DEPLOYMENT.md](doc/DEPLOYMENT.md) gives the complete Debian procedure:
+installation, TLS, reader restrictions, the API compatibility settings, the
+request budget, and the routine operations — key rotation, log rotation,
+backing up the archive and rolling back.
 
-```ini
-[Unit]
-Description=ai-digest web viewer
-After=network.target
+[deploy/](deploy) holds the matching examples:
 
-[Service]
-User=ai-digest
-WorkingDirectory=/opt/ai-digest
-EnvironmentFile=/opt/ai-digest/.env
-ExecStart=/opt/ai-digest/.venv/bin/gunicorn app:app --bind 127.0.0.1:5000 --workers 2
-Restart=on-failure
+| File | Purpose |
+|---|---|
+| `ai-digest.service` | systemd unit for the viewer |
+| `ai-digest.conf` | nginx server block, with TLS and the commented access restrictions |
+| `ai-digest.cron` | crontab for the daily batch |
 
-[Install]
-WantedBy=multi-user.target
-```
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now ai-digest
-```
-
-nginx reverse proxy:
-
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:5000;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-```
-
-Daily batch, as the `ai-digest` user:
-
-```cron
-30 6 * * * cd /opt/ai-digest && .venv/bin/python cli.py run >> /var/log/ai-digest/run.log 2>&1
-```
+The archive is the one thing that cannot be rebuilt: a report is not
+reproducible after the fact, because the feeds have moved on and the model would
+answer differently. Back up `DATA_DIR`.
 
 ### Heroku
 
@@ -470,10 +557,17 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 │       └── static/style.css
 ├── tools/
 │   └── capture_screens.py          screenshots of the viewer
+├── deploy/
+│   ├── ai-digest.service           example systemd unit for the viewer
+│   ├── ai-digest.conf              example nginx server block
+│   └── ai-digest.cron              example crontab for the batch
 ├── tests/                          unittest suite, standard library only
 ├── data/reports/                   generated reports, not tracked
 └── doc/
+    ├── DEPLOYMENT.md               Debian and nginx deployment
     ├── DEMO.md                     demo mode and the screenshots
+    ├── POLICY                      implementation policy
+    ├── VERSIONS                    repository version history
     ├── screenshots/                images embedded in this README
     ├── LICENSE
     ├── COPYING
@@ -482,13 +576,63 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 
 `tools/capture_screens.py` is a documentation helper. It is not imported by the application, and `playwright`, which only that script needs, is deliberately absent from `requirements.txt` so that neither the batch nor the viewer pulls in a browser.
 
+`app.py` imports nothing from `ai_digest.collectors` or `ai_digest.analyzer`. That is what keeps the viewer free of a credential and of outbound access: it cannot call an API because it does not carry the code that would.
+
+### Adding a collector
+
+`ai_digest/collectors/` holds everything that knows where the material comes
+from. Above it, the pipeline works from a list of `Entry` objects and does not
+care which source produced them.
+
+1. Write `ai_digest/collectors/<name>.py` exposing
+   `collect(..., lookback_hours, timeout, user_agent) -> CollectionResult`,
+   filling `Entry` with `source_type`, `title`, `url`, `summary`, `published`
+   (ISO 8601, UTC) and `origin`.
+2. Export it from `ai_digest/collectors/__init__.py`.
+3. Call it in `collect_entries()` in `cli.py`, and add its settings to
+   `config.py`, to `.env.example` and to the table under
+   [Configuration](#configuration).
+
+Two rules are not negotiable, because the whole pipeline rests on them:
+
+- **`collect()` never raises on a network error.** A source that cannot be
+  reached contributes nothing, records its failure in the `CollectionResult` and
+  lets the run continue. One misbehaving source must not end a run whose other
+  sources answered.
+- **Every request carries a timeout and the configured User-Agent.** An
+  unattended run must not hang until the next one starts, and a host reading its
+  own logs is entitled to know who is calling.
+
+Nothing else changes. `dedup.py`, the summarizers, the image resolver and the
+renderers are untouched by a new source, which is the point of `Entry`: what a
+topic has to look like is not a property of where its material came from.
+
+## The Japanese that stays
+
+The repository is written in English — the code, the comments, the log messages
+and the documents. The report is Japanese, because that is what it is for, and
+four places carry Japanese as data rather than as text that happens to be
+translated:
+
+| Where | Why |
+|---|---|
+| `ai_digest/analyzer/summarizer.py` | `SYSTEM_PROMPT` and `build_prompt()` ask the model for Japanese titles, bullets and category labels. It is the instruction, so it is written in the language of the answer |
+| `ai_digest/render/templates/` | The pages are `lang="ja"`: the viewer shows a Japanese report to a Japanese reader |
+| `ai_digest/render/compose_image.py` | The headings, the legend and the disclaimer drawn into the composite image are the image's own text, not the model's, so they are written here |
+| `ai_digest/analyzer/plain.py`, `ai_digest/images/fallback.py` | Japanese sentence enders in the sentence splitting pattern, and a Japanese glyph measured to size a line of text. They are load bearing: an English substitute would split the wrong sentences and measure the wrong height |
+| `config.py` | One macOS CJK font path among the probed locations |
+
+The screens being Japanese is the difference from a repository whose output is
+Japanese but whose interface is not. Here the reader of the site and the reader
+of the report are the same person.
+
 ## Demo and sample output
 
 ### Demo mode
 
 ```sh
 python cli.py demo
-flask --app app run
+python app.py
 ```
 
 The demo builds a report from the sample bundled in `ai_digest/demo/`. It collects nothing and calls no API, so it runs on a fresh clone with neither a key nor outbound access, and it is the quickest way to see what a finished report looks like. The result is a normal report under `data/reports/`, which the viewer lists next to the collected ones and marks with `"model": "demo"` in its statistics.
@@ -520,7 +664,7 @@ These pages were captured from a demo run, so they can be reproduced without a k
 
 ```sh
 python cli.py demo          # build the bundled sample report
-flask --app app run         # browse it at http://127.0.0.1:5000/
+python app.py               # browse it at http://127.0.0.1:3000/
 ```
 
 See [Demo mode](#demo-mode) above and [`doc/DEMO.md`](doc/DEMO.md), which states exactly which two stages the demo replaces and how it differs from a collected report.

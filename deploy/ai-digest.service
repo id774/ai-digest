@@ -1,0 +1,31 @@
+# Example systemd unit for the read only viewer. Copy it to
+# /etc/systemd/system/ and adjust the user, the paths and the port
+# before enabling it. The batch is not started from here: it runs from
+# cron, see ai-digest.cron.
+
+[Unit]
+Description=ai-digest web viewer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ai-digest
+Group=ai-digest
+WorkingDirectory=/opt/ai-digest
+EnvironmentFile=/opt/ai-digest/.env
+ExecStart=/opt/ai-digest/.venv/bin/gunicorn app:app \
+          --bind 127.0.0.1:3000 --workers 2 --timeout 60
+# The viewer only reads what the batch already wrote, so a crash is
+# never a half finished report and restarting is always safe.
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+# ProtectSystem=full leaves /opt writable, which DATA_DIR needs when
+# the archive lives under the installation directory.
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

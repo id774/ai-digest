@@ -1,6 +1,41 @@
 ai-digest Repository Version History
 ====================================
 
+v1.2 (Release Date: TBD)
+------------------------
+- Bound the summarization request with a timeout of its own,
+  SUMMARIZER_TIMEOUT, defaulting to 180 seconds. Neither API client was
+  given one, so both fell back on an SDK default measured in minutes
+  and an endpoint that accepted a request but never answered could hold
+  a nightly run open until the next one started. The value is checked
+  before anything is collected, and each retry spends it again, so the
+  worst case wait is SUMMARIZER_TIMEOUT x (ANTHROPIC_MAX_RETRIES + 1).
+  HTTP_TIMEOUT keeps its own meaning and now covers only the collectors
+  and the scraper, whose requests are many and short.
+- Raise the defaults of MAX_OUTPUT_TOKENS to 8000 and HTTP_TIMEOUT to
+  60 seconds, and move the viewer from port 5000 to 3000. A deployment
+  pinning the old values in .env is unaffected; one relying on the
+  defaults answers on the new port after an upgrade.
+- Document USER_AGENT in .env.example, which was the one setting
+  present in config.py and in the README but missing from the file
+  meant to be copied.
+- Add doc/DEPLOYMENT.md and deploy/, covering the Debian and nginx
+  procedure end to end: installation, the batch under cron, TLS, reader
+  restrictions, the API compatibility settings, the request budget, and
+  the routine operations the README never stated - rotating the key,
+  rotating the batch log, backing up the archive and rolling back. The
+  deployment section of the README now points at it instead of carrying
+  a shortened copy of the same unit file.
+- Say in the README what a failure looks like: the exit codes, the log
+  line each failure writes and what it usually means, the shared log
+  format, and that no credential appears at any level. Add the guide
+  for adding a collector that the contribution section was inviting
+  without describing, and the reason the four places carrying Japanese
+  carry it.
+- List doc/POLICY and doc/VERSIONS in the repository structure and link
+  them from the top of the README. Both existed and neither was
+  reachable from the document a reader starts at.
+
 v1.1.1 (2026-08-04)
 -------------------
 - Read the feed timestamps as UTC, which is what feedparser returns.

@@ -32,6 +32,9 @@
 #  - openai, installed separately: pip install openai
 #
 #  Version History:
+#  v1.2 2026-08-05
+#       Bound one request with an explicit timeout instead of leaving
+#       it to the SDK default, as the Anthropic path does.
 #  v1.1 2026-08-03
 #       Name the configured look back window in the prompt, like the
 #       Anthropic path.
@@ -47,6 +50,7 @@ from typing import Any, Dict, List, Optional
 from ai_digest import Entry, Topic
 from ai_digest.analyzer.summarizer import (BUILD_REPORT_TOOL,
                                            DEFAULT_LOOKBACK_HOURS,
+                                           DEFAULT_TIMEOUT,
                                            MAX_INPUT_ENTRIES,
                                            MAX_OUTPUT_TOKENS, SYSTEM_PROMPT,
                                            build_prompt, to_topics)
@@ -72,8 +76,15 @@ def build_function_tool() -> Dict[str, Any]:
 
 
 def _build_client(api_key: str, base_url: Optional[str],
-                  max_retries: Optional[int]) -> Any:
-    """ Build the OpenAI client, importing the package on demand. """
+                  max_retries: Optional[int],
+                  timeout: Optional[int] = None) -> Any:
+    """
+    Build the OpenAI client, importing the package on demand.
+
+    timeout bounds one request. The SDK default is measured in minutes,
+    which is no bound at all for an unattended run, and each retry
+    spends the timeout again.
+    """
     try:
         from openai import OpenAI
     except ImportError:
@@ -88,6 +99,8 @@ def _build_client(api_key: str, base_url: Optional[str],
         options["base_url"] = base_url
     if max_retries is not None:
         options["max_retries"] = max_retries
+    if timeout is not None:
+        options["timeout"] = timeout
     return OpenAI(**options)
 
 
@@ -144,6 +157,7 @@ def summarize(entries: List[Entry], api_key: str, model: str,
               max_topics: int, base_url: Optional[str] = None,
               max_retries: Optional[int] = None,
               max_output_tokens: int = MAX_OUTPUT_TOKENS,
+              timeout: int = DEFAULT_TIMEOUT,
               lookback_hours: int = DEFAULT_LOOKBACK_HOURS) -> List[Topic]:
     """
     Cluster and summarize collected entries over Chat Completions.
@@ -157,6 +171,8 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
+        timeout: Seconds allowed for one request. Each retry spends it
+            again, so the worst case wait is timeout x (max_retries+1).
         lookback_hours: Age limit the collectors applied, named in the
             prompt so that it matches the material actually sent.
 
@@ -172,7 +188,7 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         return []
 
     candidates = entries[:MAX_INPUT_ENTRIES]
-    client = _build_client(api_key, base_url, max_retries)
+    client = _build_client(api_key, base_url, max_retries, timeout)
     response = client.chat.completions.create(
         model=model,
         max_tokens=max_output_tokens,

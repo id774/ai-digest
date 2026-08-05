@@ -87,6 +87,7 @@
 #      --openai-model NAME (OPENAI_MODEL)
 #      --openai-base-url URL (OPENAI_BASE_URL)
 #      --max-output-tokens N (MAX_OUTPUT_TOKENS)
+#      --summarizer-timeout SECONDS (SUMMARIZER_TIMEOUT)
 #      --http-timeout SECONDS (HTTP_TIMEOUT)
 #      --user-agent STRING (USER_AGENT)
 #
@@ -111,6 +112,10 @@
 #    SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.4 2026-08-05
+#       Bound the summarization request with SUMMARIZER_TIMEOUT, and
+#       check it before anything is collected, so that an endpoint
+#       which never answers cannot hold a nightly run open.
 #  v1.3 2026-08-04
 #       Accept every setting except the credentials as an option, so
 #       that a one off run needs neither the environment edited nor a
@@ -168,6 +173,7 @@ OVERRIDABLE_FIELDS = (
     "anthropic_text_json_fallback",
     "anthropic_max_retries",
     "max_output_tokens",
+    "summarizer_timeout",
     "openai_base_url",
     "openai_model",
     "summarizer_backend",
@@ -369,9 +375,11 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
             config.validate_anthropic_auth()
             config.validate_anthropic_options()
             config.validate_output_budget()
+            config.validate_summarizer_timeout()
         elif use_openai:
             config.validate_openai_options()
             config.validate_output_budget()
+            config.validate_summarizer_timeout()
     except RuntimeError as error:
         logger.error("%s", error)
         return 1
@@ -404,6 +412,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
                     config.anthropic_text_json_fallback == "enabled"),
                 max_retries=config.anthropic_max_retries,
                 max_output_tokens=config.max_output_tokens,
+                timeout=config.summarizer_timeout,
                 lookback_hours=config.lookback_hours,
             )
         elif use_openai:
@@ -415,6 +424,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
                 base_url=config.openai_base_url,
                 max_retries=config.anthropic_max_retries,
                 max_output_tokens=config.max_output_tokens,
+                timeout=config.summarizer_timeout,
                 lookback_hours=config.lookback_hours,
             )
         else:
@@ -585,6 +595,9 @@ def add_summarizer_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-output-tokens", type=positive_int,
                         help="tokens the model may produce in one answer "
                              "(MAX_OUTPUT_TOKENS)")
+    parser.add_argument("--summarizer-timeout", type=positive_int,
+                        help="seconds allowed for one summarization "
+                             "request (SUMMARIZER_TIMEOUT)")
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
