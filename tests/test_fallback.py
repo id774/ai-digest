@@ -1,6 +1,56 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_fallback.py: Tests for wrap_text in ai_digest/images/fallback.py
+#
+#  Description:
+#  This test suite covers the line breaking of the fallback card, whose
+#  contract is that a card gets no more lines than its layout reserves
+#  room for. It checks the two ways a line ends, the configured width
+#  and an explicit line break, that the limit applies to both, and that
+#  an ellipsis marks text the limit dropped.
+#
+#  The last case is the guard against an endless loop: a line always
+#  accepts its first character, so a character wider than the whole
+#  column still advances the wrap instead of never fitting.
+#
+#  The tests draw on the bundled bitmap font rather than an installed
+#  one, so that only relative widths matter and the result does not
+#  depend on the fonts of the host.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_fallback
+#
+#  Test Cases:
+#    - Keep text that fits the width on one line.
+#    - Yield no line for empty text.
+#    - Start a new line at an explicit line break.
+#    - Apply the line limit to explicit line breaks as well.
+#    - Add no empty line for a trailing break.
+#    - Break an overflowing line and cap it at the limit.
+#    - Mark dropped text with an ellipsis after a break.
+#    - Drop nothing when the text fits within the limit.
+#    - Advance on a character wider than the configured width.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Pillow
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import unittest
 
 from PIL import Image, ImageDraw, ImageFont

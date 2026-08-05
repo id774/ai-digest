@@ -1,6 +1,60 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_resolver.py: Tests for ai_digest/images/resolver.py
+#
+#  Description:
+#  This test suite covers the fetching of an illustration, which is the
+#  part of the run that reaches pages nobody in this project controls.
+#  Every case here is about a limit holding: a body is read only up to
+#  its cap and the response is abandoned as soon as the cap is passed,
+#  rather than being buffered in full and measured afterwards, so that
+#  an endless response cannot exhaust the memory of the host.
+#
+#  The rest is the best-effort contract. A non http URL is refused
+#  without a request being made, a host that fails and an image Pillow
+#  refuses both yield None, and a decompression bomb, which is small
+#  enough to pass the byte limit and only refused on open, yields None
+#  as well. The caller has to be able to draw a fallback card in every
+#  one of those cases rather than lose the run.
+#
+#  No request is made. requests.get is replaced by a stub returning a
+#  stand-in response, so the suite needs no network.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_resolver
+#
+#  Test Cases:
+#    - Return a body that stays within the limit.
+#    - Stop reading once the limit is exceeded.
+#    - Abandon the response instead of reading the whole body first.
+#    - Stream the request and close the response.
+#    - Refuse a non http URL without requesting it.
+#    - Give up on an oversized body.
+#    - Return None when the host fails.
+#    - Skip an oversized image.
+#    - Pass MAX_IMAGE_BYTES as the limit when fetching an image.
+#    - Return None for a decompression bomb instead of raising.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Pillow, requests, beautifulsoup4
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import io
 import unittest
 from unittest import mock

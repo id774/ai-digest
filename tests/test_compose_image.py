@@ -1,6 +1,48 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_compose_image.py: Tests for the legend of the daily image
+#
+#  Description:
+#  This test suite covers the legend row of the composite daily image.
+#  The legend keeps the categories of the leading topics, and it has to
+#  fit a fixed width: the cases below pin the order it keeps, the
+#  trailing entries it drops when the row is too narrow, and the cap on
+#  how many entries it lists however wide the row is.
+#
+#  The tests draw on the bundled bitmap font rather than an installed
+#  one, so that only relative widths matter and the result does not
+#  depend on the fonts of the host.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_compose_image
+#
+#  Test Cases:
+#    - Keep every category, in order, on a row wide enough for them.
+#    - Drop the trailing categories on a row that is too narrow.
+#    - Keep nothing on a row without room for a single entry.
+#    - Yield no entry when there is no category.
+#    - Cap the listed categories at LEGEND_MAX_ENTRIES.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Pillow
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import unittest
 
 from PIL import Image, ImageDraw, ImageFont

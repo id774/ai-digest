@@ -1,6 +1,74 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_tool_choice_and_fallback.py: Tests for tool choice and the JSON fallback
+#
+#  Description:
+#  This test suite covers the settings that exist because a compatible
+#  endpoint need not behave exactly like the vendor one. The three tool
+#  choice modes are pinned as the requests they produce: 'forced' names
+#  the tool, 'any' demands a tool without naming it, which reaches the
+#  same place for an endpoint that drops a named tool_choice since
+#  build_report is the only tool offered, and 'auto' leaves the choice
+#  to the model.
+#
+#  The fallback reads a report out of a text block for an endpoint that
+#  will not call a tool at all. It is disabled by default and warns when
+#  it is used, and the cases below pin the guard that makes it safe:
+#  text without a topics list is not a report, however JSON-ish it
+#  looks, a real tool call still wins over a text block, and a truncated
+#  answer is still reported as truncated.
+#
+#  The retry cases keep one request per run the point: the SDK otherwise
+#  retries on its own, and two runs are no longer one request each.
+#
+#  No request is made. The anthropic package is replaced in sys.modules,
+#  so the suite needs neither the credential nor a network.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_tool_choice_and_fallback
+#
+#  Test Cases:
+#    - Name the tool under the forced mode.
+#    - Demand a tool without naming it under the any mode.
+#    - Leave the choice to the model under the auto mode.
+#    - Offer 'any' as a configured tool choice mode.
+#    - Keep the text JSON fallback disabled by default.
+#    - Read a JSON text block when the fallback is enabled, with a warning.
+#    - Unwrap a fenced block under the fallback.
+#    - Ignore prose, and JSON that carries no topics list.
+#    - Ignore a topics key that is not a list.
+#    - Let a real tool call win over a text block.
+#    - Report a truncated answer as truncated under the fallback.
+#    - Pass a retry budget of zero through to the SDK.
+#    - Keep the SDK default when no retry budget is given.
+#    - Default the fallback to disabled and the retry budget to two.
+#    - Accept 'any' as a configured tool choice.
+#    - Reject an unknown fallback value, and a negative retry budget.
+#    - Require a credential for the OpenAI compatible backend.
+#    - Require a model for the OpenAI compatible backend.
+#    - Load a complete OpenAI compatible configuration.
+#    - Accept a bearer token on the OpenAI compatible backend.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Standard library only (the anthropic package is stubbed, never imported)
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import os
 import sys
 import types

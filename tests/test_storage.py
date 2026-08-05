@@ -1,6 +1,52 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_storage.py: Tests for ai_digest/storage.py
+#
+#  Description:
+#  This test suite covers the persistence of a report and, above all,
+#  the validation of the date strings that name its directory. Those
+#  strings arrive from URL path segments in the Flask viewer, so a
+#  crafted one has to end as a refusal rather than as a path outside
+#  DATA_DIR: the cases below pin the refusal of a traversal, of a
+#  loosely formatted date and of a trailing newline, and they pin that
+#  a lookup answers with None instead of raising, so that the viewer
+#  can answer 404 rather than a traceback.
+#
+#  The round trip cases cover the rest of the module: a report saved and
+#  loaded again, and a directory that is not named after a date being
+#  passed over when the archive is listed.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_storage
+#
+#  Test Cases:
+#    - Accept a plain YYYY-MM-DD date.
+#    - Reject anything that could escape the archive, a trailing newline included.
+#    - Refuse a traversal in report_dir() with a ValueError.
+#    - Return None from a lookup rather than raising on a crafted date.
+#    - Save a report and load it back, listing its date in the archive.
+#    - Ignore a directory that is not named after a date.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Standard library only
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import os
 import tempfile
 import unittest

@@ -1,6 +1,57 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_output_budget.py: Tests for the MAX_OUTPUT_TOKENS setting
+#
+#  Description:
+#  This test suite follows the output budget from the environment to the
+#  request, on both API backends. The setting used to be dropped on the
+#  floor, with dotenv putting it in the environment and nothing ever
+#  reading it, so the cases below check the configured value at each
+#  stage rather than only that a request carries some limit. The value
+#  they configure differs from the default on purpose: reading nothing
+#  at all must not be able to pass.
+#
+#  A budget that is not positive is refused, since it would be refused
+#  by the SDK only after a whole collection has been spent, while a
+#  value that cannot be read as a number leaves the default in place.
+#
+#  No request is made. The API clients are replaced by stubs, so the
+#  suite needs no credential and no network.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_output_budget
+#
+#  Test Cases:
+#    - Default to the constant the summarizer defines.
+#    - Read MAX_OUTPUT_TOKENS from the environment.
+#    - Reject a budget of zero, and a negative one.
+#    - Keep the default on a value that is not a number.
+#    - Carry the default budget into an Anthropic request.
+#    - Carry a configured budget into an Anthropic request.
+#    - Pass the budget through summarize() on the Anthropic backend.
+#    - Carry the shared default into an OpenAI compatible request.
+#    - Carry a configured budget into an OpenAI compatible request.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Standard library only (the API clients are stubbed, never imported)
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import os
 import unittest
 from types import SimpleNamespace

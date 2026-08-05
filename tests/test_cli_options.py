@@ -1,6 +1,54 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_cli_options.py: Tests for the option handling of cli.py
+#
+#  Description:
+#  This test suite covers what a command line option is allowed to do to
+#  the configuration: replace exactly one setting and leave the rest
+#  alone, split a list the way the environment variable of the same name
+#  is split, and make a data directory absolute. It also checks that
+#  every name in OVERRIDABLE_FIELDS is a real field of Config, so that a
+#  renamed setting cannot leave a silently dead option behind.
+#
+#  A rule of its own is that no credential gets an option, because a
+#  command line is readable by every user of the host. The remaining
+#  cases pin the values the parser refuses outright, since a number the
+#  pipeline cannot use should cost a command line rather than a run.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_cli_options
+#
+#  Test Cases:
+#    - Return the configuration unchanged when no option is given.
+#    - Replace the window with --lookback-hours and leave the rest alone.
+#    - Split a list option the way the environment ones are split.
+#    - Make the data directory absolute.
+#    - Keep every overridable field a real field of the configuration.
+#    - Give no option to a credential.
+#    - Reject a window that is not a number, and one of zero.
+#    - Accept zero retries, and reject a negative retry budget.
+#    - Accept a known summarizer backend, and reject an unknown one.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - See requirements.txt (the command line module imports the whole pipeline)
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import contextlib
 import io
 import os
