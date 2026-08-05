@@ -87,22 +87,34 @@
 #      Maximum number of topics rendered in one daily report.
 #  - MAX_OUTPUT_TOKENS
 #      Tokens the model may produce in one answer, on either API
-#      backend. Defaults to 4000, which fits the report with room to
+#      backend. Defaults to 8000, which fits the report with room to
 #      spare. A model that thinks before answering draws on this same
 #      budget, so an endpoint whose thinking cannot be turned off may
 #      need more; raising it buys no tool call on its own.
+#  - SUMMARIZER_TIMEOUT
+#      Timeout, in seconds, of one summarization request, on either API
+#      backend. Defaults to 180. It is separate from HTTP_TIMEOUT
+#      because the two measure different things: a feed answers in
+#      moments, while an answer of MAX_OUTPUT_TOKENS is written from
+#      end to end before the client sees any of it.
 #  - AI_DIGEST_FONT_PATH
 #      Path of a CJK capable TrueType font used for image generation.
 #  - DATA_DIR
 #      Directory where generated reports are stored.
 #  - HTTP_TIMEOUT
-#      Timeout, in seconds, applied to every outgoing HTTP request.
+#      Timeout, in seconds, applied to every collector and scraper
+#      request. The summarization request uses SUMMARIZER_TIMEOUT.
 #  - USER_AGENT
 #      User-Agent header sent with every outgoing HTTP request.
 #  - PORT
-#      TCP port used by the development server.
+#      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v1.3 2026-08-05
+#       Give the summarization request a timeout of its own,
+#       SUMMARIZER_TIMEOUT, so that no outgoing request is left without
+#       one. Raise the defaults of MAX_OUTPUT_TOKENS to 8000 and
+#       HTTP_TIMEOUT to 60, and move the viewer to port 3000.
 #  v1.2 2026-08-04
 #       Expose the comma separated list parser as split_csv(), so that
 #       the command line reads a list exactly as the environment does.
@@ -250,7 +262,8 @@ class Config:
     anthropic_tool_choice_mode: str = "forced"
     anthropic_text_json_fallback: str = "disabled"
     anthropic_max_retries: int = 2
-    max_output_tokens: int = 4000
+    max_output_tokens: int = 8000
+    summarizer_timeout: int = 180
     openai_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None
     openai_model: str = ""
@@ -262,9 +275,9 @@ class Config:
     max_topics: int = 6
     font_path: Optional[str] = None
     data_dir: str = os.path.join(BASE_DIR, "data", "reports")
-    http_timeout: int = 15
+    http_timeout: int = 60
     user_agent: str = DEFAULT_USER_AGENT
-    port: int = 5000
+    port: int = 3000
 
     def validate_summarizer_backend(self) -> None:
         """
@@ -351,6 +364,22 @@ class Config:
                 )
             )
 
+    def validate_summarizer_timeout(self) -> None:
+        """
+        Raise when SUMMARIZER_TIMEOUT cannot bound a request.
+
+        A run that starts with a timeout of zero or less would either be
+        refused by the SDK after everything is collected, or fall back
+        on a default measured in minutes. An unattended run must not
+        hang until the next one starts, so the value is checked before
+        the first source is read.
+        """
+        if self.summarizer_timeout < 1:
+            raise RuntimeError(
+                "SUMMARIZER_TIMEOUT is {0}; expected a positive number "
+                "of seconds.".format(self.summarizer_timeout)
+            )
+
     def validate_openai_options(self) -> None:
         """
         Raise when the OpenAI compatible backend is not configured.
@@ -400,7 +429,8 @@ def load_config() -> Config:
             "ANTHROPIC_TEXT_JSON_FALLBACK", "disabled"
         ),
         anthropic_max_retries=_env_int("ANTHROPIC_MAX_RETRIES", 2),
-        max_output_tokens=_env_int("MAX_OUTPUT_TOKENS", 4000),
+        max_output_tokens=_env_int("MAX_OUTPUT_TOKENS", 8000),
+        summarizer_timeout=_env_int("SUMMARIZER_TIMEOUT", 180),
         openai_api_key=os.environ.get("OPENAI_API_KEY") or None,
         openai_base_url=os.environ.get("OPENAI_BASE_URL") or None,
         openai_model=os.environ.get("OPENAI_MODEL", "").strip(),
@@ -416,8 +446,8 @@ def load_config() -> Config:
         max_topics=_env_int("MAX_TOPICS", 6),
         font_path=detect_font_path(os.environ.get("AI_DIGEST_FONT_PATH")),
         data_dir=os.path.abspath(data_dir),
-        http_timeout=_env_int("HTTP_TIMEOUT", 15),
+        http_timeout=_env_int("HTTP_TIMEOUT", 60),
         user_agent=(os.environ.get("USER_AGENT", "").strip()
                     or DEFAULT_USER_AGENT),
-        port=_env_int("PORT", 5000),
+        port=_env_int("PORT", 3000),
     )

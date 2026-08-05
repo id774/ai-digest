@@ -1,0 +1,17 @@
+# Example crontab for the daily batch. Install it as the service user:
+#
+#     sudo -u ai-digest crontab deploy/ai-digest.cron
+#
+# The batch reads its settings from .env, which cron does not load, so
+# the command runs from the installation directory where python-dotenv
+# finds it.
+
+SHELL=/bin/sh
+# Where a failed run is reported. Remove the line to rely on the log
+# file alone; cron then mails nothing and a failure passes unnoticed.
+MAILTO=root
+
+# 06:30 local time. arXiv announces on weekdays only, so a run on a
+# Saturday or Sunday routinely collects nothing and exits 1; that is
+# the source being quiet, not the batch being broken.
+30 6 * * * cd /opt/ai-digest && .venv/bin/python cli.py run >> /var/log/ai-digest/run.log 2>&1

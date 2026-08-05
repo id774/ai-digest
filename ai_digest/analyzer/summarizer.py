@@ -36,6 +36,10 @@
 #  - anthropic
 #
 #  Version History:
+#  v1.3 2026-08-05
+#       Bound one request with an explicit timeout instead of leaving
+#       it to the SDK default, so that an endpoint which never answers
+#       cannot hold a nightly run open until the next one starts.
 #  v1.2 2026-08-03
 #       Name the configured look back window in the prompt instead of
 #       always announcing 24 hours.
@@ -74,7 +78,14 @@ SUMMARY_CHARS = 700
 # bullets each fit comfortably below this limit. MAX_OUTPUT_TOKENS in
 # the environment overrides it, because a model that thinks before
 # answering draws on the same budget and may need more of it.
-MAX_OUTPUT_TOKENS = 4000
+MAX_OUTPUT_TOKENS = 8000
+
+# Default seconds allowed for one summarization request. It is not the
+# network but the writing that is being waited for: nothing is
+# streamed, so the client sees the answer only once the last token of
+# MAX_OUTPUT_TOKENS exists. SUMMARIZER_TIMEOUT in the environment
+# overrides it, and it matches the value in config.py.
+DEFAULT_TIMEOUT = 180
 
 # Look back window named in the prompt when the caller does not say
 # which one the collectors used. It matches LOOKBACK_HOURS in config.py.
@@ -320,7 +331,8 @@ def to_topics(payload: Dict[str, Any], entries: List[Entry],
 
 def _build_client(api_key: Optional[str], auth_token: Optional[str],
                   base_url: Optional[str],
-                  max_retries: Optional[int] = None) -> Any:
+                  max_retries: Optional[int] = None,
+                  timeout: Optional[int] = None) -> Any:
     """
     Build a client for Anthropic or an Anthropic-compatible API.
 
@@ -328,6 +340,12 @@ def _build_client(api_key: Optional[str], auth_token: Optional[str],
     run spend exactly one request, which is what comparing two endpoint
     settings needs: the SDK otherwise retries some errors on its own
     and two runs are no longer one request each.
+
+    timeout is passed through the same way, and the caller is expected
+    to give one: the SDK default is measured in minutes, and a nightly
+    run that hangs on an endpoint which never answers is still hanging
+    when the next one starts. Each retry spends the timeout again, so
+    the worst case wait is timeout x (max_retries + 1).
     """
     import anthropic
 
@@ -339,6 +357,8 @@ def _build_client(api_key: Optional[str], auth_token: Optional[str],
     options: Dict[str, Any] = {}
     if max_retries is not None:
         options["max_retries"] = max_retries
+    if timeout is not None:
+        options["timeout"] = timeout
     if api_key:
         options["api_key"] = api_key
     else:
@@ -405,6 +425,7 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
               text_json_fallback: bool = False,
               max_retries: Optional[int] = None,
               max_output_tokens: int = MAX_OUTPUT_TOKENS,
+              timeout: int = DEFAULT_TIMEOUT,
               lookback_hours: int = DEFAULT_LOOKBACK_HOURS) -> List[Topic]:
     """
     Cluster and summarize collected entries with the Claude API.
@@ -426,6 +447,8 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
+        timeout: Seconds allowed for one request. Each retry spends it
+            again, so the worst case wait is timeout x (max_retries+1).
         lookback_hours: Age limit the collectors applied, named in the
             prompt so that it matches the material actually sent.
 
@@ -440,7 +463,8 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         return []
 
     candidates = entries[:MAX_INPUT_ENTRIES]
-    client = _build_client(api_key, auth_token, base_url, max_retries)
+    client = _build_client(api_key, auth_token, base_url, max_retries,
+                           timeout)
     message = client.messages.create(**_build_request(
         candidates, model, max_topics, thinking_mode, tool_choice_mode,
         max_output_tokens, lookback_hours,

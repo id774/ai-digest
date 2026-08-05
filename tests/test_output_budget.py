@@ -33,11 +33,13 @@ class ConfigurationTest(unittest.TestCase):
 
     def test_reads_the_environment(self):
         # The setting used to be dropped on the floor: dotenv put it in
-        # the environment and nothing ever read it.
-        loaded = self.load({"MAX_OUTPUT_TOKENS": "8000"})
+        # the environment and nothing ever read it. The value differs
+        # from the default on purpose, so that reading nothing at all
+        # cannot pass this test.
+        loaded = self.load({"MAX_OUTPUT_TOKENS": "12000"})
 
         loaded.validate_output_budget()
-        self.assertEqual(8000, loaded.max_output_tokens)
+        self.assertEqual(12000, loaded.max_output_tokens)
 
     def test_rejects_zero(self):
         loaded = self.load({"MAX_OUTPUT_TOKENS": "0"})
@@ -55,7 +57,8 @@ class ConfigurationTest(unittest.TestCase):
         loaded = self.load({"MAX_OUTPUT_TOKENS": "lots"})
 
         loaded.validate_output_budget()
-        self.assertEqual(4000, loaded.max_output_tokens)
+        self.assertEqual(summarizer.MAX_OUTPUT_TOKENS,
+                         loaded.max_output_tokens)
 
 
 class AnthropicRequestTest(unittest.TestCase):
@@ -67,9 +70,9 @@ class AnthropicRequestTest(unittest.TestCase):
 
     def test_configured_budget_reaches_the_request(self):
         request = summarizer._build_request([], "m", 6, "default", "forced",
-                                            8000)
+                                            12000)
 
-        self.assertEqual(8000, request["max_tokens"])
+        self.assertEqual(12000, request["max_tokens"])
 
     def test_summarize_passes_the_budget_through(self):
         client = mock.Mock()
@@ -80,9 +83,9 @@ class AnthropicRequestTest(unittest.TestCase):
         with mock.patch.object(summarizer, "_build_client",
                                return_value=client):
             summarizer.summarize([_entry()], api_key="k", model="m",
-                                 max_topics=6, max_output_tokens=8000)
+                                 max_topics=6, max_output_tokens=12000)
 
-        self.assertEqual(8000,
+        self.assertEqual(12000,
                          client.messages.create.call_args.kwargs["max_tokens"])
 
 
@@ -108,8 +111,8 @@ class OpenAiRequestTest(unittest.TestCase):
                          self.summarize()["max_tokens"])
 
     def test_configured_budget_reaches_the_request(self):
-        self.assertEqual(8000,
-                         self.summarize(max_output_tokens=8000)["max_tokens"])
+        self.assertEqual(12000,
+                         self.summarize(max_output_tokens=12000)["max_tokens"])
 
 
 if __name__ == "__main__":

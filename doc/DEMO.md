@@ -9,10 +9,10 @@ is configured.
 
 ```sh
 python cli.py demo
-flask --app app run
+python app.py
 ```
 
-Then open `http://127.0.0.1:5000/` and follow the date in the archive
+Then open `http://127.0.0.1:3000/` and follow the date in the archive
 index. The demo writes a normal report into `DATA_DIR`, so the viewer,
 the standalone `index.html` and the composite `summary.png` all work as
 they do for a collected report.
