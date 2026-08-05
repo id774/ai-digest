@@ -1,8 +1,8 @@
 ai-digest Repository Version History
 ====================================
 
-v1.2 (Release Date: TBD)
-------------------------
+v1.2 (2026-08-05)
+-----------------
 - Name the endpoint settings after the summarization stage instead of
   after a vendor. ANTHROPIC_* and OPENAI_* described neither what they
   addressed nor who answered: an 'anthropic-compatible' endpoint is
