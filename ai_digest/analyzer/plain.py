@@ -7,7 +7,7 @@
 #  Description:
 #  This module builds daily topics without calling any language model.
 #  It exists so that the whole pipeline can run with
-#  SUMMARIZER_BACKEND=plain and no ANTHROPIC_API_KEY at all.
+#  SUMMARIZER_BACKEND=plain and no credential at all.
 #
 #  Unlike summarizer.py, entries are neither clustered nor translated:
 #  each deduplicated entry becomes its own topic, newest first, and the

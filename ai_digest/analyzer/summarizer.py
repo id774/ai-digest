@@ -36,6 +36,10 @@
 #  - anthropic
 #
 #  Version History:
+#  v1.4 2026-08-05
+#       Name SUMMARIZER_THINKING_MODE and SUMMARIZER_TEXT_JSON_FALLBACK
+#       in the messages that ask for them, following the settings out
+#       of the vendor prefix they used to carry.
 #  v1.3 2026-08-05
 #       Bound one request with an explicit timeout instead of leaving
 #       it to the SDK default, so that an endpoint which never answers
@@ -277,14 +281,14 @@ def _extract_tool_input(message: Any,
         payload = _text_json_report(message)
         if payload is not None:
             logger.warning("no tool call; read the report from a text block "
-                           "because ANTHROPIC_TEXT_JSON_FALLBACK=enabled")
+                           "because SUMMARIZER_TEXT_JSON_FALLBACK=enabled")
             return payload
 
     types = _block_types(message)
     if stop_reason == "max_tokens" and "thinking" in types:
         raise RuntimeError(
             "Model exhausted max_tokens in thinking before returning the "
-            "build_report tool call; set ANTHROPIC_THINKING_MODE=disabled."
+            "build_report tool call; set SUMMARIZER_THINKING_MODE=disabled."
         )
     raise RuntimeError(
         "Model returned no build_report tool call; stop_reason={0}, "

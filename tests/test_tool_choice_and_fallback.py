@@ -46,7 +46,7 @@ class ToolChoiceRequestTest(unittest.TestCase):
             self.request("auto")["tool_choice"])
 
     def test_any_is_a_configured_mode(self):
-        self.assertIn("any", config.ANTHROPIC_TOOL_CHOICE_MODES)
+        self.assertIn("any", config.SUMMARIZER_TOOL_CHOICE_MODES)
 
 
 class TextJsonFallbackTest(unittest.TestCase):
@@ -65,7 +65,7 @@ class TextJsonFallbackTest(unittest.TestCase):
                                    True)
 
         self.assertEqual([{"title": "a"}], payload["topics"])
-        self.assertIn("ANTHROPIC_TEXT_JSON_FALLBACK", logged.output[0])
+        self.assertIn("SUMMARIZER_TEXT_JSON_FALLBACK", logged.output[0])
 
     def test_unwraps_a_fenced_block(self):
         with self.assertLogs(summarizer.logger, "WARNING"):
@@ -128,54 +128,72 @@ class ConfigurationTest(unittest.TestCase):
     def test_defaults(self):
         loaded = self.load({})
 
-        loaded.validate_anthropic_options()
-        self.assertEqual("disabled", loaded.anthropic_text_json_fallback)
-        self.assertEqual(2, loaded.anthropic_max_retries)
+        loaded.validate_protocol_options()
+        self.assertEqual("disabled", loaded.summarizer_text_json_fallback)
+        self.assertEqual(2, loaded.summarizer_max_retries)
 
     def test_accepts_any_as_a_tool_choice(self):
-        loaded = self.load({"ANTHROPIC_TOOL_CHOICE_MODE": "any"})
+        loaded = self.load({"SUMMARIZER_TOOL_CHOICE_MODE": "any"})
 
-        loaded.validate_anthropic_options()
-        self.assertEqual("any", loaded.anthropic_tool_choice_mode)
+        loaded.validate_protocol_options()
+        self.assertEqual("any", loaded.summarizer_tool_choice_mode)
 
     def test_rejects_an_unknown_fallback_value(self):
-        loaded = self.load({"ANTHROPIC_TEXT_JSON_FALLBACK": "yes"})
+        loaded = self.load({"SUMMARIZER_TEXT_JSON_FALLBACK": "yes"})
 
         with self.assertRaisesRegex(RuntimeError, "expected one of"):
-            loaded.validate_anthropic_options()
+            loaded.validate_protocol_options()
 
     def test_rejects_negative_retries(self):
-        loaded = self.load({"ANTHROPIC_MAX_RETRIES": "-1"})
+        loaded = self.load({"SUMMARIZER_MAX_RETRIES": "-1"})
 
         with self.assertRaisesRegex(RuntimeError, "zero or more"):
-            loaded.validate_anthropic_options()
+            loaded.validate_retry_budget()
 
-    def test_openai_backend_needs_a_key_and_a_model(self):
-        loaded = self.load({"SUMMARIZER_BACKEND": "openai"})
+    def test_openai_backend_needs_a_credential(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible"})
 
         loaded.validate_summarizer_backend()
-        with self.assertRaisesRegex(RuntimeError, "OPENAI_API_KEY"):
-            loaded.validate_openai_options()
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_API_KEY"):
+            loaded.validate_summarizer_auth()
 
     def test_openai_backend_needs_a_model(self):
-        loaded = self.load({"SUMMARIZER_BACKEND": "openai",
-                            "OPENAI_API_KEY": "key"})
+        # The anthropic-compatible backend falls back on a known Claude
+        # model here; this one has nothing to fall back on, because the
+        # models an endpoint offers are its own.
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible",
+                            "SUMMARIZER_API_KEY": "key"})
 
-        with self.assertRaisesRegex(RuntimeError, "OPENAI_MODEL"):
-            loaded.validate_openai_options()
+        loaded.validate_summarizer_auth()
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_MODEL"):
+            loaded.validate_summarizer_model()
 
     def test_openai_backend_configured(self):
         loaded = self.load({
-            "SUMMARIZER_BACKEND": "openai",
-            "OPENAI_API_KEY": "key",
-            "OPENAI_MODEL": "preview/Kimi-K2.6",
-            "OPENAI_BASE_URL": "https://api.ai.sakura.ad.jp/v1",
+            "SUMMARIZER_BACKEND": "openai-compatible",
+            "SUMMARIZER_API_KEY": "key",
+            "SUMMARIZER_MODEL": "preview/Kimi-K2.6",
+            "SUMMARIZER_BASE_URL": "https://api.ai.sakura.ad.jp/v1",
         })
 
         loaded.validate_summarizer_backend()
-        loaded.validate_openai_options()
+        loaded.validate_summarizer_auth()
+        loaded.validate_summarizer_model()
         self.assertEqual("https://api.ai.sakura.ad.jp/v1",
-                         loaded.openai_base_url)
+                         loaded.summarizer_base_url)
+        self.assertEqual("preview/Kimi-K2.6", loaded.resolved_model)
+
+    def test_openai_backend_accepts_a_bearer_token(self):
+        # The OpenAI SDK sends its api_key as a Bearer token, so the
+        # two spellings of the credential describe one request.
+        loaded = self.load({
+            "SUMMARIZER_BACKEND": "openai-compatible",
+            "SUMMARIZER_AUTH_TOKEN": "uuid:secret",
+            "SUMMARIZER_MODEL": "preview/Kimi-K2.6",
+        })
+
+        loaded.validate_summarizer_auth()
+        loaded.validate_summarizer_model()
 
 
 if __name__ == "__main__":

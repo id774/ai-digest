@@ -89,7 +89,7 @@ itself, so a collected report replaces the screenshots with no further
 work:
 
 ```sh
-python cli.py run                 # needs ANTHROPIC_API_KEY
+python cli.py run                 # needs SUMMARIZER_API_KEY
 python tools/capture_screens.py   # captures the newest report
 ```
 

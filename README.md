@@ -29,7 +29,7 @@ The Claude API is only used for one stage: clustering, translating and classifyi
 ## Requirements
 
 - Python 3.9 or later
-- An Anthropic API key with access to the Claude Messages API, unless `SUMMARIZER_BACKEND=plain` (see [Standalone use, no API key](#standalone-use-no-api-key))
+- A credential for an endpoint speaking the Anthropic Messages API or the OpenAI Chat Completions API, unless `SUMMARIZER_BACKEND=plain` (see [Standalone use, no API key](#standalone-use-no-api-key))
 - A CJK capable TrueType font, for example the `fonts-noto-cjk` package; see [Japanese font](#japanese-font)
 - Outbound HTTPS access to `export.arxiv.org`, the configured feeds and, unless running standalone, the Anthropic API
 
@@ -82,9 +82,15 @@ cp .env.example .env
 $EDITOR .env
 ```
 
-At minimum, set `ANTHROPIC_API_KEY`. An Anthropic-compatible API can instead use
-`ANTHROPIC_AUTH_TOKEN`. The `.env` file is ignored by Git and must never be committed.
-Exported variables take precedence over `.env` values.
+At minimum, set `SUMMARIZER_API_KEY`, or `SUMMARIZER_AUTH_TOKEN` for an endpoint
+that authenticates with a Bearer token. The `.env` file is ignored by Git and must
+never be committed. Exported variables take precedence over `.env` values.
+
+The settings that address the endpoint are named after the summarization stage
+rather than after a vendor, because the same key, base URL and model reach
+whichever endpoint is configured. The `ANTHROPIC_*` and `OPENAI_*` names they
+replaced are refused at startup and answered with their replacement; see
+[Renamed settings](#renamed-settings).
 
 ### 5. Verify the installation
 
@@ -98,22 +104,19 @@ The first command prints the version, the second prints nothing on a fresh insta
 
 ## Configuration
 
-All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Every one of them except the three credentials and `PORT`, which only the viewer reads, also has a command line option on `cli.py` that overrides the environment for one invocation; see [Overriding a setting for one run](#overriding-a-setting-for-one-run).
+All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Every one of them except the two credentials and `PORT`, which only the viewer reads, also has a command line option on `cli.py` that overrides the environment for one invocation; see [Overriding a setting for one run](#overriding-a-setting-for-one-run).
 
 | Variable | Default | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Claude API key. Mutually exclusive with `ANTHROPIC_AUTH_TOKEN`. |
-| `ANTHROPIC_AUTH_TOKEN` | none | Bearer token for an Anthropic-compatible API. |
-| `ANTHROPIC_BASE_URL` | none | Base URL for an Anthropic-compatible API. |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Model used for summarization. |
-| `ANTHROPIC_THINKING_MODE` | `default` | `default` sends no thinking parameter and keeps the provider default. `disabled` sends `thinking.type=disabled`, for a model that would otherwise think until the output budget is gone. |
-| `ANTHROPIC_TOOL_CHOICE_MODE` | `forced` | `forced` names `build_report` in `tool_choice`. `any` demands a tool without naming one. `auto` lets the model choose the tool and disables parallel tool use. |
-| `ANTHROPIC_TEXT_JSON_FALLBACK` | `disabled` | `enabled` also accepts a report written as JSON text when no tool call came back; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
-| `ANTHROPIC_MAX_RETRIES` | `2` | Retries the Anthropic SDK may spend on one request. `0` spends exactly one request per run. |
-| `OPENAI_API_KEY` | none | Key of the OpenAI-compatible endpoint. Required by `SUMMARIZER_BACKEND=openai`. |
-| `OPENAI_BASE_URL` | none | Base URL of that endpoint, including the version path. |
-| `OPENAI_MODEL` | none | Model asked for on that endpoint. Required by `SUMMARIZER_BACKEND=openai`. |
-| `SUMMARIZER_BACKEND` | `claude` | `claude` calls the Claude API. `plain` builds topics mechanically, with no API key and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). `openai` calls an OpenAI-compatible Chat Completions API; see [OpenAI-compatible endpoints](#openai-compatible-endpoints). Any other value stops `cli.py run` before it collects anything, rather than falling back on `claude`. |
+| `SUMMARIZER_BACKEND` | `anthropic-compatible` | Wire protocol of the summarization endpoint. `anthropic-compatible` speaks the Anthropic Messages API. `openai-compatible` speaks the OpenAI Chat Completions API; see [OpenAI-compatible endpoints](#openai-compatible-endpoints). `plain` builds topics mechanically, with no credential and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). Any other value stops `cli.py run` before it collects anything, rather than falling back on the default. |
+| `SUMMARIZER_API_KEY` | none | API key of the endpoint. Mutually exclusive with `SUMMARIZER_AUTH_TOKEN`. |
+| `SUMMARIZER_AUTH_TOKEN` | none | Bearer token of the endpoint. Mutually exclusive with `SUMMARIZER_API_KEY`. |
+| `SUMMARIZER_BASE_URL` | none | Base URL of the endpoint. Empty means Anthropic itself. The `openai-compatible` backend expects the version path to be part of it, the `anthropic-compatible` one does not. |
+| `SUMMARIZER_MODEL` | `claude-sonnet-4-5` on `anthropic-compatible` | Model asked for on the endpoint. Required by `SUMMARIZER_BACKEND=openai-compatible`, whose model names are the endpoint's own. |
+| `SUMMARIZER_MAX_RETRIES` | `2` | Retries the SDK may spend on one request, on either API backend. `0` spends exactly one request per run. |
+| `SUMMARIZER_THINKING_MODE` | `default` | Read by `anthropic-compatible`. `default` sends no thinking parameter and keeps the provider default. `disabled` sends `thinking.type=disabled`, for a model that would otherwise think until the output budget is gone. |
+| `SUMMARIZER_TOOL_CHOICE_MODE` | `forced` | Read by `anthropic-compatible`. `forced` names `build_report` in `tool_choice`. `any` demands a tool without naming one. `auto` lets the model choose the tool and disables parallel tool use. |
+| `SUMMARIZER_TEXT_JSON_FALLBACK` | `disabled` | Read by `anthropic-compatible`. `enabled` also accepts a report written as JSON text when no tool call came back; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
 | `NEWS_FEED_URLS` | three AI blogs | RSS or Atom feeds to collect, comma separated. |
@@ -133,16 +136,15 @@ Set a base URL and Bearer token to use an Anthropic-compatible Messages API.
 For example, Sakura AI Engine can be configured as follows:
 
 ```env
-ANTHROPIC_API_KEY=
-ANTHROPIC_AUTH_TOKEN=<UUID>:<secret>
-ANTHROPIC_BASE_URL=https://api.ai.sakura.ad.jp
-ANTHROPIC_MODEL=preview/Kimi-K2.6
-ANTHROPIC_THINKING_MODE=disabled
-ANTHROPIC_TOOL_CHOICE_MODE=auto
-SUMMARIZER_BACKEND=claude
+SUMMARIZER_AUTH_TOKEN=<UUID>:<secret>
+SUMMARIZER_BASE_URL=https://api.ai.sakura.ad.jp
+SUMMARIZER_MODEL=preview/Kimi-K2.6
+SUMMARIZER_THINKING_MODE=disabled
+SUMMARIZER_TOOL_CHOICE_MODE=auto
+SUMMARIZER_BACKEND=anthropic-compatible
 ```
 
-Do not set `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` together.
+Do not set `SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN` together.
 The provider must support `tools` and `tool_use` responses.
 
 Being compatible with the Messages API does not mean behaving like Anthropic.
@@ -150,7 +152,7 @@ Support for a named `tool_choice` and for the thinking output varies from one
 model to the next, which is what the two settings above are for. When a run
 fails and the log shows `stop_reason=max_tokens` together with
 `content_types=thinking`, the model used the whole output budget thinking and
-never reached the tool call. Set `ANTHROPIC_THINKING_MODE=disabled` before
+never reached the tool call. Set `SUMMARIZER_THINKING_MODE=disabled` before
 raising `MAX_OUTPUT_TOKENS`: more budget only buys more thinking, it does not
 buy a tool call.
 
@@ -162,39 +164,41 @@ setting per run, so that the run which succeeds says which setting did it, and
 read the `api response:` line the summarizer logs for `stop_reason` and
 `content_types`. `--verbose` additionally dumps the whole response body.
 
-1. `ANTHROPIC_TOOL_CHOICE_MODE=any` — the endpoint may drop a named
+1. `SUMMARIZER_TOOL_CHOICE_MODE=any` — the endpoint may drop a named
    `tool_choice` and still honour a demand for some tool. `build_report` is the
    only tool offered, so this reaches the same place.
-2. `ANTHROPIC_TOOL_CHOICE_MODE=auto` — leaves the choice to the model. The
+2. `SUMMARIZER_TOOL_CHOICE_MODE=auto` — leaves the choice to the model. The
    system prompt already tells it to call `build_report`, but nothing forces it.
-3. `ANTHROPIC_THINKING_MODE=disabled` — for `content_types=thinking` with
+3. `SUMMARIZER_THINKING_MODE=disabled` — for `content_types=thinking` with
    `stop_reason=max_tokens`.
-4. `ANTHROPIC_TEXT_JSON_FALLBACK=enabled` — only once a raw response has shown
+4. `SUMMARIZER_TEXT_JSON_FALLBACK=enabled` — only once a raw response has shown
    the endpoint answering with the right JSON as text. The report is then read
    from a text block that parses into an object with a `topics` list; anything
    else is still refused, and the run logs a warning naming this setting.
-5. `SUMMARIZER_BACKEND=openai` — when the Anthropic-compatible route stays
+5. `SUMMARIZER_BACKEND=openai-compatible` — when the Anthropic-compatible route stays
    unreliable, below.
 
-`ANTHROPIC_MAX_RETRIES=0` makes each attempt cost exactly one request, which
+`SUMMARIZER_MAX_RETRIES=0` makes each attempt cost exactly one request, which
 matters when the endpoint bills per request and two settings are being compared.
 
 ### OpenAI-compatible endpoints
 
-`SUMMARIZER_BACKEND=openai` sends the same prompt and the same tool schema to an
+`SUMMARIZER_BACKEND=openai-compatible` sends the same prompt and the same tool schema to an
 OpenAI-compatible Chat Completions API, reading the answer from
 `tool_calls[].function.arguments`. It is a second explicit path rather than a
 fallback: both backends validate the parsed arguments identically, so a report
 does not differ by the route it took.
 
 ```env
-SUMMARIZER_BACKEND=openai
-OPENAI_API_KEY=<UUID>:<secret>
-OPENAI_BASE_URL=https://api.ai.sakura.ad.jp/v1
-OPENAI_MODEL=preview/Kimi-K2.6
+SUMMARIZER_BACKEND=openai-compatible
+SUMMARIZER_API_KEY=<UUID>:<secret>
+SUMMARIZER_BASE_URL=https://api.ai.sakura.ad.jp/v1
+SUMMARIZER_MODEL=preview/Kimi-K2.6
 ```
 
-`OPENAI_BASE_URL` includes the version path, unlike `ANTHROPIC_BASE_URL`. This
+`SUMMARIZER_BASE_URL` carries the version path on this backend, which the
+`anthropic-compatible` one does not expect: switching between the two means
+rewriting that line as well as `SUMMARIZER_BACKEND`. This
 backend needs the `openai` package, which is deliberately absent from
 `requirements.txt` so that a default installation carries one API client rather
 than two:
@@ -202,6 +206,46 @@ than two:
 ```sh
 pip install openai
 ```
+
+### Renamed settings
+
+The endpoint settings used to be spelled `ANTHROPIC_*` and `OPENAI_*`, one set
+per backend. Both prefixes named a vendor for something that is a wire protocol:
+an `anthropic-compatible` endpoint is regularly neither Anthropic nor operated
+by it, and `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL`
+are also the names the Anthropic SDK and other tools read from the environment
+on their own, so a value exported for one of those decided where a digest was
+sent. One endpoint answers at a time, so there is now one set of settings for
+whichever is configured.
+
+| Old | New |
+|---|---|
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | `SUMMARIZER_API_KEY` |
+| `ANTHROPIC_AUTH_TOKEN` | `SUMMARIZER_AUTH_TOKEN` |
+| `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | `SUMMARIZER_BASE_URL` |
+| `ANTHROPIC_MODEL`, `OPENAI_MODEL` | `SUMMARIZER_MODEL` |
+| `ANTHROPIC_MAX_RETRIES` | `SUMMARIZER_MAX_RETRIES` |
+| `ANTHROPIC_THINKING_MODE` | `SUMMARIZER_THINKING_MODE` |
+| `ANTHROPIC_TOOL_CHOICE_MODE` | `SUMMARIZER_TOOL_CHOICE_MODE` |
+| `ANTHROPIC_TEXT_JSON_FALLBACK` | `SUMMARIZER_TEXT_JSON_FALLBACK` |
+| `SUMMARIZER_BACKEND=claude` | `SUMMARIZER_BACKEND=anthropic-compatible` |
+| `SUMMARIZER_BACKEND=openai` | `SUMMARIZER_BACKEND=openai-compatible` |
+
+An old name is refused rather than read, and the message names its replacement:
+
+```
+ANTHROPIC_API_KEY is no longer read by ai-digest; use SUMMARIZER_API_KEY.
+```
+
+Presence is what is refused, not the value: an exported but empty
+`ANTHROPIC_BASE_URL` still says the host was set up for the old names. Unset it,
+in `.env` and in whatever exported it — a systemd unit, a cron environment, a
+shell profile — rather than blanking it. The check runs in `load_config()`, so
+it stops the viewer as well as the batch even though the viewer reads none of
+these settings: a host half way through the rename is exactly the one where the
+old name still decides something, and a viewer that keeps serving would hide
+that rather than settle it. The command line options moved the same
+way: `--anthropic-model` and `--openai-model` are now `--summarizer-model`.
 
 ### Timeouts
 
@@ -221,7 +265,7 @@ or quiet, and raising `MAX_OUTPUT_TOKENS` lengthens it.
 Retries widen the window, because the SDK spends the timeout again on each one:
 
 ```text
-worst case wait = SUMMARIZER_TIMEOUT x (ANTHROPIC_MAX_RETRIES + 1)
+worst case wait = SUMMARIZER_TIMEOUT x (SUMMARIZER_MAX_RETRIES + 1)
 ```
 
 At the defaults that is nine minutes. Keep it well inside the interval between
@@ -245,7 +289,7 @@ When no CJK font is found, the batch logs a warning once and keeps running with 
 
 ## Standalone use, no API key
 
-Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without an Anthropic API key:
+Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without a credential of any kind:
 
 ```sh
 [ -f .env ] || cp .env.example .env
@@ -253,7 +297,7 @@ sed 's/^SUMMARIZER_BACKEND=.*/SUMMARIZER_BACKEND=plain/' .env > .env.new && mv .
 python cli.py run
 ```
 
-The copy is guarded because step 4 already created `.env`, and an unconditional `cp` here would overwrite the key configured there. `.env.example` already defines `SUMMARIZER_BACKEND=claude`, so rewrite that line rather than appending a second one: a file carrying the same key twice states two different intentions, and which one wins is a property of the parser rather than of the configuration. The command above is plain POSIX `sed` writing to a new file, because in-place editing is spelled `sed -i` on GNU and `sed -i ''` on BSD and macOS.
+The copy is guarded because step 4 already created `.env`, and an unconditional `cp` here would overwrite the key configured there. `.env.example` already defines `SUMMARIZER_BACKEND=anthropic-compatible`, so rewrite that line rather than appending a second one: a file carrying the same key twice states two different intentions, and which one wins is a property of the parser rather than of the configuration. The command above is plain POSIX `sed` writing to a new file, because in-place editing is spelled `sed -i` on GNU and `sed -i ''` on BSD and macOS.
 
 For a single run, setting the variable in the environment needs no edit at all, since exported variables take precedence over `.env`:
 
@@ -263,11 +307,11 @@ SUMMARIZER_BACKEND=plain python cli.py run
 
 In this mode:
 
-- The Claude API is never called, and `ANTHROPIC_API_KEY` can stay unset.
+- No summarization API is called, and `SUMMARIZER_API_KEY` can stay unset.
 - Each collected entry becomes its own topic, newest first; there is no cross-entry clustering and no translation, so titles and bullets stay in whatever language the source published them in (English for most feeds, English abstracts for arXiv). The `category` label is taken from the entry's origin (the arXiv category or the feed title) instead of being chosen freely by a model.
 - Topic illustrations are unaffected: image scraping and the Pillow fallback cards already run without a key. Add `--no-images` to also skip scraping and only draw local cards, for a run that touches nothing but arXiv and the configured feeds.
 
-This trades the quality of the Japanese summary and the topic grouping for zero setup beyond `pip install -r requirements.txt`. Switch back to `SUMMARIZER_BACKEND=claude` (or unset it, since that is the default) whenever an API key becomes available again; both backends write the same `report.json` shape, and `cli.py render` works on reports produced by either one.
+This trades the quality of the Japanese summary and the topic grouping for zero setup beyond `pip install -r requirements.txt`. Switch back to `SUMMARIZER_BACKEND=anthropic-compatible` (or unset it, since that is the default) whenever an API key becomes available again; both backends write the same `report.json` shape, and `cli.py render` works on reports produced by either one.
 
 ## Usage
 
@@ -329,14 +373,14 @@ Every setting listed under [Configuration](#configuration), except the credentia
 ```sh
 python cli.py run --lookback-hours 72 --max-topics 4
 python cli.py run --summarizer-backend plain --no-images
-python cli.py run --anthropic-model claude-opus-4-1 --max-output-tokens 8000
+python cli.py run --summarizer-model claude-opus-4-1 --max-output-tokens 8000
 python cli.py render 2026-07-25 --font-path /usr/share/fonts/truetype/vlgothic/VL-Gothic-Regular.ttf
 python cli.py list --data-dir /srv/ai-digest/reports
 ```
 
 Which options a subcommand takes follows from what it does: `--data-dir` is accepted everywhere, the collection and summarization settings by `run`, and `--font-path` by the three subcommands that draw images. `cli.py run --help` lists them with the variable each one replaces, and a run that overrides anything logs what it replaced, so the log of a report says how it was produced.
 
-`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and `OPENAI_API_KEY` deliberately have no option: a command line is readable by every user of the host, through `ps`, so a credential stays in the environment or in `.env`.
+`SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN` deliberately have no option: a command line is readable by every user of the host, through `ps`, so a credential stays in the environment or in `.env`.
 
 Values are validated by the parser, which refuses a look back window of `0` or a model name given to `--summarizer-backend`, and exits with status 2 without collecting anything.
 
@@ -397,8 +441,10 @@ Every failure names its cause at `ERROR` level and ends the run:
 | Log line | Usually means |
 |---|---|
 | `SUMMARIZER_BACKEND is 'X'; expected one of: ...` | A typo in a setting. The run stops before collecting, so no request is spent on it |
+| `SUMMARIZER_BACKEND is 'claude', which named a vendor ...` | A value from before the rename; the message names its replacement, see [Renamed settings](#renamed-settings) |
+| `ANTHROPIC_API_KEY is no longer read by ai-digest; use ...` | A setting from before the rename is still exported; see [Renamed settings](#renamed-settings) |
 | `MAX_OUTPUT_TOKENS is 0; expected a positive number.` | Same, for the output budget; `SUMMARIZER_TIMEOUT` is refused the same way |
-| `ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is required.` | No credential is configured, and `SUMMARIZER_BACKEND` is not `plain` |
+| `SUMMARIZER_API_KEY or SUMMARIZER_AUTH_TOKEN is required.` | No credential is configured, and `SUMMARIZER_BACKEND` is not `plain` |
 | `no entry collected: ...` | The window held nothing, or the sources could not be reached. The message distinguishes the two; see ["no entry collected"](#no-entry-collected) |
 | `summarization failed: ...` | The request was made and produced no report. The `api response:` line logged beside it says what came back |
 | `Model returned no build_report tool call` | The endpoint answered without calling the tool; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call) |
@@ -476,7 +522,7 @@ python -m unittest discover -s tests -p "test_c*.py"             # modules match
 | `test_plain.py` | API free mechanical summarizer |
 | `test_anthropic_compat.py` | Claude tool use call and its response parsing |
 | `test_openai_compat.py` | OpenAI compatible tool call path |
-| `test_tool_choice_and_fallback.py` | `ANTHROPIC_TOOL_CHOICE_MODE` and the fallback chain |
+| `test_tool_choice_and_fallback.py` | `SUMMARIZER_TOOL_CHOICE_MODE` and the fallback chain |
 | `test_output_budget.py` | output token budget and truncated answers |
 | `test_request_timeout.py` | the summarization timeout: its default, its refusal of a non-positive value, and that it reaches both SDKs |
 | `test_resolver.py` | ar5iv figure and Open Graph scraping |
@@ -516,7 +562,7 @@ answer differently. Back up `DATA_DIR`.
 
 ```sh
 heroku create
-heroku config:set ANTHROPIC_API_KEY=sk-ant-...
+heroku config:set SUMMARIZER_API_KEY=sk-ant-...
 git push heroku main
 ```
 
