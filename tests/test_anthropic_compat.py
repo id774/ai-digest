@@ -1,6 +1,77 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_anthropic_compat.py: Tests for the Anthropic compatible backend
+#
+#  Description:
+#  This test suite covers the summarizer that speaks the Anthropic
+#  protocol, from the settings that authenticate it to the reading of
+#  what it answers. Exactly one credential is accepted, an API key or a
+#  bearer token, because the two describe different requests and a
+#  configuration carrying both does not say which was meant.
+#
+#  Most of the cases are about the answer. The run asks for one tool
+#  call and gets back something else often enough that each way of
+#  failing is reported on its own: arguments cut off by the token
+#  budget, arguments that are not valid JSON, a call to another tool, a
+#  budget spent on thinking before the tool was reached, and a plain
+#  text answer, whose message names the stop reason and the block types
+#  so that a log line says what came back.
+#
+#  The prompt cases pin that the collected window is announced to the
+#  model, and the last case pins that an empty collection costs no
+#  request at all.
+#
+#  No request is made. The anthropic package is replaced in sys.modules
+#  and the client is stubbed, so the suite needs neither the credential
+#  nor a network.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_anthropic_compat
+#
+#  Test Cases:
+#    - Load API key authentication.
+#    - Load bearer authentication together with a base URL.
+#    - Reject a configuration carrying more than one credential.
+#    - Require a credential.
+#    - Default the thinking and tool choice modes to the Anthropic behaviour.
+#    - Keep the configured thinking and tool choice modes.
+#    - Reject an unknown thinking mode, and an unknown tool choice mode.
+#    - Build a standard Anthropic client from an API key.
+#    - Build a compatible client from a bearer token and a base URL.
+#    - Reject ambiguous authentication when building the client.
+#    - Omit the thinking parameter by default, and disable it on request.
+#    - Name the tool by default, and leave the choice to the model on request.
+#    - Return the arguments of a build_report call.
+#    - Parse arguments given as a JSON string.
+#    - Report arguments cut off by the token budget as truncated.
+#    - Report arguments that are not valid JSON.
+#    - Ignore a call to another tool.
+#    - Report a budget spent on thinking.
+#    - Report a plain text answer, naming the stop reason and block types.
+#    - Announce the default window and the configured one in the prompt.
+#    - Pass the window through summarize().
+#    - Call nothing when there is no entry to summarize.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Standard library only (the anthropic package is stubbed, never imported)
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import json
 import os
 import sys

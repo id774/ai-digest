@@ -1,6 +1,49 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_render_command.py: Tests for the render command of cli.py
+#
+#  Description:
+#  This test suite covers the window a rebuilt image announces. The
+#  render command draws a report that was collected earlier, possibly
+#  under a different LOOKBACK_HOURS, so it reads the window out of the
+#  statistics the run stored rather than out of the configuration it is
+#  running under. A report written before that value was recorded has
+#  nothing to read, and only then does the configuration decide.
+#
+#  The second case closes the loop from the other side: a run has to
+#  store the window before render can read it, so the demo command is
+#  driven with the drawing stages replaced and only its stored
+#  statistics are examined.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_render_command
+#
+#  Test Cases:
+#    - Use the window recorded by the run that collected the report.
+#    - Fall back on the configuration for a report that recorded none.
+#    - Report a missing date as a failed run.
+#    - Record the window a demo run ran with.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - See requirements.txt (the command line module imports the whole pipeline)
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import tempfile
 import unittest
 from dataclasses import replace

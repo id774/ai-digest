@@ -1,6 +1,68 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_collectors.py: Tests for the arXiv and news collectors
+#
+#  Description:
+#  This test suite covers what the collectors accept and what they
+#  report. The look back window is read as UTC whatever the timezone of
+#  the host: read as local time, an entry 20 hours old looks 29 hours
+#  old in Asia/Tokyo and falls out of a 24 hour window, so those cases
+#  run with TZ set rather than trusting the host.
+#
+#  The link cases pin that a feed is untrusted input. An entry whose
+#  link is not http or https is dropped with a warning, and only that
+#  entry, so that one crafted item cannot cost a whole feed.
+#
+#  The remaining cases cover the outcome of a pass. An empty result has
+#  to say whether the sources could be read at all, so a failed source,
+#  a source read without a recent entry and the merge of two passes are
+#  all counted separately, and the message built from those counts names
+#  one cause rather than listing every possibility.
+#
+#  No request is made. requests.get and the feed parser are replaced by
+#  stubs, so the suite needs no network.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_collectors
+#
+#  Test Cases:
+#    - Read a feed timestamp as UTC in both collectors.
+#    - Keep an entry inside the window under a non UTC host timezone.
+#    - Keep an http link offered by a news feed.
+#    - Drop a script link from a news feed, with a warning.
+#    - Drop only the unsafe entry of a news feed.
+#    - Keep an http link offered by an arXiv category.
+#    - Drop a script link from an arXiv category, with a warning.
+#    - Report a feed that could not be read, naming the failure.
+#    - Report a feed that was read but offered nothing recent.
+#    - Report every arXiv category that failed.
+#    - Merge the counts and the failures of two passes.
+#    - Say that no source is configured.
+#    - Say that every source failed, and name the failures.
+#    - Say that the sources answered with nothing inside the window.
+#    - Say that the sources answered with no item at all.
+#    - Name the failed sources of a partial pass.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - See requirements.txt (the command line module imports the whole pipeline)
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import os
 import time
 import unittest

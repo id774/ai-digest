@@ -1,6 +1,49 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_urls.py: Tests for the URL scheme filter and rendered links
+#
+#  Description:
+#  This test suite covers the one rule the link filter enforces: only
+#  http and https reach a page. It pins the refusal of javascript:,
+#  data:, file: and vbscript:, of a relative and a protocol relative
+#  path, and of a scheme given without a host.
+#
+#  The rendering cases close the loop at the other end. Reports written
+#  before the collectors filtered links, or edited by hand, still exist
+#  in the archive, so the template filter has to neutralize such a link
+#  into "#" at render time rather than trusting what was stored.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_urls
+#
+#  Test Cases:
+#    - Accept http and https, whatever the case of the scheme.
+#    - Reject every other scheme, and a relative or protocol relative path.
+#    - Reject a scheme given without a host.
+#    - Replace an unsafe URL with "#" and leave a safe one alone.
+#    - Keep a normal link in the rendered report.
+#    - Neutralize a script link stored in a report.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Jinja2 (through the report renderer)
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import unittest
 
 from ai_digest import Topic, is_safe_url, safe_url

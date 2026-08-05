@@ -1,6 +1,51 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_demo.py: Tests for ai_digest/demo/__init__.py
+#
+#  Description:
+#  This test suite covers the demo material, which is what lets the
+#  whole pipeline be shown without a credential and without a network.
+#  It checks that the bundled sample is present and readable, that every
+#  topic it describes is built, and that each of them stays citable and
+#  illustrable, since a topic without a source or without the fields the
+#  renderer needs would break the very screen the demo exists to show.
+#
+#  The remaining cases cover a sample given by path: one read from a
+#  file, one whose topic cites no usable entry and is therefore dropped
+#  with a warning, and one that is malformed and refused.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_demo
+#
+#  Test Cases:
+#    - Ship a readable sample carrying a date, entries and topics.
+#    - Build every topic the sample describes.
+#    - Keep every topic citable and illustrable, with https sources only.
+#    - Honour the topic limit.
+#    - Read a sample given by path.
+#    - Drop a topic citing no usable entry, and log the drop.
+#    - Reject a sample that carries no entries.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Standard library only
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import json
 import os
 import tempfile

@@ -1,6 +1,67 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_config.py: Tests for config.py
+#
+#  Description:
+#  This test suite covers the settings that decide which endpoint a run
+#  addresses. The backend name is checked strictly on purpose: a typo
+#  must not quietly select an API backend and spend requests on what was
+#  meant to be an offline run, and a superseded name is refused with the
+#  value that replaced it, because a generic list of the accepted values
+#  does not say which one a vendor name became.
+#
+#  The legacy variable cases close a hazard of their own. Names such as
+#  ANTHROPIC_BASE_URL are what the vendor SDKs and other tools read on
+#  their own, so a value exported for one of those used to decide where
+#  a digest went. Presence is refused here, not the value, which is why
+#  an exported but empty name is refused too.
+#
+#  The remaining cases cover the User-Agent, where an empty setting
+#  reads as unset rather than sending an empty header the feed hosts are
+#  free to refuse, and the model, which falls back on a known Claude
+#  model under the Anthropic protocol and has nothing to fall back on
+#  under the OpenAI one, because the models an endpoint offers are its
+#  own.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_config
+#
+#  Test Cases:
+#    - Default to the Anthropic protocol when the backend is unset or empty.
+#    - Accept the plain backend, normalizing case and surrounding space.
+#    - Reject a misspelled backend rather than selecting an API one.
+#    - Name the replacement of a superseded backend.
+#    - Reject a backend value carrying a trailing comment.
+#    - Keep require_api_key gone, validate_summarizer_auth() being the check.
+#    - Default the User-Agent when it is unset or empty.
+#    - Keep a configured User-Agent, stripped of surrounding space.
+#    - Refuse every superseded variable by name, naming its replacement.
+#    - Refuse a superseded name that is exported but empty.
+#    - Load a configuration that uses the current names.
+#    - Fall back on a Claude model under the Anthropic protocol.
+#    - Have no default model under the OpenAI protocol.
+#    - Let a configured model win on either protocol.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Standard library only
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import os
 import unittest
 from unittest import mock

@@ -1,6 +1,54 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+########################################################################
+# tests/test_plain.py: Tests for ai_digest/analyzer/plain.py
+#
+#  Description:
+#  This test suite covers the offline summarizer, the backend that
+#  spends no request and builds topics out of the collected entries
+#  themselves. It pins the ordering, newest first, the topic limit, and
+#  the way a summary becomes bullets: split into sentences, capped at
+#  MAX_BULLETS, truncated at BULLET_CHARS, and falling back on the title
+#  when an entry carries no summary at all.
+#
+#  It also pins where a category comes from. The origin of an entry
+#  names it when there is one, and the source type decides otherwise, so
+#  that a topic is never left uncategorized.
+#
+#  Author: id774 (More info: http://id774.net)
+#  Source Code: https://github.com/id774/ai-digest
+#  License: The GPL version 3, or LGPL version 3 (Dual License).
+#  Contact: idnanashi@gmail.com
+#
+#  Running the tests:
+#  Run the whole suite from the repository root:
+#      python -m unittest discover -s tests
+#  Run this module alone:
+#      python -m unittest tests.test_plain
+#
+#  Test Cases:
+#    - Return the topics newest first.
+#    - Honour the topic limit.
+#    - Split a summary into one bullet per sentence.
+#    - Keep at most MAX_BULLETS bullets.
+#    - Truncate a long bullet at BULLET_CHARS with an ellipsis.
+#    - Fall back on the title for an entry without a summary.
+#    - Take the category from the origin of the entry.
+#    - Fall back on the source type when the origin is empty.
+#    - Cite the entry a topic was built from.
+#    - Yield no topic for no entry.
+#
+#  Requirements:
+#  - Python Version: 3.9 or later
+#  - Standard library only
+#
+#  Version History:
+#  v1.0 2026-08-05
+#       Initial release.
+#
+########################################################################
+
 import unittest
 
 from ai_digest import Entry
