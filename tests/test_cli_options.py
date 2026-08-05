@@ -58,8 +58,7 @@ class OverrideTest(unittest.TestCase):
         self.assertEqual(set(), set(cli.OVERRIDABLE_FIELDS) - fields)
 
     def test_credentials_have_no_option(self):
-        for option in ("--anthropic-api-key", "--anthropic-auth-token",
-                       "--openai-api-key"):
+        for option in ("--summarizer-api-key", "--summarizer-auth-token"):
             self.assertEqual(2, refused(["run", option, "secret"]))
 
 
@@ -76,12 +75,12 @@ class NumericOptionTest(unittest.TestCase):
         self.assertRejected(["run", "--lookback-hours", "0"])
 
     def test_accepts_zero_retries(self):
-        args = cli.parse_args(["run", "--anthropic-max-retries", "0"])
+        args = cli.parse_args(["run", "--summarizer-max-retries", "0"])
 
-        self.assertEqual(0, args.anthropic_max_retries)
+        self.assertEqual(0, args.summarizer_max_retries)
 
     def test_rejects_a_negative_retry_budget(self):
-        self.assertRejected(["run", "--anthropic-max-retries", "-1"])
+        self.assertRejected(["run", "--summarizer-max-retries", "-1"])
 
 
 class ModeOptionTest(unittest.TestCase):

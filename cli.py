@@ -77,41 +77,47 @@
 #      --arxiv-max-results N (ARXIV_MAX_RESULTS)
 #      --news-feed-urls LIST (NEWS_FEED_URLS)
 #      --summarizer-backend NAME (SUMMARIZER_BACKEND)
-#      --anthropic-model NAME (ANTHROPIC_MODEL)
-#      --anthropic-base-url URL (ANTHROPIC_BASE_URL)
-#      --anthropic-thinking-mode MODE (ANTHROPIC_THINKING_MODE)
-#      --anthropic-tool-choice-mode MODE (ANTHROPIC_TOOL_CHOICE_MODE)
-#      --anthropic-text-json-fallback MODE
-#          (ANTHROPIC_TEXT_JSON_FALLBACK)
-#      --anthropic-max-retries N (ANTHROPIC_MAX_RETRIES)
-#      --openai-model NAME (OPENAI_MODEL)
-#      --openai-base-url URL (OPENAI_BASE_URL)
+#      --summarizer-model NAME (SUMMARIZER_MODEL)
+#      --summarizer-base-url URL (SUMMARIZER_BASE_URL)
+#      --summarizer-max-retries N (SUMMARIZER_MAX_RETRIES)
+#      --summarizer-thinking-mode MODE (SUMMARIZER_THINKING_MODE)
+#      --summarizer-tool-choice-mode MODE
+#          (SUMMARIZER_TOOL_CHOICE_MODE)
+#      --summarizer-text-json-fallback MODE
+#          (SUMMARIZER_TEXT_JSON_FALLBACK)
 #      --max-output-tokens N (MAX_OUTPUT_TOKENS)
 #      --summarizer-timeout SECONDS (SUMMARIZER_TIMEOUT)
 #      --http-timeout SECONDS (HTTP_TIMEOUT)
 #      --user-agent STRING (USER_AGENT)
 #
-#  ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN and OPENAI_API_KEY have no
-#  option on purpose: a command line is readable by every user of the
-#  host, so a credential belongs in the environment or in .env.
+#  SUMMARIZER_API_KEY and SUMMARIZER_AUTH_TOKEN have no option on
+#  purpose: a command line is readable by every user of the host, so a
+#  credential belongs in the environment or in .env.
 #
 #  Exit Codes:
 #  - 0: The command completed.
 #  - 1: The command failed, for example because no entry was collected,
-#       because no topic could be built,
-#       because the API key is missing or because SUMMARIZER_BACKEND,
-#       ANTHROPIC_THINKING_MODE or ANTHROPIC_TOOL_CHOICE_MODE holds an
-#       unknown value.
+#       because no topic could be built, because the credential is
+#       missing, because SUMMARIZER_BACKEND,
+#       SUMMARIZER_THINKING_MODE or SUMMARIZER_TOOL_CHOICE_MODE holds
+#       an unknown value, or because a setting this project no longer
+#       reads is still exported.
 #  - 2: The command line was rejected, for example because an option
 #       expecting a positive number received something else.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt
-#  - ANTHROPIC_API_KEY must be set for the 'run' command, unless
-#    SUMMARIZER_BACKEND=plain is used
+#  - SUMMARIZER_API_KEY or SUMMARIZER_AUTH_TOKEN must be set for the
+#    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.5 2026-08-05
+#       Name the endpoint options and settings after the summarization
+#       stage instead of a vendor: --anthropic-* and --openai-* become
+#       one --summarizer-* set, matching the SUMMARIZER_* variables
+#       they override, and one credential serves whichever backend is
+#       selected.
 #  v1.4 2026-08-05
 #       Bound the summarization request with SUMMARIZER_TIMEOUT, and
 #       check it before anything is collected, so that an endpoint
@@ -155,10 +161,9 @@ from ai_digest.images import fallback, resolver
 from ai_digest.render import build, compose_image
 from ai_digest.storage import (ensure_report_dir, list_dates, load_report,
                                save_report)
-from config import (ANTHROPIC_TEXT_JSON_FALLBACK_MODES,
-                    ANTHROPIC_THINKING_MODES, ANTHROPIC_TOOL_CHOICE_MODES,
-                    SUMMARIZER_BACKENDS, Config, detect_font_path,
-                    load_config, split_csv)
+from config import (SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
+                    SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
+                    Config, detect_font_path, load_config, split_csv)
 
 logger = logging.getLogger("ai_digest.cli")
 
@@ -166,16 +171,14 @@ logger = logging.getLogger("ai_digest.cli")
 # field it sets, so argparse stores it under that name and no table of
 # its own is needed; an option left out stays None and changes nothing.
 OVERRIDABLE_FIELDS = (
-    "anthropic_base_url",
-    "anthropic_model",
-    "anthropic_thinking_mode",
-    "anthropic_tool_choice_mode",
-    "anthropic_text_json_fallback",
-    "anthropic_max_retries",
+    "summarizer_base_url",
+    "summarizer_model",
+    "summarizer_thinking_mode",
+    "summarizer_tool_choice_mode",
+    "summarizer_text_json_fallback",
+    "summarizer_max_retries",
     "max_output_tokens",
     "summarizer_timeout",
-    "openai_base_url",
-    "openai_model",
     "summarizer_backend",
     "arxiv_categories",
     "arxiv_max_results",
@@ -350,13 +353,9 @@ def attach_images(topics: List[Topic], report_dir: str, config: Config,
                     topic.image_credit)
 
 
-def _model_label(config: Config, use_claude: bool, use_openai: bool) -> str:
+def _model_label(config: Config, use_api: bool) -> str:
     """ Name the model a report was built with, for its statistics. """
-    if use_claude:
-        return config.anthropic_model
-    if use_openai:
-        return config.openai_model
-    return "plain"
+    return config.resolved_model if use_api else "plain"
 
 
 def command_run(args: argparse.Namespace, config: Config) -> int:
@@ -368,18 +367,18 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         logger.error("%s", error)
         return 1
 
-    use_claude = config.summarizer_backend == "claude"
-    use_openai = config.summarizer_backend == "openai"
+    use_anthropic = config.summarizer_backend == "anthropic-compatible"
+    use_openai = config.summarizer_backend == "openai-compatible"
+    use_api = use_anthropic or use_openai
     try:
-        if use_claude:
-            config.validate_anthropic_auth()
-            config.validate_anthropic_options()
+        if use_api:
+            config.validate_summarizer_auth()
+            config.validate_summarizer_model()
+            config.validate_retry_budget()
             config.validate_output_budget()
             config.validate_summarizer_timeout()
-        elif use_openai:
-            config.validate_openai_options()
-            config.validate_output_budget()
-            config.validate_summarizer_timeout()
+        if use_anthropic:
+            config.validate_protocol_options()
     except RuntimeError as error:
         logger.error("%s", error)
         return 1
@@ -398,31 +397,35 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
 
     unique = deduplicate(collected)
     try:
-        if use_claude:
+        if use_anthropic:
             topics = summarizer.summarize(
                 unique,
-                api_key=config.anthropic_api_key,
-                model=config.anthropic_model,
+                api_key=config.summarizer_api_key,
+                model=config.resolved_model,
                 max_topics=config.max_topics,
-                base_url=config.anthropic_base_url,
-                auth_token=config.anthropic_auth_token,
-                thinking_mode=config.anthropic_thinking_mode,
-                tool_choice_mode=config.anthropic_tool_choice_mode,
+                base_url=config.summarizer_base_url,
+                auth_token=config.summarizer_auth_token,
+                thinking_mode=config.summarizer_thinking_mode,
+                tool_choice_mode=config.summarizer_tool_choice_mode,
                 text_json_fallback=(
-                    config.anthropic_text_json_fallback == "enabled"),
-                max_retries=config.anthropic_max_retries,
+                    config.summarizer_text_json_fallback == "enabled"),
+                max_retries=config.summarizer_max_retries,
                 max_output_tokens=config.max_output_tokens,
                 timeout=config.summarizer_timeout,
                 lookback_hours=config.lookback_hours,
             )
         elif use_openai:
+            # The OpenAI SDK sends its api_key as a Bearer token, which
+            # is the header SUMMARIZER_AUTH_TOKEN names, so either
+            # spelling of the credential describes the same request.
             topics = openai_compat.summarize(
                 unique,
-                api_key=config.openai_api_key or "",
-                model=config.openai_model,
+                api_key=(config.summarizer_api_key
+                         or config.summarizer_auth_token or ""),
+                model=config.resolved_model,
                 max_topics=config.max_topics,
-                base_url=config.openai_base_url,
-                max_retries=config.anthropic_max_retries,
+                base_url=config.summarizer_base_url,
+                max_retries=config.summarizer_max_retries,
                 max_output_tokens=config.max_output_tokens,
                 timeout=config.summarizer_timeout,
                 lookback_hours=config.lookback_hours,
@@ -443,7 +446,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         "collected": len(collected),
         "deduplicated": len(unique),
         "topics": len(topics),
-        "model": _model_label(config, use_claude, use_openai),
+        "model": _model_label(config, use_api),
         "lookback_hours": config.lookback_hours,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
@@ -565,33 +568,29 @@ def add_summarizer_options(parser: argparse.ArgumentParser) -> None:
     """ Add the options shaping how 'run' summarizes. """
     parser.add_argument("--summarizer-backend", choices=SUMMARIZER_BACKENDS,
                         help="summarizer to use (SUMMARIZER_BACKEND)")
-    parser.add_argument("--anthropic-model",
-                        help="model asked for on the Anthropic API "
-                             "(ANTHROPIC_MODEL)")
-    parser.add_argument("--anthropic-base-url",
-                        help="base URL of an Anthropic-compatible API "
-                             "(ANTHROPIC_BASE_URL)")
-    parser.add_argument("--anthropic-thinking-mode",
-                        choices=ANTHROPIC_THINKING_MODES,
-                        help="thinking parameter sent with the request "
-                             "(ANTHROPIC_THINKING_MODE)")
-    parser.add_argument("--anthropic-tool-choice-mode",
-                        choices=ANTHROPIC_TOOL_CHOICE_MODES,
-                        help="how the tool is demanded "
-                             "(ANTHROPIC_TOOL_CHOICE_MODE)")
-    parser.add_argument("--anthropic-text-json-fallback",
-                        choices=ANTHROPIC_TEXT_JSON_FALLBACK_MODES,
-                        help="accept a report written as JSON text "
-                             "(ANTHROPIC_TEXT_JSON_FALLBACK)")
-    parser.add_argument("--anthropic-max-retries", type=non_negative_int,
+    parser.add_argument("--summarizer-model",
+                        help="model asked for on the endpoint "
+                             "(SUMMARIZER_MODEL)")
+    parser.add_argument("--summarizer-base-url",
+                        help="base URL of the endpoint; the "
+                             "openai-compatible backend expects the "
+                             "version path in it (SUMMARIZER_BASE_URL)")
+    parser.add_argument("--summarizer-max-retries", type=non_negative_int,
                         help="retries the SDK may spend on one request "
-                             "(ANTHROPIC_MAX_RETRIES)")
-    parser.add_argument("--openai-model",
-                        help="model asked for on the OpenAI-compatible API "
-                             "(OPENAI_MODEL)")
-    parser.add_argument("--openai-base-url",
-                        help="base URL of that API, with the version path "
-                             "(OPENAI_BASE_URL)")
+                             "(SUMMARIZER_MAX_RETRIES)")
+    parser.add_argument("--summarizer-thinking-mode",
+                        choices=SUMMARIZER_THINKING_MODES,
+                        help="thinking parameter sent with an "
+                             "anthropic-compatible request "
+                             "(SUMMARIZER_THINKING_MODE)")
+    parser.add_argument("--summarizer-tool-choice-mode",
+                        choices=SUMMARIZER_TOOL_CHOICE_MODES,
+                        help="how the tool is demanded "
+                             "(SUMMARIZER_TOOL_CHOICE_MODE)")
+    parser.add_argument("--summarizer-text-json-fallback",
+                        choices=SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
+                        help="accept a report written as JSON text "
+                             "(SUMMARIZER_TEXT_JSON_FALLBACK)")
     parser.add_argument("--max-output-tokens", type=positive_int,
                         help="tokens the model may produce in one answer "
                              "(MAX_OUTPUT_TOKENS)")
@@ -652,7 +651,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     """ Entry point returning the process exit code. """
     args = parse_args(argv)
     configure_logging(getattr(args, "verbose", False))
-    return args.handler(args, apply_overrides(load_config(), args))
+    try:
+        config = load_config()
+    except RuntimeError as error:
+        # A setting the project no longer reads is a configuration
+        # problem, not a crash: it deserves the same one line every
+        # other refused setting gets, not a traceback the operator has
+        # to read past to find the name and its replacement.
+        logger.error("%s", error)
+        return 1
+    return args.handler(args, apply_overrides(config, args))
 
 
 if __name__ == "__main__":

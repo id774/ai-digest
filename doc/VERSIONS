@@ -3,13 +3,35 @@ ai-digest Repository Version History
 
 v1.2 (Release Date: TBD)
 ------------------------
+- Name the endpoint settings after the summarization stage instead of
+  after a vendor. ANTHROPIC_* and OPENAI_* described neither what they
+  addressed nor who answered: an 'anthropic-compatible' endpoint is
+  regularly operated by neither Anthropic nor OpenAI, and one set of
+  settings per backend meant the OpenAI path drew its retry budget from
+  a variable named for the other one. They become a single SUMMARIZER_*
+  set - SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN, SUMMARIZER_BASE_URL,
+  SUMMARIZER_MODEL, SUMMARIZER_MAX_RETRIES, SUMMARIZER_THINKING_MODE,
+  SUMMARIZER_TOOL_CHOICE_MODE and SUMMARIZER_TEXT_JSON_FALLBACK -
+  because one endpoint answers at a time. SUMMARIZER_BACKEND now names
+  the wire protocol, 'anthropic-compatible' or 'openai-compatible'
+  rather than 'claude' or 'openai', and the command line options follow
+  the variables they override.
+- Refuse the superseded names at startup rather than reading them.
+  ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN and ANTHROPIC_BASE_URL are
+  also what the Anthropic SDK and other tools take from the environment
+  on their own, so a value exported for one of those used to decide
+  where a nightly digest was sent. Presence is what is refused, not the
+  value, and the message names the replacement; a superseded
+  SUMMARIZER_BACKEND value is answered the same way. Upgrading a host
+  therefore means unsetting the old names wherever they were exported,
+  not only editing .env.
 - Bound the summarization request with a timeout of its own,
   SUMMARIZER_TIMEOUT, defaulting to 180 seconds. Neither API client was
   given one, so both fell back on an SDK default measured in minutes
   and an endpoint that accepted a request but never answered could hold
   a nightly run open until the next one started. The value is checked
   before anything is collected, and each retry spends it again, so the
-  worst case wait is SUMMARIZER_TIMEOUT x (ANTHROPIC_MAX_RETRIES + 1).
+  worst case wait is SUMMARIZER_TIMEOUT x (SUMMARIZER_MAX_RETRIES + 1).
   HTTP_TIMEOUT keeps its own meaning and now covers only the collectors
   and the scraper, whose requests are many and short.
 - Raise the defaults of MAX_OUTPUT_TOKENS to 8000 and HTTP_TIMEOUT to

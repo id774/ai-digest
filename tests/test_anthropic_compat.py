@@ -21,36 +21,37 @@ class ConfigAuthenticationTest(unittest.TestCase):
                 return config.load_config()
 
     def test_loads_api_key_authentication(self):
-        loaded = self.load({"ANTHROPIC_API_KEY": "key"})
+        loaded = self.load({"SUMMARIZER_API_KEY": "key"})
 
-        loaded.validate_anthropic_auth()
-        self.assertEqual("key", loaded.anthropic_api_key)
-        self.assertIsNone(loaded.anthropic_auth_token)
+        loaded.validate_summarizer_auth()
+        self.assertEqual("key", loaded.summarizer_api_key)
+        self.assertIsNone(loaded.summarizer_auth_token)
 
     def test_loads_bearer_authentication_and_base_url(self):
         loaded = self.load({
-            "ANTHROPIC_AUTH_TOKEN": "uuid:secret",
-            "ANTHROPIC_BASE_URL": "https://api.example.test",
+            "SUMMARIZER_AUTH_TOKEN": "uuid:secret",
+            "SUMMARIZER_BASE_URL": "https://api.example.test",
         })
 
-        loaded.validate_anthropic_auth()
-        self.assertEqual("uuid:secret", loaded.anthropic_auth_token)
-        self.assertEqual("https://api.example.test", loaded.anthropic_base_url)
+        loaded.validate_summarizer_auth()
+        self.assertEqual("uuid:secret", loaded.summarizer_auth_token)
+        self.assertEqual("https://api.example.test",
+                         loaded.summarizer_base_url)
 
     def test_rejects_multiple_authentication_values(self):
         loaded = self.load({
-            "ANTHROPIC_API_KEY": "key",
-            "ANTHROPIC_AUTH_TOKEN": "token",
+            "SUMMARIZER_API_KEY": "key",
+            "SUMMARIZER_AUTH_TOKEN": "token",
         })
 
         with self.assertRaisesRegex(RuntimeError, "only one"):
-            loaded.validate_anthropic_auth()
+            loaded.validate_summarizer_auth()
 
     def test_requires_an_authentication_value(self):
         loaded = self.load({})
 
         with self.assertRaisesRegex(RuntimeError, "is required"):
-            loaded.validate_anthropic_auth()
+            loaded.validate_summarizer_auth()
 
 
 class ConfigRequestOptionTest(unittest.TestCase):
@@ -63,34 +64,34 @@ class ConfigRequestOptionTest(unittest.TestCase):
     def test_defaults_to_the_anthropic_behaviour(self):
         loaded = self.load({})
 
-        loaded.validate_anthropic_options()
-        self.assertEqual("default", loaded.anthropic_thinking_mode)
-        self.assertEqual("forced", loaded.anthropic_tool_choice_mode)
+        loaded.validate_protocol_options()
+        self.assertEqual("default", loaded.summarizer_thinking_mode)
+        self.assertEqual("forced", loaded.summarizer_tool_choice_mode)
 
     def test_keeps_the_configured_values(self):
         loaded = self.load({
-            "ANTHROPIC_THINKING_MODE": "disabled",
-            "ANTHROPIC_TOOL_CHOICE_MODE": "auto",
+            "SUMMARIZER_THINKING_MODE": "disabled",
+            "SUMMARIZER_TOOL_CHOICE_MODE": "auto",
         })
 
-        loaded.validate_anthropic_options()
-        self.assertEqual("disabled", loaded.anthropic_thinking_mode)
-        self.assertEqual("auto", loaded.anthropic_tool_choice_mode)
+        loaded.validate_protocol_options()
+        self.assertEqual("disabled", loaded.summarizer_thinking_mode)
+        self.assertEqual("auto", loaded.summarizer_tool_choice_mode)
 
     def test_rejects_an_unknown_thinking_mode(self):
-        loaded = self.load({"ANTHROPIC_THINKING_MODE": "off"})
+        loaded = self.load({"SUMMARIZER_THINKING_MODE": "off"})
 
-        with self.assertRaisesRegex(RuntimeError, "ANTHROPIC_THINKING_MODE"):
-            loaded.validate_anthropic_options()
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_THINKING_MODE"):
+            loaded.validate_protocol_options()
 
     def test_rejects_an_unknown_tool_choice_mode(self):
         # 'any' used to stand for an unknown value here; it is a
         # supported mode now, so the check needs a real typo.
-        loaded = self.load({"ANTHROPIC_TOOL_CHOICE_MODE": "always"})
+        loaded = self.load({"SUMMARIZER_TOOL_CHOICE_MODE": "always"})
 
         with self.assertRaisesRegex(RuntimeError,
-                                    "ANTHROPIC_TOOL_CHOICE_MODE"):
-            loaded.validate_anthropic_options()
+                                    "SUMMARIZER_TOOL_CHOICE_MODE"):
+            loaded.validate_protocol_options()
 
 
 class ClientConstructionTest(unittest.TestCase):

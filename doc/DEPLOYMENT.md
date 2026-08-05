@@ -48,7 +48,7 @@ sudo -u ai-digest .venv/bin/pip install --upgrade pip
 sudo -u ai-digest .venv/bin/pip install -r requirements.txt
 ```
 
-`SUMMARIZER_BACKEND=openai` additionally needs the `openai` package, which is
+`SUMMARIZER_BACKEND=openai-compatible` additionally needs the `openai` package, which is
 deliberately absent from `requirements.txt` so that a default installation
 carries one API client rather than two:
 
@@ -64,10 +64,13 @@ sudo chmod 600 .env
 sudo -u ai-digest sensible-editor .env
 ```
 
-At minimum set one Anthropic authentication value — `ANTHROPIC_API_KEY`, or
-`ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL` for a compatible endpoint.
-Set `SUMMARIZER_BACKEND=plain` instead to run without any key at all, at the
-cost of translation and clustering. Every setting is listed in
+At minimum set one credential — `SUMMARIZER_API_KEY`, or
+`SUMMARIZER_AUTH_TOKEN` with `SUMMARIZER_BASE_URL` for a compatible endpoint.
+Set `SUMMARIZER_BACKEND=plain` instead to run without any credential at all, at
+the cost of translation and clustering. A host upgraded from an earlier release
+must unset the `ANTHROPIC_*` and `OPENAI_*` variables wherever they were
+exported, including this unit's `EnvironmentFile`: the batch refuses to start
+while one of them is present and names its replacement. Every setting is listed in
 [`.env.example`](../.env.example) and under
 [Configuration](../README.md#configuration).
 
@@ -214,11 +217,11 @@ Where an endpoint differs, the difference is a setting rather than a code path:
 
 | Setting | For an endpoint that |
 |---|---|
-| `ANTHROPIC_TOOL_CHOICE_MODE=any` | drops a named `tool_choice` but honours a demand for some tool |
-| `ANTHROPIC_TOOL_CHOICE_MODE=auto` | honours neither, and must be asked through the prompt |
-| `ANTHROPIC_THINKING_MODE=disabled` | thinks until the output budget is gone and never reaches the tool call |
-| `ANTHROPIC_TEXT_JSON_FALLBACK=enabled` | writes the right JSON as text instead of calling the tool |
-| `SUMMARIZER_BACKEND=openai` | is more reliable over Chat Completions than over the Messages API |
+| `SUMMARIZER_TOOL_CHOICE_MODE=any` | drops a named `tool_choice` but honours a demand for some tool |
+| `SUMMARIZER_TOOL_CHOICE_MODE=auto` | honours neither, and must be asked through the prompt |
+| `SUMMARIZER_THINKING_MODE=disabled` | thinks until the output budget is gone and never reaches the tool call |
+| `SUMMARIZER_TEXT_JSON_FALLBACK=enabled` | writes the right JSON as text instead of calling the tool |
+| `SUMMARIZER_BACKEND=openai-compatible` | is more reliable over Chat Completions than over the Messages API |
 
 Change one setting per run, so that the run which succeeds says which setting
 did it. [When the endpoint returns no tool
@@ -232,11 +235,11 @@ One `cli.py run` spends one summarization request, plus whatever the SDK retries
 | What | Requests |
 |---|---:|
 | One `cli.py run` | 1 |
-| Each SDK retry (`ANTHROPIC_MAX_RETRIES`, default 2) | 1 more |
+| Each SDK retry (`SUMMARIZER_MAX_RETRIES`, default 2) | 1 more |
 | `cli.py demo`, `cli.py render`, `cli.py list` | 0 |
 | Every page of the viewer | 0 |
 
-`ANTHROPIC_MAX_RETRIES=0` makes a run cost exactly one request, which is what
+`SUMMARIZER_MAX_RETRIES=0` makes a run cost exactly one request, which is what
 comparing two endpoint settings needs on a plan that counts them.
 
 Collection, deduplication, image scraping, the fallback cards and the composite
@@ -249,7 +252,7 @@ which is why `SUMMARIZER_BACKEND=plain` removes the cost entirely.
 each retry spends it again:
 
 ```text
-worst case wait = SUMMARIZER_TIMEOUT x (ANTHROPIC_MAX_RETRIES + 1)
+worst case wait = SUMMARIZER_TIMEOUT x (SUMMARIZER_MAX_RETRIES + 1)
 ```
 
 At the defaults that is nine minutes. Keep it comfortably below the interval
