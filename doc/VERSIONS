@@ -1,6 +1,22 @@
 ai-digest Repository Version History
 ====================================
 
+v1.2.1 (Release Date: TBD)
+--------------------------
+- Add .gitattributes. The Markdown documents take diff=markdown, so that a
+  diff hunk header names the section it falls in; doc/POLICY and doc/LICENSE
+  also take linguist-language=Markdown for highlighting on GitHub. doc/VERSIONS
+  is left out because it is underlined plain text, and diff=markdown empties
+  the hunk headers that otherwise name the version. doc/COPYING and
+  doc/COPYING.LESSER are left out as the licence texts. Each path is named on
+  its own rather than matched by a glob, which would catch the '#' comment
+  lines of the scripts and the configuration files.
+- State the document file naming and attribute rules in doc/POLICY: a Markdown
+  document takes .md, the fixed names under doc/ keep no extension because they
+  are the names this repository shares with the author's other repositories,
+  and an existing document is not renamed for its extension, because its path
+  is a public URL that pages outside the repository link to.
+
 v1.2 (2026-08-05)
 -----------------
 - Name the endpoint settings after the summarization stage instead of
