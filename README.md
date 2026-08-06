@@ -516,6 +516,7 @@ python -m unittest discover -s tests -p "test_c*.py"             # modules match
 | Module | Subject |
 |---|---|
 | `test_config.py` | environment driven settings and backend validation |
+| `test_cli_options.py` | the command line overrides: one setting replaced at a time, list splitting, the absolute data directory, that every overridable name is a real field, that no credential has an option, and the values the parser refuses |
 | `test_collectors.py` | arXiv and RSS collection, look back window, partial source failures |
 | `test_storage.py` | report persistence, date validation, path traversal refusal |
 | `test_urls.py` | accepted URL schemes and neutralization of unsafe stored links |
@@ -526,6 +527,9 @@ python -m unittest discover -s tests -p "test_c*.py"             # modules match
 | `test_output_budget.py` | output token budget and truncated answers |
 | `test_request_timeout.py` | the summarization timeout: its default, its refusal of a non-positive value, and that it reaches both SDKs |
 | `test_resolver.py` | ar5iv figure and Open Graph scraping |
+| `test_fallback.py` | line breaking of the fallback card: the configured width, an explicit break, the cap on the lines a card gets, and the ellipsis marking what was dropped |
+| `test_compose_image.py` | the legend of the composite daily image: the order it keeps, the entries a narrow row drops, and the cap on how many it lists |
+| `test_render_command.py` | the window a rebuilt image announces, read from the statistics the run stored rather than from the current configuration |
 | `test_demo.py` | bundled demo report build |
 
 A passing suite says nothing about the feeds or the API being reachable; those are exercised only by an actual `python cli.py run`.
@@ -579,6 +583,8 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 ├── Procfile                        Heroku process definition
 ├── .python-version
 ├── .env.example
+├── .gitignore                      generated reports, .env and Python artifacts
+├── .gitattributes                  diff settings for the documents under doc/
 ├── ai_digest/
 │   ├── __init__.py                 Entry and Topic dataclasses, category colors
 │   ├── dedup.py                    title similarity based deduplication
@@ -612,10 +618,10 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 └── doc/
     ├── DEPLOYMENT.md               Debian and nginx deployment
     ├── DEMO.md                     demo mode and the screenshots
-    ├── POLICY                      implementation policy
+    ├── POLICY.md                   implementation policy
     ├── VERSIONS                    repository version history
     ├── screenshots/                images embedded in this README
-    ├── LICENSE
+    ├── LICENSE.md
     ├── COPYING
     └── COPYING.LESSER
 ```
@@ -728,4 +734,4 @@ Please follow the style used in this repository: module level header comments de
 ## License
 
 This repository is dual licensed under the [GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the [LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
-For full details, please refer to the [LICENSE](doc/LICENSE.md) file. See also [COPYING](doc/COPYING) and [COPYING.LESSER](doc/COPYING.LESSER) for the complete license texts.
+For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also [doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the complete license texts.
