@@ -197,16 +197,95 @@ These lines are not crossed by a setting, by an option or by an extension.
 
 #### doc/VERSIONS Structure
 - `doc/VERSIONS` reads as a version-level summary of overall changes, not a raw
-  commit log:
-  - When multiple changes to the same file within one version are really one
-    coherent change, merge them into a single bullet.
-  - When changes are independent, place entries that touch the same file or
-    feature near each other, so that each version reads as a coherent whole.
+  commit log. It is a plain text document and follows the rules for one stated
+  below, with the one exception of line length described here.
+- Write one coherent change on one physical line. The file is read as a list
+  and reviewed as a diff, and both are served by an entry that is not wrapped:
+  one line is one change, added, removed or reworded as a whole.
+- That rule comes before the roughly 80 columns a plain text document otherwise
+  aims at. Near 100 columns is the usual target, and an entry that has to name
+  a file, a command, a function, an option or a setting may run to about 120
+  columns or beyond.
+- These widths are a prompt to check whether an entry explains more than it
+  needs to, not a limit to enforce.
+- When an entry runs long, look first for what can be dropped or abstracted:
+  the implementation detail, the example, the detailed reason, the secondary
+  effect. Consider that before wrapping the line.
+- Keep the changed target, the behavior visible from outside, the effect on
+  compatibility, the effect on safety, and the identifiers that matter.
+- An entry that is long because it names the identifiers it needs is not
+  shortened for its length alone.
+- Merge changes that serve one purpose. Related changes to the same file within
+  one version are merged as a rule; changes to the same file that mean
+  different things are left as separate entries rather than forced together.
+- Place entries that touch the same feature, file or purpose near each other,
+  and append an independent change to the end of that version. Reading well as
+  a version comes before preserving the order the commits happened in.
 - Use UTF-8.
+
+#### Document Format
+- The format of a document is decided by what it is for and by the name it
+  carries, not by whether part of its content happens to parse as Markdown.
+- A document named with `.md` is written, displayed and maintained as Markdown.
+- A document that carries no extension is a plain text document, and nothing in
+  it assumes a Markdown renderer.
+- Underlined headings, dashed lists, backquotes and bare URLs are readable as
+  Markdown wherever they appear, and finding them in a plain text document does
+  not make it one.
+- The name states the format so that nobody has to infer it from the content.
+  Reading a file to guess what it is gives a different answer to every reader
+  and to every agent; the extension gives all of them the same answer.
+- The two formats are kept apart because they are read in different places.
+  Markdown is read rendered, in a browser, where the structure carries the
+  meaning. Plain text is read raw, in a terminal, a pager or a diff, where the
+  bytes are all there is. A rule that serves one damages the other, which is
+  why the two sets of rules below are stated separately and are not merged.
+
+#### Markdown Documents
+- A Markdown document may assume that it will be rendered, on GitHub or
+  elsewhere.
+- Use headings, lists, tables, code blocks, links and emphasis to make the
+  structure of the document explicit.
+- Name it with `.md`, so that the path states the format.
+- `*.md diff=markdown` in `.gitattributes` gives it diff hunk headers that name
+  the section, and that is there to be used.
+- Both sides count: the structure after rendering, and how easy the source is
+  to edit.
+- Ordinary prose may be wrapped where that keeps the source readable, near the
+  width the document already uses.
+- The roughly 80 columns that plain text aims at is not a limit here, and is
+  not applied to a Markdown document as one.
+- A URL, a table row, a code block, a command, an identifier or a link
+  construct may run long. Wrapping one of those costs a copyable line or a
+  working table and buys nothing.
+- Line length never justifies breaking the meaning of the markup or inserting a
+  break the notation does not want.
+- In a Markdown document the heading structure, the paragraph structure, the
+  correctness of the notation and the rendered result come before the length of
+  a physical line.
+
+#### Plain Text Documents
+- A plain text document is read as it is, without GitHub's rendering and
+  without any particular viewer.
+- It stays readable on an old fixed-width terminal, under `less` or `cat`, in
+  an editor and in a diff.
+- Ordinary prose stays near 80 columns as far as it practically can.
+- Near 80 columns is a guideline for readability on a terminal, not an absolute
+  mechanical limit.
+- A URL, a legal formula, a command, a required identifier, a table, or a line
+  that is clearer left unbroken may exceed the usual width.
+- Exceeding that width is not by itself a defect, and not by itself something
+  that has to be corrected.
+- Markdown-compatible headings and lists may be used to give such a document
+  structure, but nothing in it assumes Markdown rendering.
+- Judge it as raw text: how readable and how stable it is line by line, not
+  what a renderer would make of it.
 
 #### Document File Naming
 - A document written in Markdown takes a `.md` extension when it is newly
-  created.
+  created. ai-digest is a recent repository, so its Markdown documents carry
+  the extension from the moment they are written: `doc/POLICY.md`,
+  `doc/LICENSE.md`, and the design and operation documents beside them.
 - The licence texts keep the extensionless names by which they are recognised:
   `COPYING` and `COPYING.LESSER`.
 - A document that is not Markdown takes no extension, or `.txt`.
@@ -222,20 +301,61 @@ These lines are not crossed by a setting, by an option or by an extension.
   repository, where it was corrected in the same change.
 - `doc/VERSIONS` keeps its name. It is not Markdown, so rendering does not
   apply to it.
-- A repository whose extensionless document is linked from outside, such as
-  id774/scripts with `doc/POLICY.md`, keeps its name. There the broken links would
-  cost more than the rendering gains.
+- An older repository may keep an extensionless `POLICY` or `GUIDELINES`
+  because history, a published path, an outside reference or compatibility
+  weighs more there than rendering does. A name that differs between
+  repositories is not by itself a policy that differs: the rule for naming a
+  new document and the rule for keeping an existing path hold at the same time.
+- The naming of a recent repository is not applied backwards to an older one,
+  and the historical naming of an older repository is not copied into a recent
+  one. Each name is decided where it lives.
+
+#### The Extensionless Documents Here
+- `doc/VERSIONS` is the version history, plain text, without an extension.
+- `doc/COPYING` and `doc/COPYING.LESSER` hold the official licence texts as
+  plain text.
+- None of the three is a `.md` document, and none of them is meant to be
+  rendered as Markdown.
+- Their official names, their legal wording and their published paths come
+  first. Uniformity of form is not on its own a reason to rename them.
+- `doc/LICENSE.md` carries `.md` because it is the Markdown document this
+  repository presents to a reader.
+- `LICENSE.md` and the `COPYING` texts have different roles, so having both is
+  neither a duplicate nor an inconsistency.
+- Do not rename `doc/VERSIONS`, `doc/COPYING` or `doc/COPYING.LESSER` to `.md`
+  because they contain a symbol a Markdown renderer would accept.
 
 #### Document File Attributes
+- What `.gitattributes` says about a diff does not decide the format of a
+  document. It describes documents whose format their names have already
+  settled.
 - `.gitattributes` gives `diff=markdown` to `*.md`, so that a diff hunk header
   names the section it falls in. A document named with `.md` is covered by that
   line and needs no entry of its own.
 - `doc/VERSIONS` is excluded. It is underlined plain text, and `diff=markdown`
-  empties the hunk headers that otherwise name the version.
-- `doc/COPYING` and `doc/COPYING.LESSER` are excluded as the licence texts.
+  empties the hunk headers that otherwise name the version; leaving it out
+  agrees with treating it as a plain text version history.
+- `doc/COPYING` and `doc/COPYING.LESSER` are excluded as the licence texts,
+  which agrees with their role as the official legal wording.
 - No file is given `linguist-language`. Nothing in `.gitattributes` makes GitHub
   render a document that carries no extension; that is what the `.md` names are
-  for.
+  for, and an extensionless document is not dressed up as Markdown.
+- How a document appears on GitHub is not a reason on its own to change its
+  format or its attributes.
+
+#### Form and Role
+- Bringing every document to one extension, one line width and one way of being
+  displayed is not a goal in itself.
+- Choose the form from the role of the document, where it is read, the path it
+  is published under, what it must stay compatible with, and how it is edited.
+- What is kept uniform is not the appearance of the documents but the criterion
+  by which their form is chosen.
+- Markdown documents and plain text documents living side by side in one
+  repository is the intended design, not an untidiness to be resolved.
+- Modernizing or unifying a format must not cost an existing path, a legal
+  text, readability on a terminal, or the legibility of a diff.
+- Before changing a file name or a line width, find out why the current form
+  was chosen.
 
 ### Comments, Docstrings and Language
 - Comments must be written in English only.
