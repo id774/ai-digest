@@ -7,185 +7,95 @@ v1.2.1 (Release Date: TBD)
 - Rename doc/POLICY and doc/LICENSE to doc/POLICY.md and doc/LICENSE.md, so
   that GitHub renders them, and update the references to them.
 - Add the document file naming and attribute rules to doc/POLICY.md.
+- Summarize the entries of this file to one bullet per change, as
+  doc/POLICY.md has always asked.
 
 v1.2 (2026-08-05)
 -----------------
-- Name the endpoint settings after the summarization stage instead of
-  after a vendor. ANTHROPIC_* and OPENAI_* described neither what they
-  addressed nor who answered: an 'anthropic-compatible' endpoint is
-  regularly operated by neither Anthropic nor OpenAI, and one set of
-  settings per backend meant the OpenAI path drew its retry budget from
-  a variable named for the other one. They become a single SUMMARIZER_*
-  set - SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN, SUMMARIZER_BASE_URL,
-  SUMMARIZER_MODEL, SUMMARIZER_MAX_RETRIES, SUMMARIZER_THINKING_MODE,
-  SUMMARIZER_TOOL_CHOICE_MODE and SUMMARIZER_TEXT_JSON_FALLBACK -
-  because one endpoint answers at a time. SUMMARIZER_BACKEND now names
-  the wire protocol, 'anthropic-compatible' or 'openai-compatible'
-  rather than 'claude' or 'openai', and the command line options follow
-  the variables they override.
-- Refuse the superseded names at startup rather than reading them.
-  ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN and ANTHROPIC_BASE_URL are
-  also what the Anthropic SDK and other tools take from the environment
-  on their own, so a value exported for one of those used to decide
-  where a nightly digest was sent. Presence is what is refused, not the
-  value, and the message names the replacement; a superseded
-  SUMMARIZER_BACKEND value is answered the same way. Upgrading a host
-  therefore means unsetting the old names wherever they were exported,
-  not only editing .env.
-- Bound the summarization request with a timeout of its own,
-  SUMMARIZER_TIMEOUT, defaulting to 180 seconds. Neither API client was
-  given one, so both fell back on an SDK default measured in minutes
-  and an endpoint that accepted a request but never answered could hold
-  a nightly run open until the next one started. The value is checked
-  before anything is collected, and each retry spends it again, so the
-  worst case wait is SUMMARIZER_TIMEOUT x (SUMMARIZER_MAX_RETRIES + 1).
-  HTTP_TIMEOUT keeps its own meaning and now covers only the collectors
-  and the scraper, whose requests are many and short.
-- Raise the defaults of MAX_OUTPUT_TOKENS to 8000 and HTTP_TIMEOUT to
-  60 seconds, and move the viewer from port 5000 to 3000. A deployment
-  pinning the old values in .env is unaffected; one relying on the
-  defaults answers on the new port after an upgrade.
-- Document USER_AGENT in .env.example, which was the one setting
-  present in config.py and in the README but missing from the file
-  meant to be copied.
+- Rename the endpoint settings from ANTHROPIC_* and OPENAI_* to a single
+  SUMMARIZER_* set, and name the wire protocol in SUMMARIZER_BACKEND as
+  anthropic-compatible or openai-compatible; the command line options
+  follow the variables they override.
+- Refuse the superseded setting names at startup. Upgrading a host means
+  unsetting them wherever they were exported, not only editing .env.
+- Bound the summarization request with SUMMARIZER_TIMEOUT, defaulting to
+  180 seconds, so that HTTP_TIMEOUT now covers only the collectors and the
+  scraper.
+- Raise the MAX_OUTPUT_TOKENS default to 8000 and the HTTP_TIMEOUT default
+  to 60 seconds, and move the viewer from port 5000 to 3000. A deployment
+  relying on the defaults answers on the new port after an upgrade.
+- Document USER_AGENT in .env.example.
 - Add doc/DEPLOYMENT.md and deploy/, covering the Debian and nginx
-  procedure end to end: installation, the batch under cron, TLS, reader
-  restrictions, the API compatibility settings, the request budget, and
-  the routine operations the README never stated - rotating the key,
-  rotating the batch log, backing up the archive and rolling back. The
-  deployment section of the README now points at it instead of carrying
-  a shortened copy of the same unit file.
-- Say in the README what a failure looks like: the exit codes, the log
-  line each failure writes and what it usually means, the shared log
-  format, and that no credential appears at any level. Add the guide
-  for adding a collector that the contribution section was inviting
-  without describing, and the reason the four places carrying Japanese
-  carry it.
+  procedure and the routine operations.
+- Describe the exit codes, the failure log lines and how to add a collector
+  in the README.
 - List doc/POLICY and doc/VERSIONS in the repository structure and link
-  them from the top of the README. Both existed and neither was
-  reachable from the document a reader starts at.
+  them from the top of the README.
 
 v1.1.1 (2026-08-04)
 -------------------
-- Read the feed timestamps as UTC, which is what feedparser returns.
-  time.mktime() read them as local time, so on a host east of UTC every
-  entry looked older than it was and the look back window silently lost
-  the difference; in Asia/Tokyo a run covered 15 hours instead of 24.
+- Read the feed timestamps as UTC, which is what feedparser returns; a host
+  east of UTC had been losing the offset from its look back window.
 - Name the configured look back window in the prompt and in the summary
-  image instead of always announcing 24 hours, so that LOOKBACK_HOURS
-  and what the report says about itself cannot disagree.
-- Say why a run collected nothing. The collectors now return the per
-  source outcome next to their entries, so an empty run is reported as
-  unreachable sources, as sources that answered with nothing published
-  inside the window, or as no source configured, instead of one message
-  that listed every possible cause at once. A run that loses only some
-  of its sources continues and says so.
-- Copy the composite image of the captured report into doc/screenshots
-  from tools/capture_screens.py, so that refreshing the images embedded
-  in the README is one command instead of four captures plus a manual
-  copy of summary.png.
-- Accept every setting as a command line option on cli.py, each named
-  after the variable it replaces, so that a one off run states what it
-  wants, as in 'cli.py run --lookback-hours 72', instead of needing the
-  environment edited or a variable prefixed. An option left out changes
-  nothing, so an existing cron entry behaves as before; the values a run
-  replaced are logged, and a number the pipeline cannot use is refused
-  by the parser before anything is collected. The three credentials
-  deliberately have no option, because a command line is readable by
-  every user of the host.
-- Keep the categories of the leading topics in the legend of the
-  summary image. The legend is right aligned and was drawn from the
-  right until the row was full, so a day with long category names lost
-  the entries of its most important topics rather than of its least
-  important ones.
+  image instead of always announcing 24 hours.
+- Report why a run collected nothing, distinguishing unreachable sources,
+  sources with nothing published inside the window, and no source
+  configured; a run that loses only some of its sources continues and says
+  so.
+- Copy the composite image of the captured report into doc/screenshots from
+  tools/capture_screens.py.
+- Accept every setting as a command line option on cli.py, each named after
+  the variable it replaces. The three credentials deliberately have none,
+  because a command line is readable by every user of the host.
+- Keep the categories of the leading topics in the legend of the summary
+  image.
 - Draw a card instead of ending the run when an image is refused as a
-  decompression bomb. Such a picture compresses to far less than the
-  byte limit stops, and Pillow reports it outside OSError, so the error
-  escaped the resolver and ended the batch with a traceback after the
-  summarization had already been paid for.
+  decompression bomb.
 - Record the look back window a run collected in the statistics of its
-  report, so that 'cli.py render' redraws the summary image with the
-  period the report was built from instead of whatever LOOKBACK_HOURS
-  holds at the time of the rebuild.
-- Fall back on the default identity when USER_AGENT is set but empty,
-  and ignore the space around it. Every other string setting already
-  reads an empty value as unset, so a line reading 'USER_AGENT=' in
-  .env was the one way to send an empty header to arXiv and to the
-  feed and publisher hosts, which are free to refuse it.
-- Apply the line limit of wrap_text() to an explicit line break as
-  well. A break added a line without counting it, so a text carrying
-  one could be given more lines than the card reserves room for and
-  run over the illustration below it. Nothing produces such a text
-  today, since titles and bullets have their whitespace collapsed
-  before they are drawn, and the limit now holds whatever arrives.
+  report, so that 'cli.py render' redraws the summary image with the period
+  the report was built from.
+- Fall back on the default identity when USER_AGENT is set but empty.
+- Apply the line limit of wrap_text() to an explicit line break as well.
 
 v1.1 (2026-08-02)
 -----------------
-- Stop the batch on an unknown SUMMARIZER_BACKEND value instead of
-  falling back on the default, which turned a typo into a run against
-  the Claude API when an API-key-free run was intended, and remove the
-  unused Config.require_api_key() left beside that check.
-- Accept only http and https links from the collectors, and neutralize
-  the ones already stored when a report is rendered, so that a crafted
-  feed entry cannot place a javascript: URL in the report.
-- Enforce the image size limit while the response is being read rather
-  than after the whole body has been buffered, and request image
-  sources over http and https only.
-- Anchor the report date pattern with \A and \Z, since $ also matched
-  in front of a trailing newline.
-- Cover the configuration, the report paths, the link filtering, the
-  capped download and the plain backend with unit tests.
-- Add ANTHROPIC_THINKING_MODE and ANTHROPIC_TOOL_CHOICE_MODE, which
-  turn the thinking output off and let the model pick the tool, for an
-  Anthropic-compatible endpoint that accepts the request but answers
-  with thinking alone until the output budget is gone and so never
-  returns a tool_use block. The defaults leave the request Anthropic
-  receives unchanged, and an unknown value stops the run before
-  anything is collected.
-- Add 'any' to ANTHROPIC_TOOL_CHOICE_MODE, which demands a tool without
-  naming one, for an endpoint that drops a named tool_choice but
-  honours an unnamed demand; build_report being the only tool offered,
-  both reach the same place.
-- Add ANTHROPIC_TEXT_JSON_FALLBACK, which reads a report an endpoint
-  wrote as JSON text rather than as a tool call. It is off by default
-  and accepts only a text block parsing into an object with a topics
-  list, so that prose is never published as a report, and it names
-  itself in a warning whenever it is used.
-- Read MAX_OUTPUT_TOKENS from the environment. It was a constant in the
-  summarizer, so a value placed in .env was loaded and then ignored,
-  while the message a truncated report prints told the reader to raise
-  exactly that name. Both API backends take the budget from the
-  configuration now, and a value below 1 stops the run before anything
-  is collected.
-- Add ANTHROPIC_MAX_RETRIES, so that a run can be made to spend exactly
-  one request while two endpoint settings are compared, without
-  editing the summarizer as the earlier investigation did.
-- Add SUMMARIZER_BACKEND=openai, an OpenAI-compatible Chat Completions
-  path for a provider whose Anthropic-compatible endpoint returns no
-  usable tool call. It sends the same prompt and the same tool schema,
-  reads the answer from tool_calls[].function.arguments and validates
-  it through the same to_topics(), so a report does not differ by the
-  route it took. The openai package stays out of requirements.txt and
-  is imported only when that backend runs.
+- Stop the batch on an unknown SUMMARIZER_BACKEND value instead of falling
+  back on the default, and remove the unused Config.require_api_key().
+- Accept only http and https links from the collectors, and neutralize the
+  ones already stored when a report is rendered.
+- Enforce the image size limit while the response is being read rather than
+  after the whole body has been buffered, and request image sources over
+  http and https only.
+- Anchor the report date pattern with \A and \Z.
+- Cover the configuration, the report paths, the link filtering, the capped
+  download and the plain backend with unit tests.
+- Add ANTHROPIC_THINKING_MODE and ANTHROPIC_TOOL_CHOICE_MODE, the latter
+  taking 'any' as well as a named tool, for an endpoint that otherwise
+  never returns a tool_use block. The defaults leave the request unchanged.
+- Add ANTHROPIC_TEXT_JSON_FALLBACK, off by default, which reads a report an
+  endpoint wrote as JSON text rather than as a tool call.
+- Read MAX_OUTPUT_TOKENS from the environment, where it had been a constant
+  in the summarizer.
+- Add ANTHROPIC_MAX_RETRIES.
+- Add SUMMARIZER_BACKEND=openai, an OpenAI-compatible Chat Completions path
+  validated through the same to_topics(); the openai package stays out of
+  requirements.txt and is imported only when that backend runs.
 - Name the stop reason and the content block types when the summarizer
-  finds no build_report call, report a truncated or unparsable set of
-  arguments as such instead of letting a partial report through as an
-  empty one, accept only a block named build_report instead of the
-  first tool call seen, log one summary line per response instead of
-  the whole body, and restore the default client retries that the
-  earlier investigation had disabled.
-- Add doc/POLICY, the ai-digest implementation policy adapted for a
-  single Python project from the shared id774/scripts policy.
+  finds no build_report call, report truncated or unparsable arguments as
+  such, accept only a block named build_report, and log one summary line
+  per response.
+- Add doc/POLICY, the ai-digest implementation policy adapted for a single
+  Python project from the shared id774/scripts policy.
 
 v1.0 (2026-07-31)
 -----------------
-- Add the 'demo' command, which builds a report from the sample bundled
-  in ai_digest/demo without collecting anything or calling the API, and
+- Add the 'demo' command, which builds a report from the sample bundled in
+  ai_digest/demo without collecting anything or calling the API, and
   document the output with screenshots captured from it by
   tools/capture_screens.py.
-- Add SUMMARIZER_BACKEND=plain, letting the batch pipeline run without
-  an Anthropic API key by building topics mechanically instead of
-  calling the Claude API.
+- Add SUMMARIZER_BACKEND=plain, letting the batch pipeline run without an
+  Anthropic API key by building topics mechanically instead of calling the
+  Claude API.
 - Support custom Anthropic-compatible API URLs and Bearer authentication.
 
 v0.1 (2026-07-26)
