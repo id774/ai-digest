@@ -1,6 +1,11 @@
 ai-digest Repository Version History
 ====================================
 
+v1.2.1 (Release Date: TBD)
+--------------------------
+- Add .gitattributes, marking the Markdown documents for diff and language.
+- Add the document file naming and attribute rules to doc/POLICY.
+
 v1.2 (2026-08-05)
 -----------------
 - Name the endpoint settings after the summarization stage instead of
