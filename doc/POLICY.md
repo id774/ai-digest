@@ -206,40 +206,36 @@ These lines are not crossed by a setting, by an option or by an extension.
 
 #### Document File Naming
 - A document written in Markdown takes a `.md` extension when it is newly
-  created. This holds for the documents under `doc/` as well: a repository
-  created from now on names its policy `doc/POLICY.md`.
-- The licence files are the exception. `COPYING`, `COPYING.LESSER`, and
-  `LICENSE` keep the extensionless names by which they are recognised, whether
-  they are new or not.
+  created.
+- The licence texts keep the extensionless names by which they are recognised:
+  `COPYING` and `COPYING.LESSER`.
 - A document that is not Markdown takes no extension, or `.txt`.
-- An existing document is never renamed to add or change an extension. A path
+- An existing document is not renamed to add or change an extension. A path
   here is a public URL that the README, the other repositories, and pages
-  outside them link to. Renaming breaks those links, and the ones outside
-  cannot be found or repaired.
-- `doc/POLICY` and `doc/VERSIONS` therefore keep their names here. The same
-  document is `POLICY` in this repository and `POLICY.md` in one started later,
-  and that is the intended result. The rule applies at creation, and naming
-  that matches across repositories is not a goal that outranks a published path
-  staying where it is.
-- Rename only when the current name causes an actual failure, and only after
-  examining the references to it. Being shown as plain text on GitHub is not a
-  failure: `doc/POLICY` is Markdown that GitHub does not render, and that is
-  accepted.
+  outside them link to. Renaming breaks those links, and the ones outside can
+  be neither found nor repaired.
+- Rename only when the current name causes a failure that outweighs the links
+  it breaks, and only after examining the references to it. `doc/POLICY.md` and
+  `doc/LICENSE.md` were renamed under that exception: GitHub does not render a
+  Markdown document that carries no extension, nothing in `.gitattributes`
+  changes that, and every reference to these two files was inside this
+  repository, where it was corrected in the same change.
+- `doc/VERSIONS` keeps its name. It is not Markdown, so rendering does not
+  apply to it.
+- A repository whose extensionless document is linked from outside, such as
+  id774/scripts with `doc/POLICY.md`, keeps its name. There the broken links would
+  cost more than the rendering gains.
 
 #### Document File Attributes
-- `.gitattributes` gives `diff=markdown` to `*.md` and to the extensionless
-  Markdown documents, so that a diff hunk header names the section it falls in.
-  `doc/POLICY` and `doc/LICENSE` also take `linguist-language=Markdown`, which
-  gives them Markdown highlighting on GitHub. No attribute makes GitHub render
-  them.
-- A document created with `.md` is covered by the `*.md` line and needs no
-  entry of its own.
+- `.gitattributes` gives `diff=markdown` to `*.md`, so that a diff hunk header
+  names the section it falls in. A document named with `.md` is covered by that
+  line and needs no entry of its own.
 - `doc/VERSIONS` is excluded. It is underlined plain text, and `diff=markdown`
   empties the hunk headers that otherwise name the version.
 - `doc/COPYING` and `doc/COPYING.LESSER` are excluded as the licence texts.
-- The extensionless documents are listed one path at a time. A glob over the
-  files that carry no extension would catch the `#` comment lines of the
-  scripts and the configuration files.
+- No file is given `linguist-language`. Nothing in `.gitattributes` makes GitHub
+  render a document that carries no extension; that is what the `.md` names are
+  for.
 
 ### Comments, Docstrings and Language
 - Comments must be written in English only.
@@ -278,7 +274,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 
 ### License
 - The repository is dual licensed under the GPL version 3 or the LGPL version 3,
-  at the user's option. The full texts live in `doc/LICENSE`, `doc/COPYING` and
+  at the user's option. The full texts live in `doc/LICENSE.md`, `doc/COPYING` and
   `doc/COPYING.LESSER`.
 - Every module header repeats the license line of the standard block, so that a
   file read on its own still states its terms.

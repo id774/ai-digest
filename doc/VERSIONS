@@ -3,8 +3,10 @@ ai-digest Repository Version History
 
 v1.2.1 (Release Date: TBD)
 --------------------------
-- Add .gitattributes, marking the Markdown documents for diff and language.
-- Add the document file naming and attribute rules to doc/POLICY.
+- Add .gitattributes, marking the Markdown documents for diff.
+- Rename doc/POLICY and doc/LICENSE to doc/POLICY.md and doc/LICENSE.md, so
+  that GitHub renders them, and update the references to them.
+- Add the document file naming and attribute rules to doc/POLICY.md.
 
 v1.2 (2026-08-05)
 -----------------
