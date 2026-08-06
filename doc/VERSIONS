@@ -9,6 +9,7 @@ v1.2.1 (Release Date: TBD)
 - Add the document file naming and attribute rules to doc/POLICY.md.
 - Summarize the entries of this file to one bullet per change, as
   doc/POLICY.md has always asked.
+- Add the shared version history description guidelines to the end of this file.
 
 v1.2 (2026-08-05)
 -----------------
@@ -101,3 +102,18 @@ v1.0 (2026-07-31)
 v0.1 (2026-07-26)
 -----------------
 - The initial version of the project.
+
+Version History Guidelines
+==========================
+- Write one coherent change per physical line.
+- Keep entries near 100 columns where practical. Necessary file names,
+  command names, option names, and configuration names may extend an entry
+  to approximately 120 columns.
+- When an entry becomes substantially longer, omit or abstract implementation
+  details, examples, reasons, and secondary effects where possible.
+- Preserve the changed target, externally observable behavior, compatibility
+  or security impact, and important option or configuration names.
+- Combine related changes within the same version, especially changes to the
+  same file or feature.
+- Place closely related entries near each other.
+- Append an independent new change to the end of the current version entry.
