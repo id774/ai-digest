@@ -1,12 +1,16 @@
 # Implementation Policies
 
-This document defines the implementation policy for ai-digest. Unlike the
-multi-language policy of the id774/scripts repository, ai-digest is a single
+This document defines the implementation policy for ai-digest. It is a single
 Python application, so the policy below is stated directly for Python instead
 of separating a shared common section from per-language sections.
 
-The intent is the same: minimize redundancy while making the design intent
-explicit and consistent for all contributors.
+This document stands on its own. It is the whole implementation policy of this
+repository, and no rule here is completed by a document kept somewhere else. A
+subject it does not cover is a gap in this document, to be filled here rather
+than looked up in another repository.
+
+The intent is to minimize redundancy while making the design intent explicit
+and consistent for all contributors.
 
 ---
 
@@ -65,10 +69,9 @@ These lines are not crossed by a setting, by an option or by an extension.
   ends the current command.
 - Configure logging once, at the entry point, with `logging.basicConfig` writing
   to standard error. The batch uses a fully structured, timestamped format
-  (`%(asctime)s %(levelname)s %(name)s: %(message)s`); this is the accepted
-  alternative to the `[INFO]`/`[WARN]`/`[ERROR]` prefix style used by shell
-  scripts, and is chosen because every message already carries a level and a
-  logger name.
+  (`%(asctime)s %(levelname)s %(name)s: %(message)s`), chosen because every
+  message already carries its level and its logger name, which makes a
+  separate severity prefix redundant.
 - Log messages must be human-readable and suitable for cron execution. Keep them
   low-noise: a single unattended run must not flood the cron mail with per-item
   output at the default level.
@@ -135,6 +138,24 @@ These lines are not crossed by a setting, by an option or by an extension.
 - **126, 127, 128 and above**
   Reserved by the shell and by signal convention. Do not redefine them for
   application errors.
+
+### Environment Differences
+- Branch on what the environment provides, not on what it is called. A
+  distribution name, a release number, a platform string or a Python build
+  each answer a question the code is not asking. The question is whether the
+  command, the file, the service or the format it needs is there.
+- Keep that detection in one place. The same question answered separately in
+  several places drifts apart as environments change.
+- A capability the application can work without is detected where it is used,
+  not declared as a requirement. Detection asks whether the capability is
+  usable, not only whether it is present: a package can import while the
+  backend it needs is absent, and a command can exist while the option this
+  code passes it is not supported.
+- Decide in advance what an absent optional capability leads to: use the
+  alternative, skip the step and say so once, or refuse the run. Which one is
+  right depends on where the code runs. An unattended run in an environment
+  that will never supply what it needs says so once and ends with a documented
+  status, rather than reporting the same absence on every scheduled run.
 
 ### Documentation and Versioning
 - Every module must contain a structured header, in this order:
@@ -371,6 +392,12 @@ These lines are not crossed by a setting, by an option or by an extension.
   quotes: `""" Return True when the string is a plain YYYY-MM-DD date. """`.
 - A longer docstring opens on the line after the quotes, and describes the
   non-obvious parameters under `Args:` and the result under `Returns:`.
+- Name a thing by what it is, not by a part of it. The shell is the interpreter
+  that runs a shell script, so a script is not "a shell", in the same way that
+  a USB memory stick is not "a USB". The same loss happens wherever a shorthand
+  reaches for the interface, the format or the container instead of the thing
+  itself. This applies to the headers, the documents and the commit messages as
+  much as to the comments.
 
 ### Testing and Operation
 - Tests live under `tests/` as `test_*.py` and run with
@@ -391,6 +418,13 @@ These lines are not crossed by a setting, by an option or by an extension.
   environment or `.env`, so required variables are defined explicitly there.
 - The batch must be safe to run twice for the same date: a second run replaces
   the report of that day rather than appending to it or refusing to start.
+- Anything else that changes state on the host is safe to run twice as well,
+  the deployment steps and the utilities under `tools/` included. Check the
+  current state before changing it, rather than assuming the state a previous
+  run left behind.
+- The batch, the viewer and the utilities run with the privileges their work
+  needs and no more. A step that needs a raised privilege takes it for that
+  step; the process does not run its whole body under it.
 
 ### License
 - The repository is dual licensed under the GPL version 3 or the LGPL version 3,
