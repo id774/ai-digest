@@ -1,12 +1,16 @@
 # Implementation Policies
 
-This document defines the implementation policy for ai-digest. Unlike the
-multi-language policy of the id774/scripts repository, ai-digest is a single
+This document defines the implementation policy for ai-digest. It is a single
 Python application, so the policy below is stated directly for Python instead
 of separating a shared common section from per-language sections.
 
-The intent is the same: minimize redundancy while making the design intent
-explicit and consistent for all contributors.
+This document stands on its own. It is the whole implementation policy of this
+repository, and no rule here is completed by a document kept somewhere else. A
+subject it does not cover is a gap in this document, to be filled here rather
+than looked up in another repository.
+
+The intent is to minimize redundancy while making the design intent explicit
+and consistent for all contributors.
 
 ---
 
@@ -65,10 +69,9 @@ These lines are not crossed by a setting, by an option or by an extension.
   ends the current command.
 - Configure logging once, at the entry point, with `logging.basicConfig` writing
   to standard error. The batch uses a fully structured, timestamped format
-  (`%(asctime)s %(levelname)s %(name)s: %(message)s`); this is the accepted
-  alternative to the `[INFO]`/`[WARN]`/`[ERROR]` prefix style used by shell
-  scripts, and is chosen because every message already carries a level and a
-  logger name.
+  (`%(asctime)s %(levelname)s %(name)s: %(message)s`), chosen because every
+  message already carries its level and its logger name, which makes a
+  separate severity prefix redundant.
 - Log messages must be human-readable and suitable for cron execution. Keep them
   low-noise: a single unattended run must not flood the cron mail with per-item
   output at the default level.

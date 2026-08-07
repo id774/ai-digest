@@ -6,7 +6,7 @@ v1.2.1 (Release Date: TBD)
 - Add .gitattributes, marking the Markdown documents for diff.
 - Rename doc/POLICY and doc/LICENSE to doc/POLICY.md and doc/LICENSE.md, so
   that GitHub renders them, and update the references to them.
-- Expand doc/POLICY.md across documents, environment differences, optional capabilities, repeated execution and naming.
+- Expand doc/POLICY.md into a standalone policy covering environment differences, repeated execution and naming.
 - Summarize the entries of this file to one bullet per change, as
   doc/POLICY.md has always asked.
 - Add the shared version history description guidelines to the end of this file.
