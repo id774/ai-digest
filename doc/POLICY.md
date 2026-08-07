@@ -136,6 +136,24 @@ These lines are not crossed by a setting, by an option or by an extension.
   Reserved by the shell and by signal convention. Do not redefine them for
   application errors.
 
+### Environment Differences
+- Branch on what the environment provides, not on what it is called. A
+  distribution name, a release number, a platform string or a Python build
+  each answer a question the code is not asking. The question is whether the
+  command, the file, the service or the format it needs is there.
+- Keep that detection in one place. The same question answered separately in
+  several places drifts apart as environments change.
+- A capability the application can work without is detected where it is used,
+  not declared as a requirement. Detection asks whether the capability is
+  usable, not only whether it is present: a package can import while the
+  backend it needs is absent, and a command can exist while the option this
+  code passes it is not supported.
+- Decide in advance what an absent optional capability leads to: use the
+  alternative, skip the step and say so once, or refuse the run. Which one is
+  right depends on where the code runs. An unattended run in an environment
+  that will never supply what it needs says so once and ends with a documented
+  status, rather than reporting the same absence on every scheduled run.
+
 ### Documentation and Versioning
 - Every module must contain a structured header, in this order:
   `Description`, `Routes` (the viewer only), the standard `Author`,
@@ -371,6 +389,12 @@ These lines are not crossed by a setting, by an option or by an extension.
   quotes: `""" Return True when the string is a plain YYYY-MM-DD date. """`.
 - A longer docstring opens on the line after the quotes, and describes the
   non-obvious parameters under `Args:` and the result under `Returns:`.
+- Name a thing by what it is, not by a part of it. The shell is the interpreter
+  that runs a shell script, so a script is not "a shell", in the same way that
+  a USB memory stick is not "a USB". The same loss happens wherever a shorthand
+  reaches for the interface, the format or the container instead of the thing
+  itself. This applies to the headers, the documents and the commit messages as
+  much as to the comments.
 
 ### Testing and Operation
 - Tests live under `tests/` as `test_*.py` and run with
@@ -391,6 +415,13 @@ These lines are not crossed by a setting, by an option or by an extension.
   environment or `.env`, so required variables are defined explicitly there.
 - The batch must be safe to run twice for the same date: a second run replaces
   the report of that day rather than appending to it or refusing to start.
+- Anything else that changes state on the host is safe to run twice as well,
+  the deployment steps and the utilities under `tools/` included. Check the
+  current state before changing it, rather than assuming the state a previous
+  run left behind.
+- The batch, the viewer and the utilities run with the privileges their work
+  needs and no more. A step that needs a raised privilege takes it for that
+  step; the process does not run its whole body under it.
 
 ### License
 - The repository is dual licensed under the GPL version 3 or the LGPL version 3,
