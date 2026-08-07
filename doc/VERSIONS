@@ -6,10 +6,12 @@ v1.2.1 (Release Date: TBD)
 - Add .gitattributes, marking the Markdown documents for diff.
 - Rename doc/POLICY and doc/LICENSE to doc/POLICY.md and doc/LICENSE.md, so
   that GitHub renders them, and update the references to them.
-- Expand doc/POLICY.md into a standalone policy covering environment differences, repeated execution and naming.
+- Expand doc/POLICY.md into a standalone policy covering environment
+  differences, repeated execution and naming.
 - Summarize the entries of this file to one bullet per change, as
   doc/POLICY.md has always asked.
-- Add the shared version history description guidelines to the end of this file.
+- Add the shared version history description guidelines to the end of this
+  file.
 
 v1.2 (2026-08-05)
 -----------------
@@ -109,6 +111,8 @@ Version History Guidelines
 - Keep entries near 100 columns where practical. Necessary file names,
   command names, option names, and configuration names may extend an entry
   to approximately 120 columns.
+- When a version history already exists, balance a new entry against the
+  length of the existing lines, so that the whole file stays consistent.
 - When an entry becomes substantially longer, omit or abstract implementation
   details, examples, reasons, and secondary effects where possible.
 - Preserve the changed target, externally observable behavior, compatibility
