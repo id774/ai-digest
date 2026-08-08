@@ -229,6 +229,12 @@ These lines are not crossed by a setting, by an option or by an extension.
   columns or beyond.
 - These widths are a prompt to check whether an entry explains more than it
   needs to, not a limit to enforce.
+- `doc/VERSIONS` carries these guidelines again at its foot, and an entry
+  written into it follows the reasons recorded there.
+- Where the file has settled on a width of its own, a new entry is wrapped to
+  that width and balanced against the lines already standing, so that the
+  version history stays of a piece. That consistency comes before the one
+  physical line asked for above.
 - When an entry runs long, look first for what can be dropped or abstracted:
   the implementation detail, the example, the detailed reason, the secondary
   effect. Consider that before wrapping the line.
