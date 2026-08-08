@@ -14,16 +14,16 @@ and consistent for all contributors.
 
 ---
 
-## General Policy
+## 1. General Policy
 
-### Design Philosophy
+### 1.1 Design Philosophy
 - Prioritize clarity, portability, and explicit control over convenience.
 - Favor predictable behavior and long-term maintainability.
 - Avoid implicit behavior; make control flow, errors, and side effects explicit.
 - Keep the daily batch (`cli.py`) and the read-only viewer (`app.py`) independent,
   so that a failed or slow batch never takes the site down.
 
-### Invariants
+### 1.2 Invariants
 These lines are not crossed by a setting, by an option or by an extension.
 
 - The batch is the only writer of `DATA_DIR`. No route of the viewer collects
@@ -59,7 +59,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   `hash()`, which is salted per process. Category colors and every comparable
   mapping use a hash written in the module.
 
-### Logging and Output
+### 1.3 Logging and Output
 - Use the standard `logging` module. Do not print status to standard output
   from library modules; obtain a module logger with
   `logging.getLogger(__name__)` and log through it.
@@ -84,7 +84,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - When a run replaces a setting from the command line, log which setting took
   which value, so that an unattended run states what it actually ran with.
 
-### Control Flow Rules
+### 1.4 Control Flow Rules
 - Reserve explicit termination (`sys.exit`) for the process entry point.
   Commands and helpers return their status; they do not call `sys.exit`.
 - Normal execution paths must return normally and propagate status explicitly.
@@ -99,7 +99,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   terms, such as a date that is not a date. The caller that received the value
   from outside decides whether that means a refusal or a `404`.
 
-### CLI Conventions
+### 1.5 CLI Conventions
 - Command-line tools must provide consistent options:
   - `-h`, `--help` to display usage information and exit with code `0`.
   - `-v`, `--version` to display version information and exit with code `0`.
@@ -117,13 +117,13 @@ These lines are not crossed by a setting, by an option or by an extension.
   A new mode of operation becomes a subcommand; it does not become a flag that
   changes what an existing subcommand means.
 
-### Error Handling and Exit Codes
+### 1.6 Error Handling and Exit Codes
 - Detect command failures and unmet prerequisites early.
 - Always log the reason and the affected target when an error occurs.
 - Exit code semantics follow widely accepted UNIX/Linux conventions and remain
   consistent across the repository.
 
-#### Exit Code Conventions
+#### 1.6.1 Exit Code Conventions
 - **0: Success**
   The command completed successfully. This includes terminating after displaying
   help or version information without encountering an error.
@@ -139,7 +139,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   Reserved by the shell and by signal convention. Do not redefine them for
   application errors.
 
-### Environment Differences
+### 1.7 Environment Differences
 - Branch on what the environment provides, not on what it is called. A
   distribution name, a release number, a platform string or a Python build
   each answer a question the code is not asking. The question is whether the
@@ -157,7 +157,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   that will never supply what it needs says so once and ends with a documented
   status, rather than reporting the same absence on every scheduled run.
 
-### Documentation and Versioning
+### 1.8 Documentation and Versioning
 - Every module must contain a structured header, in this order:
   `Description`, `Routes` (the viewer only), the standard `Author`,
   `Source Code`, `License`, `Contact` block used across the repository,
@@ -178,7 +178,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   behavior that a reader would look for in the README, in `.env.example` or in
   `doc/VERSIONS` is not finished until it is there as well.
 
-#### When to Bump a Module Version
+#### 1.8.1 When to Bump a Module Version
 - These rules apply to the `Version History` in each module header. Repository
   release versions and Git tags follow the separate rules below.
 - Do not bump the version mechanically every time a file is touched. Decide
@@ -195,7 +195,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - The date of a `Version History` entry is the date of the change, written as
   `vX.Y YYYY-MM-DD`, with the newest entry first.
 
-#### Module Version Numbering
+#### 1.8.2 Module Version Numbering
 - Versions use a two-level `major.minor` scheme.
 - When incrementing `minor` would reach `10`, roll over instead: increment
   `major` by 1 and reset `minor` to `0` (for example `v0.9` -> `v1.0`,
@@ -203,7 +203,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Do not continue `minor` past `9` as in standard semantic versioning
   (do not use `v1.10`, `v1.11`, ...).
 
-#### Repository Versioning
+#### 1.8.3 Repository Versioning
 - Repository release versions are independent of individual module versions.
 - Record repository release versions in `doc/VERSIONS` and use the same versions
   for Git tags.
@@ -216,7 +216,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   tracks the application, and is bumped when a release warrants it, not on every
   change.
 
-#### doc/VERSIONS Structure
+#### 1.8.4 doc/VERSIONS Structure
 - `doc/VERSIONS` reads as a version-level summary of overall changes, not a raw
   commit log. It is a plain text document and follows the rules for one stated
   below, with the one exception of line length described here.
@@ -250,7 +250,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   a version comes before preserving the order the commits happened in.
 - Use UTF-8.
 
-#### Document Format
+#### 1.8.5 Document Format
 - The format of a document is decided by what it is for and by the name it
   carries, not by whether part of its content happens to parse as Markdown.
 - A document named with `.md` is written, displayed and maintained as Markdown.
@@ -268,7 +268,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   bytes are all there is. A rule that serves one damages the other, which is
   why the two sets of rules below are stated separately and are not merged.
 
-#### Markdown Documents
+#### 1.8.6 Markdown Documents
 - A Markdown document may assume that it will be rendered, on GitHub or
   elsewhere.
 - Use headings, lists, tables, code blocks, links and emphasis to make the
@@ -291,7 +291,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   correctness of the notation and the rendered result come before the length of
   a physical line.
 
-#### Plain Text Documents
+#### 1.8.7 Plain Text Documents
 - A plain text document is read as it is, without GitHub's rendering and
   without any particular viewer.
 - It stays readable on an old fixed-width terminal, under `less` or `cat`, in
@@ -308,7 +308,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Judge it as raw text: how readable and how stable it is line by line, not
   what a renderer would make of it.
 
-#### Document File Naming
+#### 1.8.8 Document File Naming
 - A document written in Markdown takes a `.md` extension when it is newly
   created. ai-digest is a recent repository, so its Markdown documents carry
   the extension from the moment they are written: `doc/POLICY.md`,
@@ -337,7 +337,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   and the historical naming of an older repository is not copied into a recent
   one. Each name is decided where it lives.
 
-#### The Extensionless Documents Here
+#### 1.8.9 The Extensionless Documents Here
 - `doc/VERSIONS` is the version history, plain text, without an extension.
 - `doc/COPYING` and `doc/COPYING.LESSER` hold the official licence texts as
   plain text.
@@ -352,7 +352,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Do not rename `doc/VERSIONS`, `doc/COPYING` or `doc/COPYING.LESSER` to `.md`
   because they contain a symbol a Markdown renderer would accept.
 
-#### Document File Attributes
+#### 1.8.10 Document File Attributes
 - What `.gitattributes` says about a diff does not decide the format of a
   document. It describes documents whose format their names have already
   settled.
@@ -370,7 +370,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - How a document appears on GitHub is not a reason on its own to change its
   format or its attributes.
 
-#### Form and Role
+#### 1.8.11 Form and Role
 - Bringing every document to one extension, one line width and one way of being
   displayed is not a goal in itself.
 - Choose the form from the role of the document, where it is read, the path it
@@ -384,7 +384,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Before changing a file name or a line width, find out why the current form
   was chosen.
 
-### Comments, Docstrings and Language
+### 1.9 Comments, Docstrings and Language
 - Comments must be written in English only.
 - Comments must be imperative, concise, and action-oriented
   (for example `# Validate input`, `# Initialize environment`), avoiding
@@ -405,7 +405,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   itself. This applies to the headers, the documents and the commit messages as
   much as to the comments.
 
-### Testing and Operation
+### 1.10 Testing and Operation
 - Tests live under `tests/` as `test_*.py` and run with
   `python -m unittest discover -s tests`.
 - Use only the standard library for tests: `unittest` and `unittest.mock`.
@@ -432,13 +432,13 @@ These lines are not crossed by a setting, by an option or by an extension.
   needs and no more. A step that needs a raised privilege takes it for that
   step; the process does not run its whole body under it.
 
-### Pull Request Scope and History
+### 1.11 Pull Request Scope and History
 A pull request presents the change it proposes, not the sequence of corrections
 that produced it. It carries one purpose, and when the direction is revised part
 way through a review, the branch is rewritten so that it reads as the change
 finally intended, and merges as if it had been written that way.
 
-#### One Purpose to a Pull Request
+#### 1.11.1 One Purpose to a Pull Request
 - Changes that serve different purposes are proposed separately, as a rule,
   even when they touch one file and even when one was noticed while the other
   was being made. A pull request is accepted or rejected whole, and a mixed one
@@ -457,7 +457,7 @@ finally intended, and merges as if it had been written that way.
   or reviewable without the other, they are proposed together and the request
   says why.
 
-#### Keeping a Branch to Its Change
+#### 1.11.2 Keeping a Branch to Its Change
 - A branch that carries one coherent change carries it as one commit. That
   commit is amended and force pushed with `--force-with-lease`, rather than
   gaining a further commit for each remark received.
@@ -468,7 +468,7 @@ finally intended, and merges as if it had been written that way.
   independent changes. The reasoning is the one that decides a `doc/VERSIONS`
   bullet: coherence, not chronology.
 
-#### Leaving No Trace of the Correction
+#### 1.11.3 Leaving No Trace of the Correction
 - Each revision is read against the base branch, not against the revision
   before it, so that a correction leaves no residue in the diff that is merged.
 - A correction withdraws what it replaces. Code, comments and wording
@@ -480,7 +480,7 @@ finally intended, and merges as if it had been written that way.
   is confined to the branch under review, and the rewrite is stated whenever
   the branch is shared.
 
-### License
+### 1.12 License
 - The repository is dual licensed under the GPL version 3 or the LGPL version 3,
   at the user's option. The full texts live in `doc/LICENSE.md`, `doc/COPYING` and
   `doc/COPYING.LESSER`.
@@ -490,21 +490,21 @@ finally intended, and merges as if it had been written that way.
 
 ---
 
-## Python Implementation Policy
+## 2. Python Implementation Policy
 
-### Supported Versions and Compatibility
+### 2.1 Supported Versions and Compatibility
 - Target Python 3.9 or later, and state `Python Version: 3.9 or later` in module
   headers. Do not state a minimum higher than the code actually requires.
 - Type hints are used throughout and are part of the house style; they are not
   avoided for backward compatibility, because the supported floor is 3.9.
 - Prefer `str.format()` over f-strings, consistent with the existing code base.
 
-### Header Formatting Rules
+### 2.2 Header Formatting Rules
 - The shebang must be `#!/usr/bin/env python`. Do not use `python3`.
 - Include the encoding header:
   `# -*- coding: utf-8 -*-`
 
-### Program Structure
+### 2.3 Program Structure
 - Define `main() -> int` as the entry point of an executable and terminate with
   `sys.exit(main())`.
 - Use early returns to simplify control flow.
@@ -512,7 +512,7 @@ finally intended, and merges as if it had been written that way.
   third-party package inside the function that needs it only when that package
   is optional, so that the module still imports without it.
 
-### Configuration
+### 2.4 Configuration
 - Keep configuration in `config.py`: every setting lives in the `Config`
   dataclass, read from environment variables and optionally from `.env`. The
   module performs no network access and touches no file beyond `.env`, so it is
@@ -531,7 +531,7 @@ finally intended, and merges as if it had been written that way.
   being unset; a fake key would pass the authentication check and fail only
   after a whole run has been spent.
 
-### Dependencies and I/O
+### 2.5 Dependencies and I/O
 - Runtime dependencies are declared and version-pinned in `requirements.txt`
   with compatible ranges, so that a future major release cannot break an
   unattended cron run. Add a dependency only when it earns its place; prefer the
