@@ -1,5 +1,23 @@
 # ai-digest
 
+## Contents
+
+1. [Overview](#overview)
+2. [Features](#features)
+3. [Requirements](#requirements)
+4. [Installation](#installation)
+5. [Configuration](#configuration)
+6. [Standalone use, no API key](#standalone-use-no-api-key)
+7. [Usage](#usage)
+8. [When something fails](#when-something-fails)
+9. [Tests](#tests)
+10. [Deployment](#deployment)
+11. [Repository Structure](#repository-structure)
+12. [The Japanese that stays](#the-japanese-that-stays)
+13. [Demo and sample output](#demo-and-sample-output)
+14. [Contribution](#contribution)
+15. [License](#license)
+
 ## Overview
 
 **ai-digest** collects AI related papers and news once a day, summarizes and classifies them in Japanese with the Claude API, and publishes the result as a browsable HTML report together with a single composite PNG image.
