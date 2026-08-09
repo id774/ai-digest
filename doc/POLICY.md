@@ -183,8 +183,9 @@ These lines are not crossed by a setting, by an option or by an extension.
   release versions and Git tags follow the separate rules below.
 - Do not bump the version mechanically every time a file is touched. Decide
   based on the nature of the change:
-  - Documentation-only changes (comments, help text, README/POLICY/VERSIONS
-    wording with no effect on behavior) do not bump the version.
+  - Documentation-only, comment-only and formatting-only changes (help text,
+    README/POLICY/VERSIONS wording, whitespace and layout, with no effect on
+    behavior) do not bump the version.
   - Any change that affects code behavior (bug fixes, new options, and refactors
     that change observable behavior) bumps the version.
   - Multiple updates on the same date are consolidated into a single version
