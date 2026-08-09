@@ -183,8 +183,9 @@ These lines are not crossed by a setting, by an option or by an extension.
   release versions and Git tags follow the separate rules below.
 - Do not bump the version mechanically every time a file is touched. Decide
   based on the nature of the change:
-  - Documentation-only changes (comments, help text, README/POLICY/VERSIONS
-    wording with no effect on behavior) do not bump the version.
+  - Documentation-only, comment-only and formatting-only changes (help text,
+    README/POLICY/VERSIONS wording, whitespace and layout, with no effect on
+    behavior) do not bump the version.
   - Any change that affects code behavior (bug fixes, new options, and refactors
     that change observable behavior) bumps the version.
   - Multiple updates on the same date are consolidated into a single version
@@ -220,9 +221,10 @@ These lines are not crossed by a setting, by an option or by an extension.
 - `doc/VERSIONS` reads as a version-level summary of overall changes, not a raw
   commit log. It is a plain text document and follows the rules for one stated
   below, with the one exception of line length described here.
-- Write one coherent change on one physical line. The file is read as a list
-  and reviewed as a diff, and both are served by an entry that is not wrapped:
-  one line is one change, added, removed or reworded as a whole.
+- Write one coherent change on one physical line. This is the rule, qualified
+  once below for a file that has already settled on a form of its own. The file
+  is read as a list and reviewed as a diff, and both are served by an entry that
+  is not wrapped: one line is one change, added, removed or reworded as a whole.
 - That rule comes before the roughly 80 columns a plain text document otherwise
   aims at. Near 100 columns is the usual target, and an entry that has to name
   a file, a command, a function, an option or a setting may run to about 120
@@ -231,10 +233,12 @@ These lines are not crossed by a setting, by an option or by an extension.
   needs to, not a limit to enforce.
 - `doc/VERSIONS` carries these guidelines again at its foot, and an entry
   written into it follows the reasons recorded there.
-- Where the file has settled on a width of its own, a new entry is wrapped to
-  that width and balanced against the lines already standing, so that the
-  version history stays of a piece. That consistency comes before the one
-  physical line asked for above.
+- That qualification is this: where the file has settled on a width of its own,
+  a new entry is wrapped to that width and balanced against the lines already
+  standing, so that the version history stays of a piece, and that consistency
+  comes before the one physical line asked for above. Holding to a form the
+  file has established is how the rule is kept there, not a departure from it,
+  and the entries already written are not reflowed or rebuilt to suit it.
 - When an entry runs long, look first for what can be dropped or abstracted:
   the implementation detail, the example, the detailed reason, the secondary
   effect. Consider that before wrapping the line.
