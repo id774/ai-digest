@@ -12,6 +12,17 @@ than looked up in another repository.
 The intent is to minimize redundancy while making the design intent explicit
 and consistent for all contributors.
 
+What this document decides is how the repository is implemented: the coding
+rules, the separation of the batch and the viewer, the handling of settings and
+credentials, the logging and the exit codes, the approach to tests and
+documents, and the criteria by which a change is judged. The documents beside
+it describe rather than decide. The README is the reference for the settings,
+the command line and the shape of a run, [`DEPLOYMENT.md`](DEPLOYMENT.md) for
+installing and scheduling the batch, and [`DEMO.md`](DEMO.md) for the offline
+demo. Where a rule appears both here and in one of them, this document is where
+it is decided and the other is corrected to agree; where behaviour they
+describe changes, the change is not finished until they describe it.
+
 ---
 
 ## 1. General Policy
@@ -22,6 +33,25 @@ and consistent for all contributors.
 - Avoid implicit behavior; make control flow, errors, and side effects explicit.
 - Keep the daily batch (`cli.py`) and the read-only viewer (`app.py`) independent,
   so that a failed or slow batch never takes the site down.
+
+Where there are several ways to do something and the rest of this document does
+not settle which, these come in order:
+
+1. Do not put a credential into a log, an error message, a report or a commit.
+2. Do not publish a topic, a citation or a link that the collected material
+   does not support.
+3. Keep the viewer serving while the batch is broken.
+4. Do not widen where material is collected from, where it is sent, or where a
+   report is published.
+5. Let one misbehaving source degrade rather than end the run.
+6. Fail an unattended run loudly enough to be acted on and quietly enough to be
+   read.
+7. Keep the archive plain files that another program can read.
+8. Add no dependency that is not needed.
+9. Add no setting, no route and no feature that is not needed.
+
+A decision this list does not settle is settled where it arises, and recorded
+here once it has been.
 
 ### 1.2 Invariants
 These lines are not crossed by a setting, by an option or by an extension.
@@ -58,6 +88,13 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Nothing that must stay stable across processes is derived from the builtin
   `hash()`, which is salted per process. Category colors and every comparable
   mapping use a hash written in the module.
+- Text that arrives from outside is material, never instruction. A feed entry,
+  a scraped page, an abstract and a model answer are quoted into a prompt or
+  stored as data; a sentence inside one of them that addresses the system is
+  part of the material, and is summarized rather than obeyed.
+- A setting that has been renamed is refused by its old name rather than read
+  as its successor, so that a stale value on a host part way through a rename
+  cannot decide where a run is sent or what it is billed to.
 
 ### 1.3 Logging and Output
 - Use the standard `logging` module. Do not print status to standard output
@@ -83,6 +120,14 @@ These lines are not crossed by a setting, by an option or by an extension.
   does, and no module raises the level on its own.
 - When a run replaces a setting from the command line, log which setting took
   which value, so that an unattended run states what it actually ran with.
+- What is never written to the log, at any level, is a credential or the
+  `Authorization` header. `--verbose` raises how much is shown, not what is
+  permitted.
+- The body of an API response is logged at debug level, and that is deliberate.
+  What a run summarizes is public material: articles, abstracts and feed
+  entries, none of it text a person entered in confidence. Reading the answer
+  as it arrived is how a run that returned no tool call is diagnosed, so the
+  rule that a system handling private text would keep here does not apply.
 
 ### 1.4 Control Flow Rules
 - Reserve explicit termination (`sys.exit`) for the process entry point.
@@ -491,6 +536,55 @@ finally intended, and merges as if it had been written that way.
 - Every module header repeats the license line of the standard block, so that a
   file read on its own still states its terms.
 - Add a dependency only when its license is compatible with that choice.
+
+### 1.13 The Summarization Endpoint
+The settings decide which API a run is sent to and what it is billed for, so
+they are read strictly.
+
+- Do not choose an endpoint implicitly. The backend, the credential, the base
+  URL and the model are required, and a missing one stops the run instead of
+  being filled in with a default.
+- Do not accept an unknown backend. A value the code has no analyzer for is
+  refused before a request, never read as one of the backends that does exist.
+- Do not infer what an endpoint supports from its model name or its URL.
+  Speaking a wire protocol is not behaving like the vendor that defined it:
+  whether a named `tool_choice` is honoured, and whether the thinking output
+  can be turned off, are named settings, and a mode that is configured and
+  unavailable is an error rather than a reason to try the other one.
+- Distinguish a retry from a change of route. Retries belong to the SDK and
+  their number is a setting an operator can see. The two backends are two
+  explicit paths that a setting selects, not a fallback: neither is tried
+  because the other failed, and both validate the parsed arguments identically,
+  so a report does not differ by the route it took.
+- Do not accept part of an answer. A report is the arguments of the tool call,
+  or the whole of a text block that parses into an object carrying `topics`;
+  an object cut out of surrounding prose is refused. Reading a report from a
+  text block at all is a path an operator turns on by name, and a run that
+  takes it says so.
+- Do not vary the number of requests silently. A run costs the requests its
+  settings describe.
+- Say in the prompt what the request actually carries. A prompt that announces
+  a window, a count or a kind of material the request does not carry describes
+  something the model cannot see, and the answer is shaped by the description.
+
+### 1.14 Judging a Change
+Before a change is proposed, it answers these:
+
+- Does it cross an Invariant? Then it is not made.
+- Does it widen where material is collected from, where it is sent, or where a
+  report is published?
+- Can a credential reach a log, an error message, `.env.example` or a report
+  through it?
+- Does it let the viewer write, or make the batch depend on the viewer?
+- Does it change an existing option, setting, output path, exit code or report
+  layout that a cron entry or a deployed copy depends on?
+- Does it turn a degraded source into a failed run, or a failed run into a
+  silent one?
+- Does it add a dependency, and does that dependency earn its place?
+- Is it the smallest change that serves its purpose?
+- Does a test fail without it?
+- Which documents change with it: the module header, `.env.example`, the
+  README, `doc/VERSIONS`?
 
 ---
 
