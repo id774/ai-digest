@@ -1,6 +1,11 @@
 ai-digest Repository Version History
 ====================================
 
+v1.2.2 (Release Date: TBD)
+--------------------------
+- Treat structurally invalid report files as corrupt so that they cannot crash
+  the viewer or the render command.
+
 v1.2.1 (2026-08-09)
 -------------------
 - Add .gitattributes, marking the Markdown documents for diff.

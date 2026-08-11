@@ -536,7 +536,7 @@ python -m unittest discover -s tests -p "test_c*.py"             # modules match
 | `test_config.py` | environment driven settings and backend validation |
 | `test_cli_options.py` | the command line overrides: one setting replaced at a time, list splitting, the absolute data directory, that every overridable name is a real field, that no credential has an option, and the values the parser refuses |
 | `test_collectors.py` | arXiv and RSS collection, look back window, partial source failures |
-| `test_storage.py` | report persistence, date validation, path traversal refusal |
+| `test_storage.py` | report persistence, corrupt report handling, date validation, path traversal refusal |
 | `test_urls.py` | accepted URL schemes and neutralization of unsafe stored links |
 | `test_plain.py` | API free mechanical summarizer |
 | `test_anthropic_compat.py` | Claude tool use call and its response parsing |
