@@ -34,6 +34,7 @@
 #    - Reject anything that could escape the archive, a trailing newline included.
 #    - Refuse a traversal in report_dir() with a ValueError.
 #    - Return None from a lookup rather than raising on a crafted date.
+#    - Return None for syntactically valid JSON with an invalid structure.
 #    - Save a report and load it back, listing its date in the archive.
 #    - Ignore a directory that is not named after a date.
 #
@@ -47,6 +48,7 @@
 #
 ########################################################################
 
+import json
 import os
 import tempfile
 import unittest
@@ -91,6 +93,26 @@ class DateValidationTest(unittest.TestCase):
 
 
 class RoundTripTest(unittest.TestCase):
+
+    def test_returns_none_for_a_report_with_an_invalid_structure(self):
+        invalid_payloads = (
+            [],
+            {"topics": {}},
+            {"topics": [None]},
+            {"topics": [{"bullets": None}]},
+            {"stats": []},
+            {"date": None},
+        )
+        with tempfile.TemporaryDirectory() as data_dir:
+            directory = os.path.join(data_dir, "2026-08-02")
+            os.makedirs(directory)
+            path = os.path.join(directory, "report.json")
+
+            for payload in invalid_payloads:
+                with self.subTest(payload=payload):
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump(payload, handle)
+                    self.assertIsNone(load_report(data_dir, "2026-08-02"))
 
     def test_saves_and_loads_a_report(self):
         topic = Topic(category="テスト", title="見出し", bullets=["本文"],

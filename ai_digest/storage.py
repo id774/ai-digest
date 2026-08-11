@@ -27,6 +27,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.2 2026-08-11
+#       Treat a syntactically valid report with an invalid structure as
+#       corrupt instead of letting it raise while the viewer loads it.
 #  v1.1 2026-08-02
 #       Anchor the date pattern so that a trailing newline no longer
 #       passes validation.
@@ -121,10 +124,24 @@ def load_report(data_dir: str, date: str) -> Optional[Dict[str, Any]]:
             payload = json.load(handle)
     except (OSError, ValueError):
         return None
+    if not isinstance(payload, dict):
+        return None
+    topics = payload.get("topics", [])
+    stats = payload.get("stats", {})
+    stored_date = payload.get("date", date)
+    if (not isinstance(topics, list)
+            or not all(isinstance(item, dict) for item in topics)
+            or not isinstance(stats, dict)
+            or not isinstance(stored_date, str)):
+        return None
+    try:
+        loaded_topics = [Topic.from_dict(item) for item in topics]
+    except (AttributeError, TypeError, ValueError):
+        return None
     return {
-        "date": payload.get("date", date),
-        "topics": [Topic.from_dict(item) for item in payload.get("topics", [])],
-        "stats": payload.get("stats", {}),
+        "date": stored_date,
+        "topics": loaded_topics,
+        "stats": stats,
     }
 
 
