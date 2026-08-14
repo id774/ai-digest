@@ -5,6 +5,12 @@ v1.2.2 (Release Date: TBD)
 --------------------------
 - Treat structurally invalid report files as corrupt so that they cannot crash
   the viewer or the render command.
+- Complete the versioning rules in doc/POLICY.md with what section 1.8 left
+  unsaid: when major moves for a reason other than the rollover, what counts as
+  an incompatible change, that an unreleased version number is provisional until
+  it ships, that a documentation-only change takes no entry here unless its
+  scale warrants one, the heading form an entry in this file opens with, and
+  that its width is a deliberate exception rather than a defect to correct.
 
 v1.2.1 (2026-08-09)
 -------------------
