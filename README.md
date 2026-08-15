@@ -28,6 +28,8 @@ Every topic carries an illustration. The application first tries to obtain a rea
 
 The Claude API is only used for one stage: clustering, translating and classifying the collected entries into topics. Collection (arXiv, RSS/Atom) and every image path already run without an API key. Setting `SUMMARIZER_BACKEND=plain` removes the last dependency and runs the whole pipeline offline except for fetching the feeds themselves; see [Standalone use, no API key](#standalone-use-no-api-key).
 
+- Requirements definition: [doc/REQUIREMENTS.md](doc/REQUIREMENTS.md)
+- Basic design: [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md)
 - Debian and nginx deployment: [doc/DEPLOYMENT.md](doc/DEPLOYMENT.md)
 - Demo mode and the screenshots: [doc/DEMO.md](doc/DEMO.md)
 - Implementation policy: [doc/POLICY.md](doc/POLICY.md)
@@ -634,6 +636,8 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 ├── tests/                          unittest suite, standard library only
 ├── data/reports/                   generated reports, not tracked
 └── doc/
+    ├── REQUIREMENTS.md             what the system is required to do, and why
+    ├── BASIC_DESIGN.md             how those requirements are met
     ├── DEPLOYMENT.md               Debian and nginx deployment
     ├── DEMO.md                     demo mode and the screenshots
     ├── POLICY.md                   implementation policy
