@@ -35,6 +35,7 @@
 #    - Refuse a traversal in report_dir() with a ValueError.
 #    - Return None from a lookup rather than raising on a crafted date.
 #    - Return None for syntactically valid JSON with an invalid structure.
+#    - Return None when the stored date does not match its directory.
 #    - Save a report and load it back, listing its date in the archive.
 #    - Ignore a directory that is not named after a date.
 #
@@ -113,6 +114,16 @@ class RoundTripTest(unittest.TestCase):
                     with open(path, "w", encoding="utf-8") as handle:
                         json.dump(payload, handle)
                     self.assertIsNone(load_report(data_dir, "2026-08-02"))
+
+    def test_returns_none_when_stored_date_does_not_match_directory(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            directory = os.path.join(data_dir, "2026-08-02")
+            os.makedirs(directory)
+            path = os.path.join(directory, "report.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"date": "2026-08-03", "topics": []}, handle)
+
+            self.assertIsNone(load_report(data_dir, "2026-08-02"))
 
     def test_saves_and_loads_a_report(self):
         topic = Topic(category="テスト", title="見出し", bullets=["本文"],
