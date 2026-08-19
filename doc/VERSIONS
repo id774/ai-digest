@@ -6,7 +6,8 @@ v1.2.2 (Release Date: TBD)
 - Add doc/REQUIREMENTS.md and doc/BASIC_DESIGN.md, separating what the system
   is required to do from how it is built, and reference both from README.
 - Treat structurally invalid report files as corrupt so that they cannot crash
-  the viewer or the render command.
+  the viewer or the render command, and reject a stored date that does not
+  match the report directory so that one report cannot use another day's assets.
 - Complete the versioning rules in doc/POLICY.md.
 
 v1.2.1 (2026-08-09)

@@ -27,6 +27,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.3 2026-08-19
+#       Reject a report whose stored date does not match its directory.
 #  v1.2 2026-08-11
 #       Treat a syntactically valid report with an invalid structure as
 #       corrupt instead of letting it raise while the viewer loads it.
@@ -132,7 +134,8 @@ def load_report(data_dir: str, date: str) -> Optional[Dict[str, Any]]:
     if (not isinstance(topics, list)
             or not all(isinstance(item, dict) for item in topics)
             or not isinstance(stats, dict)
-            or not isinstance(stored_date, str)):
+            or not isinstance(stored_date, str)
+            or stored_date != date):
         return None
     try:
         loaded_topics = [Topic.from_dict(item) for item in topics]
