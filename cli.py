@@ -9,7 +9,7 @@
 #
 #      collect (arXiv API + news RSS)
 #        -> deduplicate by title similarity
-#        -> summarize and classify with the Claude API
+#        -> edit into topics with the configured topic-editing backend
 #        -> resolve one image per topic (scrape, else generate)
 #        -> store report.json and the images under DATA_DIR
 #        -> render the report HTML and the composite summary PNG
@@ -27,9 +27,10 @@
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
 #
-#  Every setting of config.py except the three credentials and PORT,
-#  which only the viewer reads, can also be given as an option, which
-#  overrides the environment and .env for one invocation:
+#  Every setting of config.py can also be given as an option except
+#  SUMMARIZER_API_KEY and SUMMARIZER_AUTH_TOKEN, which are deliberately
+#  excluded from the command line, and PORT, which only the viewer reads.
+#  Each option overrides the environment and .env for one invocation:
 #
 #      python cli.py run --lookback-hours 72
 #

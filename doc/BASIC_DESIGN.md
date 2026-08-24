@@ -27,9 +27,10 @@ The following decisions shape everything below.
 - **`Entry` and `Topic` are the whole internal interface.** Everything below the
   collectors works from `Entry`, everything above the summarizers works from
   `Topic`. That is what makes a new source a change to one directory.
-- **The model answers into a schema, and the application owns the facts.** The
-  answer is the arguments of a declared tool call; citations come back as input
-  item numbers and the real URLs are restored from collected data.
+- **API-backed topic editors answer into a schema, and the application owns the
+  facts.** Model-backed answers identify collected input items, and the real
+  citation URLs are restored from collected data. The `plain` backend keeps the
+  collected title and URL directly and does not ask a model for either one.
 - **Settings are resolved once, from the environment, in `config.py`.** No module
   below reads `os.environ`, and every batch setting also has a command line
   option.
@@ -136,9 +137,10 @@ structure carries a collected item:
 | `origin` | a readable origin, such as the arXiv category or the feed title |
 
 Nothing above the collectors knows that arXiv answers Atom or that a feed may be
-RSS. A topic likewise carries only what a report needs: category, Japanese
-title, bullets, sources as title and URL pairs, the image file name and where
-the image came from.
+RSS. A topic likewise carries only what a report needs: category, title,
+bullets, sources as title and URL pairs, the image file name and where the image
+came from. API-backed backends produce Japanese topic text; `plain` preserves
+the source language.
 
 `CollectionResult` carries the *outcome* of a collection pass beside its
 entries — how many sources were asked, how many failed, how many items they offered, how

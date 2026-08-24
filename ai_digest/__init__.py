@@ -6,9 +6,10 @@
 #
 #  Description:
 #  ai_digest is the implementation package of the ai-digest application.
-#  It collects AI related papers and news once a day, summarizes them in
-#  Japanese with the Claude API, resolves an illustration for every
-#  topic and renders both an HTML report and a single composite PNG.
+#  It collects AI related papers and news once a day, turns them into
+#  daily topics through the configured topic-editing backend, resolves
+#  an illustration for every topic and renders both an HTML report and
+#  a single composite PNG.
 #
 #  This module keeps the package level metadata and the dataclasses
 #  shared by the collectors, the analyzer and the renderers:
@@ -207,13 +208,14 @@ class Topic:
     """
     One curated block of the daily report.
 
-    A topic groups one or more collected entries that cover the same
-    story, and carries the Japanese summary produced by the language
-    model together with the illustration resolved for it.
+    A topic is one block of the daily report and carries the title,
+    bullets and category produced by the selected topic-editing backend
+    together with the illustration resolved for it. API-backed backends
+    produce Japanese topic text; plain mode preserves the source language.
 
     Attributes:
-        category: Free form Japanese category label chosen by the model.
-        title: Japanese headline of the topic.
+        category: Category label produced by the selected topic-editing backend.
+        title: Headline of the topic in the language produced by the selected backend.
         bullets: Two to four Japanese bullet points.
         sources: List of {'title': ..., 'url': ...} dictionaries.
         image: File name of the topic image inside the report directory.

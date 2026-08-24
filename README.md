@@ -47,8 +47,8 @@ see [Standalone use, no API key](#standalone-use-no-api-key).
 
 - **Daily pipeline in a single command**: collect, deduplicate, summarize, illustrate, render
 - **Structured API-backed summarization**: the selected API backend returns tool-call arguments that are validated as structured data rather than prose
-- **Japanese output**: English sources are translated and condensed into two to four bullet points per topic
-- **Free form categories**: labels are chosen by the model per day, and colors are derived from the label so that they stay consistent within a report
+- **API-backed Japanese editing**: with an API-backed backend, English sources are translated and condensed into two to four Japanese bullet points per topic; `plain` keeps the source language
+- **Backend-specific categories**: API-backed backends let the model choose a label for the day's content; `plain` derives the label mechanically from the source origin, and colors are derived from the resulting label
 - **Resilient image handling**: scraping is attempted first and falls back to locally generated cards
 - **One image per day**: a composite PNG summarizing the whole report, drawn with Pillow, without a headless browser
 - **No database**: reports are plain JSON and PNG files under one directory per day
@@ -110,9 +110,11 @@ cp .env.example .env
 $EDITOR .env
 ```
 
-At minimum, set `SUMMARIZER_API_KEY`, or `SUMMARIZER_AUTH_TOKEN` for an endpoint
-that authenticates with a Bearer token. The `.env` file is ignored by Git and must
-never be committed. Exported variables take precedence over `.env` values.
+Choose `SUMMARIZER_BACKEND` first. With `plain`, no summarization credential is
+required. With `anthropic-compatible` or `openai-compatible`, set exactly one of
+`SUMMARIZER_API_KEY` or `SUMMARIZER_AUTH_TOKEN` as required by the configured
+endpoint. The `.env` file is ignored by Git and must never be committed. Exported
+variables take precedence over `.env` values.
 
 The settings that address the endpoint are named after the summarization stage
 rather than after a vendor, because the same key, base URL and model reach
