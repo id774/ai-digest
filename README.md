@@ -85,7 +85,7 @@ sudo apt update
 sudo apt install python3 python3-venv python3-pip fonts-noto-cjk
 ```
 
-`fonts-noto-cjk` is not optional in practice. Every string drawn into an image is Japanese, and neither the bitmap font bundled with Pillow nor DejaVuSans contains CJK glyphs, so without it the generated cards and the summary image show empty boxes instead of text.
+`fonts-noto-cjk` is not optional in practice. The generated images always contain Japanese interface text, and API-backed reports also draw Japanese topic text. The `plain` backend may preserve non-Japanese source titles and bullets, but the fixed image labels still require CJK glyphs. Neither the bitmap font bundled with Pillow nor DejaVuSans contains those glyphs, so without a CJK-capable font the affected image text renders as empty boxes.
 
 ### 2. Clone the repository
 

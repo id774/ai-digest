@@ -13,7 +13,7 @@
 #        scope and a label in the upper right corner
 #      - legend mapping every category of the day to its color
 #      - grid of numbered cards, each with a headline, an illustration,
-#        the Japanese bullet points and the URL of the primary source
+#        the topic bullet points and the URL of the primary source
 #      - footer with the metadata of the run and a disclaimer
 #
 #  The image is composed directly with Pillow instead of screenshotting
@@ -21,7 +21,8 @@
 #  dependencies light, at the cost of a layout that has to be computed
 #  here rather than by a CSS engine.
 #
-#  All rendered text is Japanese, so a CJK capable font is required; see
+#  The image includes fixed Japanese labels and may include Japanese
+#  topic text, so a CJK capable font is required; see
 #  ai_digest.images.fallback for how the font is resolved.
 #
 #  Author: id774 (More info: http://id774.net)
@@ -34,6 +35,9 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.3 2026-08-24
+#       Make fixed summary-image attribution backend-neutral so plain
+#       reports are not described as AI-generated.
 #  v1.2 2026-08-04
 #       Choose the legend entries before drawing them, so that a row
 #       too narrow for every category drops the trailing ones instead
@@ -74,16 +78,16 @@ TEXT_COLOR = "#1a1a1a"
 SUBTEXT_COLOR = "#4a5560"
 
 LABEL_TEXT = "AI DIGEST"
-HEADER_SUBTITLE = "過去 {0} 時間の AI 関連論文・ニュースを AI により要約・分類"
+HEADER_SUBTITLE = "過去 {0} 時間の AI 関連論文・ニュースを収集・整理"
 PERIOD_TEXT = "過去 {0} 時間"
 FOOTER_ITEMS = (
     ("データソース", "arXiv・公開ニュース"),
     ("対象期間", PERIOD_TEXT),
-    ("分析手法", "AI による要約・分類"),
+    ("整理方法", "公開情報の収集・整理"),
     ("目的", "研究・技術動向の把握"),
 )
 DISCLAIMER = (
-    "留意事項: 本資料は公開情報を AI により要約・分類した参考情報です。"
+    "留意事項: 本資料は公開情報を収集・整理した参考情報です。"
     "重要な判断に際しては、原典となる一次情報を確認してください。"
 )
 

@@ -13,8 +13,8 @@
 #  Two stages of the pipeline are replaced, because both need outbound
 #  access. Collection is replaced by the 'entries' array of
 #  sample_input.json, and summarization by its 'build_report' object,
-#  which holds the arguments the Claude API would have returned for the
-#  build_report tool call. Everything downstream is the pipeline itself:
+#  which holds representative arguments from an API-backed build_report
+#  tool call. Everything downstream is the pipeline itself:
 #  the payload is validated by summarizer.to_topics(), and the caller
 #  illustrates, stores and renders the result as usual.
 #

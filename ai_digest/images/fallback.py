@@ -7,14 +7,14 @@
 #  Description:
 #  When no image can be scraped for a topic, this module draws one with
 #  Pillow: a panel in the category color, the category label and the
-#  Japanese headline, wrapped to the available width.
+#  topic headline, wrapped to the available width.
 #
-#  The text is Japanese, so a font with CJK glyphs is mandatory. Neither
-#  the bitmap font bundled with Pillow nor DejaVuSans contains those
-#  glyphs, and using them renders every character as an empty box. The
-#  font is therefore resolved through config.detect_font_path(), which
-#  honours AI_DIGEST_FONT_PATH and probes the usual Noto CJK locations;
-#  a warning is emitted once when nothing suitable is installed.
+#  Topic text can contain CJK characters, and the composite image always
+#  contains fixed Japanese labels, so a CJK-capable font is required for
+#  complete image rendering. The font is resolved through
+#  config.detect_font_path(), which honours AI_DIGEST_FONT_PATH and
+#  probes the usual Noto CJK locations; a warning is emitted once when
+#  nothing suitable is installed.
 #
 #  This module also exposes the text helpers load_font(), text_size()
 #  and wrap_text(), which the composite image renderer reuses.
