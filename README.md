@@ -124,7 +124,8 @@ The first command prints the version, the second prints nothing on a fresh insta
 
 ## Configuration
 
-All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Every one of them except the two credentials and `PORT`, which only the viewer reads, also has a command line option on `cli.py` that overrides the environment for one invocation; see [Overriding a setting for one run](#overriding-a-setting-for-one-run).
+All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Settings used by the batch also have command-line overrides on `cli.py` except `SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN`; `PORT` belongs to
+the viewer. See [Overriding a setting for one run](#overriding-a-setting-for-one-run).
 
 | Variable | Default | Description |
 |---|---|---|
@@ -139,7 +140,7 @@ All settings are read from environment variables, optionally through `.env`. The
 | `SUMMARIZER_TEXT_JSON_FALLBACK` | `disabled` | Read by `anthropic-compatible`. `enabled` also accepts a report written as JSON text when no tool call came back; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
-| `NEWS_FEED_URLS` | three AI blogs | RSS or Atom feeds to collect, comma separated. |
+| `NEWS_FEED_URLS` | list defined by `DEFAULT_NEWS_FEED_URLS` in `config.py` | RSS or Atom feeds to collect, comma separated. |
 | `LOOKBACK_HOURS` | `24` | Age limit of the collected entries. |
 | `MAX_TOPICS` | `6` | Maximum topics per report. Six fills the summary image grid. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
@@ -169,7 +170,8 @@ The provider must support `tools` and `tool_use` responses.
 
 Being compatible with the Messages API does not mean behaving like Anthropic.
 Support for a named `tool_choice` and for the thinking output varies from one
-model to the next, which is what the two settings above are for. When a run
+model to the next, which is what `SUMMARIZER_THINKING_MODE` and
+`SUMMARIZER_TOOL_CHOICE_MODE` are for. When a run
 fails and the log shows `stop_reason=max_tokens` together with
 `content_types=thinking`, the model used the whole output budget thinking and
 never reached the tool call. Set `SUMMARIZER_THINKING_MODE=disabled` before
@@ -220,8 +222,8 @@ SUMMARIZER_MODEL=preview/Kimi-K2.6
 `anthropic-compatible` one does not expect: switching between the two means
 rewriting that line as well as `SUMMARIZER_BACKEND`. This
 backend needs the `openai` package, which is deliberately absent from
-`requirements.txt` so that a default installation carries one API client rather
-than two:
+`requirements.txt` so that the default installation does not include an API client used only by
+this optional backend:
 
 ```sh
 pip install openai
