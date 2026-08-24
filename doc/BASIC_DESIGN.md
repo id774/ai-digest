@@ -17,14 +17,14 @@ change is measured against.
 
 ## 2. Design policy
 
-Six decisions shape everything below.
+The following decisions shape everything below.
 
-- **Two processes, one directory.** The batch writes, the viewer reads. The
+- **Separate batch and viewer, one shared directory.** The batch writes, the viewer reads. The
   viewer cannot call an endpoint because it does not import the code that would,
   which is a stronger guarantee than a rule saying it must not.
 - **The archive is plain files.** One directory per day, JSON and PNG. Anything
   that can read a file can read the archive.
-- **Two structures are the whole internal interface.** Everything below the
+- **`Entry` and `Topic` are the whole internal interface.** Everything below the
   collectors works from `Entry`, everything above the summarizers works from
   `Topic`. That is what makes a new source a change to one directory.
 - **The model answers into a schema, and the application owns the facts.** The
@@ -86,7 +86,7 @@ whose path it did not get from `ai_digest/storage.py`.
 ```text
 .
 ├── cli.py                   the daily batch: subcommands, options, the pipeline
-├── app.py                   the viewer: five routes, read only
+├── app.py                   the viewer: routes, read only
 ├── config.py                every setting, resolved once from the environment
 ├── requirements.txt         what the batch and the viewer need, and no more
 ├── .env.example             the settings, with no value that is a credential
@@ -99,7 +99,7 @@ whose path it did not get from `ai_digest/storage.py`.
 │   │   └── news_rss.py      RSS and Atom feeds
 │   ├── analyzer/            how material becomes topics
 │   │   ├── summarizer.py    the prompt, the tool schema, the validation
-│   │   ├── openai_compat.py the second wire protocol, sharing all three
+│   │   ├── openai_compat.py the OpenAI-compatible wire protocol, reusing the shared analyzer contract
 │   │   └── plain.py         no model, no credential
 │   ├── images/              one illustration per topic
 │   │   ├── resolver.py      taken from the source, best effort
@@ -117,9 +117,9 @@ whose path it did not get from `ai_digest/storage.py`.
 └── doc/                     these documents
 ```
 
-Two absences are deliberate. The documentation helper needs a browser driver and
-the second wire protocol needs a second API client; neither is in
-`requirements.txt`, so a default installation carries neither.
+The browser driver used only by documentation capture and the API client used
+only by the OpenAI-compatible backend are deliberately absent from
+`requirements.txt`; a default installation carries neither optional dependency.
 
 ## 5. The common item form
 
@@ -140,8 +140,8 @@ RSS. A topic likewise carries only what a report needs: category, Japanese
 title, bullets, sources as title and URL pairs, the image file name and where
 the image came from.
 
-A third structure carries the *outcome* of a collection pass beside its entries
-— how many sources were asked, how many failed, how many items they offered, how
+`CollectionResult` carries the *outcome* of a collection pass beside its
+entries — how many sources were asked, how many failed, how many items they offered, how
 many fell outside the window, and one reason line per failure. That is what lets
 the batch tell an unreachable network from a quiet weekend without guessing, and
 two passes merge into one outcome so the pipeline sees a single result.
@@ -149,7 +149,7 @@ two passes merge into one outcome so the pipeline sees a single result.
 ## 6. Collection
 
 arXiv and the news feeds are separate collectors with the same shape and the
-same two rules.
+same collection rules.
 
 - **A collector never raises on a network error.** A source that cannot be read
   contributes nothing, records its reason in the outcome, and lets the run
@@ -210,8 +210,8 @@ Topic editing is one interchangeable stage with a fixed contract:
 
 Every backend satisfies it, so the illustration, storage and rendering stages
 never learn which produced the report. A backend is selected by
-`SUMMARIZER_BACKEND`, and exactly one runs per invocation — the backends are two
-explicit routes plus a mechanical one, never a failover chain.
+`SUMMARIZER_BACKEND`, and exactly one runs per invocation — the backends are the API-backed routes plus the mechanical `plain` route,
+never a failover chain.
 
 | Backend | Editing |
 |---|---|
@@ -219,7 +219,7 @@ explicit routes plus a mechanical one, never a failover chain.
 | `openai-compatible` | a Chat Completions tool call |
 | `plain` | mechanical, no model and no credential |
 
-**Both API backends cap the candidates at 60 entries** before building the
+**The `anthropic-compatible` and `openai-compatible` backends cap the candidates at 60 entries** before building the
 request, taking them in the order deduplication left them — papers first, then
 news, each newest first within its source. Ordering and truncation are part of
 the design because they decide what the model is able to consider at all. The
@@ -227,9 +227,9 @@ mechanical backend applies no candidate cap, since it selects by date directly.
 
 ## 9. The model backends
 
-`summarizer.py` owns the material both API routes share: the system prompt, the
+`summarizer.py` owns the material shared by the API-backed routes: the system prompt, the
 prompt builder, the `build_report` tool schema, and the validation. The
-OpenAI-compatible module imports all four, translates the tool definition into
+OpenAI-compatible module reuses those shared definitions and translates the tool definition into
 the other protocol's function-tool form, reads the answer from the tool call
 arguments, and validates identically — so **a report does not differ by the
 route it took.** Its SDK is imported inside the call, because only that backend
@@ -238,7 +238,7 @@ needs it.
 ### What the model is asked for
 
 The prompt numbers every candidate and asks for topics in decreasing importance.
-The tool schema requires four fields per topic:
+The tool schema requires the following fields per topic:
 
 | Field | Asked for |
 |---|---|
@@ -254,7 +254,7 @@ model cannot see.
 ### Compatibility settings
 
 Endpoints that speak a protocol do not all behave like the vendor that defined
-it, so three behaviours are named settings rather than inferred:
+it, so the following compatibility behaviours are named settings rather than inferred:
 
 | Setting | Shapes |
 |---|---|
@@ -317,10 +317,11 @@ Per topic, the sources are tried in order until one yields an image; otherwise a
 card is drawn.
 
 The resolver reads the figure of a paper from its HTML rendering, or the image an
-article declares for social sharing. Three bounds are enforced **while reading**
-rather than after buffering — a cap on page bytes, a cap on image bytes, and a
-minimum side below which an image is not worth showing — and a decoder refusing
-an image is an ordinary "no image" rather than the end of a run.
+article declares for social sharing. The resolver enforces a page-byte cap, an
+image-byte cap, and a minimum image side **while reading** rather than after
+buffering, so oversized or unusable material is rejected before it is fully
+retained, and a decoder refusing an image is an ordinary "no image" rather than
+the end of a run.
 
 The fallback draws a panel in the category colour with the label and the
 headline wrapped to the width, and it also owns the font loading, measuring and
@@ -328,8 +329,8 @@ wrapping helpers the summary image reuses. It is where the missing-CJK-font
 warning is emitted once; without such a font the HTML stays correct and only the
 images lose their text.
 
-Every topic ends this stage with an image file name and a credit recording which
-of the two routes produced it.
+Every topic ends this stage with an image file name and a credit recording
+whether the image came from a source or the local fallback.
 
 ## 12. Persistence
 
@@ -374,7 +375,7 @@ from it and are kept in the same directory.
 `stats.model` records how a report was produced — a model name, `plain`, or
 `demo` — which lets all three kinds of day sit in one archive as one format.
 
-Two properties of this module carry weight:
+The following properties of this module carry weight:
 
 - **The date pattern is anchored** so that a trailing newline cannot make a date
   from a URL name a directory of its own.

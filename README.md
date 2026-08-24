@@ -20,13 +20,21 @@
 
 ## Overview
 
-**ai-digest** collects AI related papers and news once a day, summarizes and classifies them in Japanese with the Claude API, and publishes the result as a browsable HTML report together with a single composite PNG image.
+**ai-digest** collects AI related papers and news once a day, organizes them
+into topics through the configured summarization backend, and publishes the
+result as a browsable HTML report together with a single composite PNG image.
+API-backed backends can translate and edit the topics in Japanese; `plain`
+mode remains mechanical and needs no credential.
 
 The batch pipeline and the web viewer are separate processes. `cli.py` performs the daily collection and generation, writes everything under `data/reports/<date>/`, and exits. `app.py` is a read only Flask application that serves what the batch already produced, so a failed or slow run never takes the site down and the web process needs no API key.
 
 Every topic carries an illustration. The application first tries to obtain a real image from the source, an `ar5iv` figure for arXiv papers or the Open Graph image for news articles, and draws a card locally with Pillow when that fails. Scraping is best effort by design; a publisher changing its markup degrades the look of the report, never its availability.
 
-The Claude API is only used for one stage: clustering, translating and classifying the collected entries into topics. Collection (arXiv, RSS/Atom) and every image path already run without an API key. Setting `SUMMARIZER_BACKEND=plain` removes the last dependency and runs the whole pipeline offline except for fetching the feeds themselves; see [Standalone use, no API key](#standalone-use-no-api-key).
+An API-backed summarization endpoint is used only for the topic-editing stage.
+Collection (arXiv, RSS/Atom) and every image path already run without an API
+credential. Setting `SUMMARIZER_BACKEND=plain` removes the endpoint dependency
+and runs the whole pipeline offline except for fetching the feeds themselves;
+see [Standalone use, no API key](#standalone-use-no-api-key).
 
 - Requirements definition: [doc/REQUIREMENTS.md](doc/REQUIREMENTS.md)
 - Basic design: [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md)
@@ -38,7 +46,7 @@ The Claude API is only used for one stage: clustering, translating and classifyi
 ## Features
 
 - **Daily pipeline in a single command**: collect, deduplicate, summarize, illustrate, render
-- **Structured summarization**: the Claude API is called through tool use, so the answer is validated JSON rather than prose
+- **Structured API-backed summarization**: the selected API backend returns tool-call arguments that are validated as structured data rather than prose
 - **Japanese output**: English sources are translated and condensed into two to four bullet points per topic
 - **Free form categories**: labels are chosen by the model per day, and colors are derived from the label so that they stay consistent within a report
 - **Resilient image handling**: scraping is attempted first and falls back to locally generated cards
@@ -51,14 +59,14 @@ The Claude API is only used for one stage: clustering, translating and classifyi
 - Python 3.9 or later
 - A credential for an endpoint speaking the Anthropic Messages API or the OpenAI Chat Completions API, unless `SUMMARIZER_BACKEND=plain` (see [Standalone use, no API key](#standalone-use-no-api-key))
 - A CJK capable TrueType font, for example the `fonts-noto-cjk` package; see [Japanese font](#japanese-font)
-- Outbound HTTPS access to `export.arxiv.org`, the configured feeds and, unless running standalone, the Anthropic API
+- Outbound HTTPS access to `export.arxiv.org`, the configured feeds and, unless running standalone, the configured summarization endpoint
 
 Python dependencies are listed in `requirements.txt`:
 
 | Package | Purpose |
 |---|---|
 | Flask | Web viewer and Jinja2 templates |
-| anthropic | Claude API client |
+| anthropic | Client for the `anthropic-compatible` Messages API backend |
 | feedparser | arXiv Atom and news RSS parsing |
 | requests | HTTP transport for the collectors and the scraper |
 | beautifulsoup4 | HTML parsing for figure and Open Graph extraction |
@@ -292,8 +300,9 @@ Retries widen the window, because the SDK spends the timeout again on each one:
 worst case wait = SUMMARIZER_TIMEOUT x (SUMMARIZER_MAX_RETRIES + 1)
 ```
 
-At the defaults that is nine minutes. Keep it well inside the interval between
-two cron runs, so that a hung run has ended before the next one starts. Neither
+Compute the worst-case wait from the formula above and keep it well inside the
+interval between two cron runs, so that a hung run has ended before the next
+one starts. Neither
 setting may be zero or negative; `cli.py run` refuses such a value before it
 collects anything, rather than letting the SDK reject it after a whole
 collection has been spent.

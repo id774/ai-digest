@@ -13,8 +13,8 @@ installs, and it is why a failed batch leaves yesterday's report on the site.
 Prepare these values first:
 
 - A DNS name whose `A` or `AAAA` record points to the server
-- An Anthropic API key, or the token, base URL and model of a compatible
-  endpoint — unless the host is to run `SUMMARIZER_BACKEND=plain`
+- A credential, base URL and model for the configured API-backed summarization
+  endpoint, unless the host is to run `SUMMARIZER_BACKEND=plain`
 - A TLS certificate for the DNS name
 - A decision about who may read the archive: nobody outside, Basic
   authentication, an IP range, or a VPN
@@ -48,9 +48,9 @@ sudo -u ai-digest .venv/bin/pip install --upgrade pip
 sudo -u ai-digest .venv/bin/pip install -r requirements.txt
 ```
 
-`SUMMARIZER_BACKEND=openai-compatible` additionally needs the `openai` package, which is
-deliberately absent from `requirements.txt` so that a default installation
-carries one API client rather than two:
+`SUMMARIZER_BACKEND=openai-compatible` additionally needs the `openai` package.
+It is deliberately absent from `requirements.txt` so that this optional backend
+does not add its client dependency to a default installation:
 
 ```sh
 sudo -u ai-digest .venv/bin/pip install openai
@@ -140,7 +140,7 @@ sudo -u ai-digest crontab -l
 ```
 
 [`deploy/ai-digest.cron`](../deploy/ai-digest.cron) runs `cli.py run` at 06:30
-local time. Two properties of that entry matter:
+local time. The cron entry deliberately:
 
 - It `cd`s into the installation directory first, because `.env` is found
   relative to the repository root and cron loads no profile.
@@ -148,7 +148,8 @@ local time. Two properties of that entry matter:
   when nothing usable could be produced, which is what makes a broken feed or an
   expired key visible without anyone watching the site.
 
-Run it once by hand before trusting the schedule. This spends one API request:
+Run it once by hand before trusting the schedule. An API-backed backend starts
+one summarization request before any configured SDK retry; `plain` starts none:
 
 ```sh
 sudo -u ai-digest sh -c 'cd /opt/ai-digest && .venv/bin/python cli.py run'
@@ -208,7 +209,7 @@ its availability.
 
 ### What the batch asks of the endpoint
 
-The Claude backend calls the Messages API with a tool named `build_report`, and
+The `anthropic-compatible` backend calls the Messages API with a tool named `build_report`, and
 reads the answer from the `tool_use` block. An Anthropic-compatible endpoint
 must therefore support `tools` and return `tool_use` responses; being compatible
 with the Messages API is not enough on its own.
@@ -230,11 +231,13 @@ try them in.
 
 ### Request budget
 
-One `cli.py run` spends one summarization request, plus whatever the SDK retries.
+With an API-backed backend, one `cli.py run` starts one summarization request
+and configured SDK retries may add requests. With `plain`, it starts none.
 
 | What | Requests |
 |---|---:|
-| One `cli.py run` | 1 |
+| One `cli.py run` with `anthropic-compatible` or `openai-compatible` | 1 initial request |
+| One `cli.py run` with `plain` | 0 |
 | Each SDK retry (`SUMMARIZER_MAX_RETRIES`, default 2) | 1 more |
 | `cli.py demo`, `cli.py render`, `cli.py list` | 0 |
 | Every page of the viewer | 0 |
@@ -255,8 +258,9 @@ each retry spends it again:
 worst case wait = SUMMARIZER_TIMEOUT x (SUMMARIZER_MAX_RETRIES + 1)
 ```
 
-At the defaults that is nine minutes. Keep it comfortably below the interval
-between two cron runs, so that a hung run has ended before the next one starts.
+Compute the worst-case wait from the formula above and keep it comfortably
+below the interval between cron runs, so that a hung run has ended before the
+next one starts.
 `HTTP_TIMEOUT` (default 60 seconds) is a separate limit and applies to the
 collectors and the scraper, whose requests are many and short.
 
@@ -334,8 +338,8 @@ from its stored JSON when a rendering change has to be undone in place.
 
 ## When a run fails
 
-The batch says why in its log and exits `1`. Three failures are worth telling
-apart before reaching for a setting:
+The batch says why in its log and exits `1`. The following failures are worth
+telling apart before reaching for a setting:
 
 - **`no entry collected`** — the sources were reached and had nothing recent,
   or could not be reached at all. The message distinguishes the two. arXiv
