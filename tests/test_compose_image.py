@@ -32,12 +32,15 @@
 #    - Keep nothing on a row without room for a single entry.
 #    - Yield no entry when there is no category.
 #    - Cap the listed categories at LEGEND_MAX_ENTRIES.
+#    - Use backend-neutral fixed wording in the daily image.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow
 #
 #  Version History:
+#  v1.1 2026-08-24
+#       Pin the backend-neutral fixed text of the daily summary image.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -94,6 +97,25 @@ class LegendEntriesTest(unittest.TestCase):
         kept = self.entries(categories, 100000)
 
         self.assertEqual(compose_image.LEGEND_MAX_ENTRIES, len(kept))
+
+
+class SummaryTextTest(unittest.TestCase):
+    """ The fixed summary text is correct for every backend. """
+
+    def test_fixed_summary_text_is_backend_neutral(self):
+        self.assertEqual(
+            "過去 {0} 時間の AI 関連論文・ニュースを収集・整理",
+            compose_image.HEADER_SUBTITLE,
+        )
+        self.assertIn(
+            ("整理方法", "公開情報の収集・整理"),
+            compose_image.FOOTER_ITEMS,
+        )
+        self.assertEqual(
+            "留意事項: 本資料は公開情報を収集・整理した参考情報です。"
+            "重要な判断に際しては、原典となる一次情報を確認してください。",
+            compose_image.DISCLAIMER,
+        )
 
 
 if __name__ == "__main__":

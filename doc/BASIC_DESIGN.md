@@ -283,9 +283,11 @@ The difference from the API backends is confined to this stage and nowhere else.
 
 ## 10. Validating the answer and restoring citations
 
-The parsed tool arguments pass through **one validation function**, which every
-backend and the bundled sample share, so nothing is stored on the strength of a
-model's word.
+The parsed tool arguments produced by the API-backed backends, and the bundled
+sample data representing such an answer, pass through one shared validation
+function before citation restoration. The mechanical `plain` backend does not
+produce tool arguments: it builds `Topic` values directly from collected `Entry`
+values, so there is no model-supplied citation to validate or restore.
 
 It enforces, in order:
 
