@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 
 ########################################################################
-# ai_digest/analyzer/summarizer.py: Claude based clustering and summary
+# ai_digest/analyzer/summarizer.py: Anthropic-compatible clustering and summary
 #
 #  Description:
-#  This module asks the Claude API to read the collected entries, group
-#  the ones that cover the same story, rank them by importance, label
-#  each group with a freely chosen Japanese category and write a short
-#  Japanese summary for it.
+#  This module asks a configured Anthropic-compatible Messages API
+#  endpoint to read the collected entries, group the ones that cover the
+#  same story, rank them by importance, label each group with a freely
+#  chosen Japanese category and write a short Japanese summary for it.
 #
 #  The call uses the Anthropic tool use interface: a tool named
 #  build_report declares the expected JSON schema and the model invokes

@@ -6,9 +6,9 @@
 #
 #  Description:
 #  This module serves the reports produced by cli.py. It is read only:
-#  no route collects data or calls the Claude API, so the web process
-#  needs neither an API key nor outbound network access, and a slow or
-#  failing batch cannot affect the site.
+#  no route collects data or calls a summarization endpoint, so the web
+#  process needs neither an endpoint credential nor outbound network
+#  access, and a slow or failing batch cannot affect the site.
 #
 #  Routes:
 #      /                          list of the stored report dates

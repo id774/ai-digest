@@ -19,21 +19,23 @@ repository.
 ## 2. Name
 
 `ai-digest`. The name is the output, not the technique: the repository exists to
-produce a digest, and the collectors, the language model and the image drawing
-are how one is produced.
+produce a digest, and the collectors, the topic-editing backend and the image
+drawing are how one is produced.
 
 ## 3. Purpose
 
 **ai-digest collects AI related papers and news once a day, organizes them into
-the topics worth knowing about, and stores the result as a Japanese daily report
-that can be read then and later.**
+the topics worth knowing about, and stores the result as a daily report that can
+be read then and later. API-backed topic editing produces Japanese headlines,
+categories and bullets; `plain` keeps titles and bullets in the source language
+and derives categories mechanically.**
 
 It is not a list of articles and it is not a search system. It exists to remove
 work the reader would otherwise repeat every day:
 
 - visiting each source in turn,
 - deciding which items are the same story,
-- reading English titles and abstracts,
+- translating and editing English titles and abstracts when an API-backed topic editor is selected,
 - choosing which of them matter,
 - and keeping track of where each one came from.
 
@@ -70,8 +72,10 @@ handle.
 
 - **Not a news site.** No audience, no feed of its own, no comment, no account
   and no search.
-- **Not a mirror.** It stores a Japanese summary and a citation. It does not
-  store, republish or serve the article or the paper it summarizes.
+- **Not a mirror.** It stores a topic representation and a citation. API-backed
+  modes write the topic in Japanese; `plain` keeps source-language titles and
+  bullets. It does not store, republish or serve the article or the paper the
+  topic came from.
 - **Not a scraper of pages written for humans.** Its material comes from the
   arXiv API and from RSS and Atom feeds, published for programmatic use. One
   narrow exception is bounded and optional: an illustration is looked for on the
@@ -91,8 +95,8 @@ A single Linux host — Debian or Ubuntu is the documented case — on Python 3.
 later, running two things with different lifetimes: **a batch that runs once a
 day and exits**, and **a viewer that runs continuously** behind a web server.
 The host needs outbound HTTPS to the sources and, unless the API free mode is
-used, to the summarization endpoint, plus a CJK capable TrueType font, because
-every string drawn into an image is Japanese.
+used, to the summarization endpoint, plus a CJK capable TrueType font, because Japanese text can appear in the
+report images and must remain renderable.
 
 A platform whose file system does not survive a restart can host the viewer as a
 demonstration only. The archive is exactly what must survive.
@@ -132,15 +136,16 @@ end of it**:
 1. collect papers and news,
 2. absorb the differences between sources into one common form,
 3. remove the obvious duplicates,
-4. group what covers the same story into topics,
-5. select the topics that matter that day,
-6. produce a Japanese headline, category and bullet points for each,
-7. attach the originating sources to each topic,
-8. give each topic an image,
-9. store the structured data,
-10. generate the HTML report,
-11. generate the daily summary image,
-12. leave it all readable afterwards.
+4. edit the deduplicated entries into topics through the configured backend,
+5. with an API-backed backend, group and rank related entries and write Japanese
+   headlines, categories and bullets; with `plain`, keep one entry per topic,
+   preserve the source language and derive the category from the origin,
+6. attach the originating sources to each topic,
+7. give each topic an image,
+8. store the structured data,
+9. generate the HTML report,
+10. generate the daily summary image,
+11. leave it all readable afterwards.
 
 **A day's report is complete only when the citations, the images, the storage,
 the HTML and the image generation have all finished.** A run that summarized
@@ -152,10 +157,12 @@ report.
 Each topic carries the papers or articles it was built from, and the reader can
 follow them to the original.
 
-**The model must never invent a citation URL.** It is asked which of the
-numbered input items a topic rests on; the application looks those items up in
-what it actually collected and takes the real URL and title from there. The
-model supplies the correspondence, the application supplies the address.
+**A model must never invent a citation URL.** In API-backed modes it is asked
+which of the numbered input items a topic rests on; the application looks those
+items up in what it actually collected and takes the real URL and title from
+there. The model supplies the correspondence and the application supplies the
+address. In `plain`, each topic keeps the collected entry's real title and URL
+directly.
 
 - A reference to an input item that does not exist is discarded.
 - **A topic with no valid citation is not published.** A block of text without a
@@ -169,8 +176,8 @@ purpose.
 - **Obvious duplication is removed mechanically, before any model is
   involved**: the same URL, or titles that differ only in how they are written.
 - **Duplication that requires understanding** — different titles covering the
-  same research or event — is left to the topic editing stage, which compares
-  meaning.
+  same research or event — is handled by API-backed topic editing, which compares
+  meaning. `plain` intentionally performs no semantic grouping.
 
 Separating them buys four things: less material sent to an endpoint, a smaller
 bill, less distortion of the importance judgement by the same story appearing
@@ -211,12 +218,13 @@ could process.**
 
 | Limit | Value |
 |---|---|
-| Candidates sent for topic editing | 60 |
+| Candidates sent to an API-backed topic editor | 60 |
 | Topics in a report | 6 |
-| Bullet points per topic | 2 to 4, one sentence each |
+| API-backed bullet points per topic | 2 to 4, one sentence each |
+| Plain-mode bullet points per topic | 1 to 4, taken mechanically from the source summary |
 | Citations kept per topic | 3 |
-| Headline length asked for | within 40 characters |
-| Bullet length asked for | within 60 characters |
+| Headline length asked from an API-backed editor | within 40 characters |
+| Bullet length asked from an API-backed editor | within 60 characters |
 
 Six topics is also what the daily summary image holds, so the report and the
 image agree without either being trimmed to fit the other.
@@ -323,13 +331,13 @@ The batch runs unattended, so how it fails is part of what it is.
 
 - some sources could not be read, but others yielded valid items,
 - some external images could not be obtained,
-- some individual topics from the model were malformed.
+- some individual topics returned by an API-backed model were malformed.
 
 **Fail** — nothing worth storing was produced:
 
 - no valid item was collected from any source,
 - no usable topic survived topic editing,
-- the required structured answer could not be interpreted,
+- an API-backed answer could not be interpreted when an API-backed backend was selected,
 - storing the report failed,
 - a required artifact could not be generated.
 
@@ -346,9 +354,9 @@ name the cause.
 
 ## 20. Records
 
-Each run records at least: how many items were collected, how many remained
-after deduplication, how many topics were produced, which model produced them,
-and when it was generated.
+Each run records how many items were collected, how many remained after
+deduplication, how many topics were produced, the model label used for the run
+(`plain` when no model is used), and when it was generated.
 
 **Full auditability is not a goal.** Why each candidate was accepted or rejected,
 and how the model reached its ranking, are not reconstructed or stored. The
@@ -386,12 +394,12 @@ viewer port, the archive directory, the sources, and the display limits.
 that a change can be tried without editing anything, and a run that overrode
 something says so in its log. Credentials are the exception in section 23.
 
-Two limits bound the outgoing requests and they measure different things: one
-for a collector or scraper request, and a longer one for a summarization
-request, where what is being waited for is the writing rather than the network.
-Retries multiply the second, and the product must stay well inside the interval
-between two scheduled runs, so that a hung run has ended before the next one
-starts. **A daily job must never wait indefinitely for an API.**
+Collector and scraper requests use a network-request limit, while an API-backed
+summarization request uses a longer summarization limit, because that wait covers
+the writing as well as the network. Retries multiply the summarization limit,
+and the product must stay well inside the interval between scheduled runs, so a
+hung run has ended before the next one starts. **A daily job must never wait
+indefinitely for an API.**
 
 ## 23. Security
 
@@ -407,7 +415,7 @@ starts. **A daily job must never wait indefinitely for an API.**
   it** — TLS, authentication, an address restriction, a VPN — as the environment
   requires. The application provides none of its own.
 
-Three further rules follow from rendering other people's text in a browser:
+Further rules follow from rendering other people's text in a browser:
 
 - **Text from outside is material, never instruction.** A feed entry, a scraped
   page, an abstract and a model answer are summarized or stored as data; a
