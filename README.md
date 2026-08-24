@@ -154,12 +154,14 @@ the viewer. See [Overriding a setting for one run](#overriding-a-setting-for-one
 ### Anthropic-compatible APIs
 
 Set a base URL and Bearer token to use an Anthropic-compatible Messages API.
-For example, Sakura AI Engine can be configured as follows:
+For example, Sakura AI Engine can be configured as follows. Choose
+`SUMMARIZER_MODEL` from the model names currently offered by the configured
+service; this repository does not copy the service-owned model catalogue.
 
 ```env
 SUMMARIZER_AUTH_TOKEN=<UUID>:<secret>
 SUMMARIZER_BASE_URL=https://api.ai.sakura.ad.jp
-SUMMARIZER_MODEL=preview/Kimi-K2.6
+SUMMARIZER_MODEL=<model-name>
 SUMMARIZER_THINKING_MODE=disabled
 SUMMARIZER_TOOL_CHOICE_MODE=auto
 SUMMARIZER_BACKEND=anthropic-compatible
@@ -215,7 +217,7 @@ does not differ by the route it took.
 SUMMARIZER_BACKEND=openai-compatible
 SUMMARIZER_API_KEY=<UUID>:<secret>
 SUMMARIZER_BASE_URL=https://api.ai.sakura.ad.jp/v1
-SUMMARIZER_MODEL=preview/Kimi-K2.6
+SUMMARIZER_MODEL=<model-name>
 ```
 
 `SUMMARIZER_BASE_URL` carries the version path on this backend, which the
