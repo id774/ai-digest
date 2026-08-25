@@ -216,7 +216,7 @@ class Topic:
     Attributes:
         category: Category label produced by the selected topic-editing backend.
         title: Headline of the topic in the language produced by the selected backend.
-        bullets: Two to four Japanese bullet points.
+        bullets: Two to four bullet points in the language produced by the selected backend.
         sources: List of {'title': ..., 'url': ...} dictionaries.
         image: File name of the topic image inside the report directory.
         image_credit: Where the image came from, or 'generated'.
