@@ -1,8 +1,8 @@
 ai-digest Repository Version History
 ====================================
 
-v1.2.2 (Release Date: TBD)
---------------------------
+v1.2.2 (2026-08-26)
+-------------------
 - Add doc/REQUIREMENTS.md and doc/BASIC_DESIGN.md, separating what the system
   is required to do from how it is built, and reference both from README.
 - Treat structurally invalid report files as corrupt so that they cannot crash
