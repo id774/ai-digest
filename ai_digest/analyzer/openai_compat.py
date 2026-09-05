@@ -32,6 +32,9 @@
 #  - openai, installed separately: pip install openai
 #
 #  Version History:
+#  v1.3 2026-09-05
+#       Refuse a missing or blank base_url in _build_client(), and name
+#       the current backend in the missing-package error.
 #  v1.2 2026-08-05
 #       Bound one request with an explicit timeout instead of leaving
 #       it to the SDK default, as the Anthropic path does.
@@ -84,19 +87,30 @@ def _build_client(api_key: str, base_url: Optional[str],
     timeout bounds one request. The SDK default is measured in minutes,
     which is no bound at all for an unattended run, and each retry
     spends the timeout again.
+
+    base_url is required: this boundary is the last point before the
+    SDK is asked to build a client, and a missing or blank value is
+    refused here even when a caller reaches it without going through
+    cli.py's own preflight check, rather than being left to the SDK's
+    own default endpoint.
     """
     try:
         from openai import OpenAI
     except ImportError:
         raise RuntimeError(
-            "SUMMARIZER_BACKEND=openai needs the openai package, which is "
-            "not part of requirements.txt. Install it with "
-            "'pip install openai'."
+            "SUMMARIZER_BACKEND=openai-compatible needs the openai "
+            "package, which is not part of requirements.txt. Install it "
+            "with 'pip install openai'."
         )
 
-    options: Dict[str, Any] = {"api_key": api_key}
-    if base_url:
-        options["base_url"] = base_url
+    if not (base_url or "").strip():
+        raise RuntimeError(
+            "SUMMARIZER_BASE_URL is required by "
+            "SUMMARIZER_BACKEND=openai-compatible; the OpenAI SDK's own "
+            "default endpoint is not used in its place."
+        )
+
+    options: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
     if max_retries is not None:
         options["max_retries"] = max_retries
     if timeout is not None:
@@ -168,6 +182,8 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         model: Model identifier as that endpoint names it.
         max_topics: Maximum number of topics to keep.
         base_url: Base URL of the endpoint, including the version path.
+            Required; a missing or blank value is refused rather than
+            left to the OpenAI SDK's own default endpoint.
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
@@ -181,8 +197,9 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         An empty input yields an empty list without calling the API.
 
     Raises:
-        RuntimeError: The openai package is missing, or the model
-            answered without a usable build_report call.
+        RuntimeError: The openai package is missing, base_url is
+            missing or blank, or the model answered without a usable
+            build_report call.
     """
     if not entries:
         return []

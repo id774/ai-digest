@@ -1,6 +1,11 @@
 ai-digest Repository Version History
 ====================================
 
+v1.3 (Release Date: TBD)
+------------------------
+- Require an explicit SUMMARIZER_BASE_URL for SUMMARIZER_BACKEND=openai-compatible,
+  failing before anything is collected when it is missing or blank.
+
 v1.2.2 (2026-08-26)
 -------------------
 - Add doc/REQUIREMENTS.md and doc/BASIC_DESIGN.md, separating what the system

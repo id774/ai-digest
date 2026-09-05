@@ -25,6 +25,12 @@
 #  under the OpenAI one, because the models an endpoint offers are its
 #  own.
 #
+#  The base URL cases cover validate_summarizer_base_url(): a missing,
+#  empty or whitespace-only value is refused on the openai-compatible
+#  protocol, because it used to fall through to the OpenAI SDK's own
+#  default endpoint, while the anthropic-compatible and plain backends
+#  keep accepting no base URL at all, which is not a defect for either.
+#
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
@@ -51,6 +57,11 @@
 #    - Fall back on a Claude model under the Anthropic protocol.
 #    - Have no default model under the OpenAI protocol.
 #    - Let a configured model win on either protocol.
+#    - Reject a missing, an empty and a whitespace-only base URL on the
+#      OpenAI protocol.
+#    - Accept an explicit base URL on the OpenAI protocol.
+#    - Keep accepting a missing base URL on the Anthropic protocol and
+#      on plain.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -64,6 +75,7 @@
 
 import os
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 import config
@@ -210,6 +222,61 @@ class ResolvedModelTest(unittest.TestCase):
                                 "SUMMARIZER_MODEL": " preview/Kimi-K2.6 "})
 
             self.assertEqual("preview/Kimi-K2.6", loaded.resolved_model)
+
+
+class SummarizerBaseUrlTest(unittest.TestCase):
+    """
+    validate_summarizer_base_url() must keep the openai-compatible
+    backend from reaching the SDK with no endpoint target of its own,
+    without touching the anthropic-compatible or plain backends, where
+    an unset base URL is not a defect.
+    """
+
+    def load(self, environment):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with mock.patch.object(config, "load_dotenv", None):
+                return config.load_config()
+
+    def test_rejects_a_missing_base_url_on_the_openai_protocol(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible"})
+
+        self.assertIsNone(loaded.summarizer_base_url)
+        with self.assertRaisesRegex(
+                RuntimeError,
+                "SUMMARIZER_BASE_URL.*SUMMARIZER_BACKEND=openai-compatible"):
+            loaded.validate_summarizer_base_url()
+
+    def test_rejects_an_empty_base_url_on_the_openai_protocol(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible",
+                            "SUMMARIZER_BASE_URL": ""})
+
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+            loaded.validate_summarizer_base_url()
+
+    def test_rejects_a_whitespace_only_base_url_on_the_openai_protocol(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible"})
+        loaded = replace(loaded, summarizer_base_url="   ")
+
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+            loaded.validate_summarizer_base_url()
+
+    def test_accepts_an_explicit_base_url_on_the_openai_protocol(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible",
+                            "SUMMARIZER_BASE_URL":
+                                "https://api.example.test/v1"})
+
+        loaded.validate_summarizer_base_url()
+
+    def test_a_missing_base_url_still_passes_on_the_anthropic_protocol(self):
+        loaded = self.load({})
+
+        self.assertIsNone(loaded.summarizer_base_url)
+        loaded.validate_summarizer_base_url()
+
+    def test_a_missing_base_url_still_passes_on_plain(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "plain"})
+
+        loaded.validate_summarizer_base_url()
 
 
 if __name__ == "__main__":

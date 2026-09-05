@@ -520,9 +520,13 @@ things.
   batch: a host part way through a rename is exactly the one where an old name
   still decides something, and a viewer that kept serving would hide that.
   Superseded backend values are answered the same way.
-- **Validates by concern, on demand.** Backend, credential, model, retry budget,
-  output budget, timeout and protocol options are separate checks, and the batch
-  calls the ones the selected backend needs before collecting.
+- **Validates by concern, on demand.** Backend, credential, model, endpoint
+  target, retry budget, output budget, timeout and protocol options are
+  separate checks, and the batch calls the ones the selected backend needs
+  before collecting. The endpoint target check is what keeps the
+  openai-compatible backend from reaching the SDK with no base URL of its
+  own: the anthropic-compatible one accepts an empty one by design, so only
+  the former can fail this check.
 - **Resolves the font**, honouring the explicit setting and otherwise probing the
   usual CJK locations for the first that exists.
 

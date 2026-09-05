@@ -20,8 +20,12 @@
 #
 #  The client cases cover the construction of the SDK client, including
 #  the error raised when the openai package is absent: it names the
-#  install command, since that package is deliberately left out of
-#  requirements.txt.
+#  install command and the current backend name, since that package is
+#  deliberately left out of requirements.txt. A missing, empty or
+#  whitespace-only base URL is refused here too, before the SDK client
+#  is ever constructed, so that this boundary does not depend on
+#  cli.py's own preflight check to keep the SDK from picking its own
+#  default endpoint.
 #
 #  No request is made. The openai package is replaced in sys.modules, so
 #  the suite needs neither the dependency nor a network.
@@ -54,6 +58,9 @@
 #    - Pass the base URL and the retry budget to the SDK.
 #    - Omit the retry budget when it is not given.
 #    - Name the install command when the openai package is missing.
+#    - Name the current backend when the openai package is missing.
+#    - Reject a missing, an empty and a whitespace-only base URL.
+#    - Build no SDK client when the base URL is missing.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -220,10 +227,12 @@ class ClientTest(unittest.TestCase):
             max_retries=0)
 
     def test_omits_retries_when_not_given(self):
-        constructor = self.build(api_key="key", base_url=None,
+        constructor = self.build(api_key="key",
+                                 base_url="https://api.example.test/v1",
                                  max_retries=None)
 
-        constructor.assert_called_once_with(api_key="key")
+        constructor.assert_called_once_with(
+            api_key="key", base_url="https://api.example.test/v1")
 
     def test_missing_package_names_the_install_command(self):
         real_import = __import__
@@ -236,6 +245,49 @@ class ClientTest(unittest.TestCase):
         with mock.patch("builtins.__import__", side_effect=fail):
             with self.assertRaisesRegex(RuntimeError, "pip install openai"):
                 openai_compat._build_client("key", None, None)
+
+    def test_missing_package_names_the_current_backend(self):
+        real_import = __import__
+
+        def fail(name, *args, **kwargs):
+            if name == "openai":
+                raise ImportError("no openai")
+            return real_import(name, *args, **kwargs)
+
+        with mock.patch("builtins.__import__", side_effect=fail):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "SUMMARIZER_BACKEND=openai-compatible"):
+                openai_compat._build_client("key", None, None)
+
+    def test_rejects_a_missing_base_url(self):
+        with mock.patch.dict(sys.modules,
+                             {"openai": types.SimpleNamespace(
+                                 OpenAI=mock.Mock())}):
+            with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+                openai_compat._build_client("key", None, None)
+
+    def test_rejects_an_empty_base_url(self):
+        with mock.patch.dict(sys.modules,
+                             {"openai": types.SimpleNamespace(
+                                 OpenAI=mock.Mock())}):
+            with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+                openai_compat._build_client("key", "", None)
+
+    def test_rejects_a_whitespace_only_base_url(self):
+        with mock.patch.dict(sys.modules,
+                             {"openai": types.SimpleNamespace(
+                                 OpenAI=mock.Mock())}):
+            with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+                openai_compat._build_client("key", "   ", None)
+
+    def test_does_not_construct_a_client_on_a_missing_base_url(self):
+        constructor = mock.Mock()
+        module = types.SimpleNamespace(OpenAI=constructor)
+        with mock.patch.dict(sys.modules, {"openai": module}):
+            with self.assertRaises(RuntimeError):
+                openai_compat._build_client("key", None, None)
+
+        constructor.assert_not_called()
 
 
 if __name__ == "__main__":
