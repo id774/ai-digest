@@ -183,14 +183,18 @@ class OpenAiClientTest(unittest.TestCase):
         constructor = mock.Mock(return_value=object())
         module = types.SimpleNamespace(OpenAI=constructor)
         with mock.patch.dict(sys.modules, {"openai": module}):
-            openai_compat._build_client("key", None, None, timeout)
+            openai_compat._build_client(
+                "key", "https://api.example.test/v1", None, timeout)
         return constructor
 
     def test_timeout_reaches_the_sdk(self):
-        self.build(180).assert_called_once_with(api_key="key", timeout=180)
+        self.build(180).assert_called_once_with(
+            api_key="key", base_url="https://api.example.test/v1",
+            timeout=180)
 
     def test_none_keeps_the_sdk_default(self):
-        self.build(None).assert_called_once_with(api_key="key")
+        self.build(None).assert_called_once_with(
+            api_key="key", base_url="https://api.example.test/v1")
 
     def test_summarize_passes_the_timeout_through(self):
         client = mock.Mock()

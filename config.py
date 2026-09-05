@@ -64,10 +64,11 @@
 #      with SUMMARIZER_API_KEY.
 #  - SUMMARIZER_BASE_URL
 #      Base URL of the endpoint. Optional on the anthropic-compatible
-#      backend, where an empty value means Anthropic itself. The
-#      openai-compatible backend expects the version path to be part of
-#      it, e.g. https://api.ai.sakura.ad.jp/v1, while the
-#      anthropic-compatible one does not.
+#      backend, where an empty value means Anthropic itself. Required
+#      on the openai-compatible backend, which expects the version path
+#      to be part of it, e.g. https://api.ai.sakura.ad.jp/v1: an empty
+#      value is refused rather than left to the OpenAI SDK's own
+#      default endpoint.
 #  - SUMMARIZER_MODEL
 #      Model asked for on the endpoint. Defaults to a Claude Sonnet
 #      model on the anthropic-compatible backend; required on the
@@ -131,6 +132,10 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v1.5 2026-09-05
+#       Add validate_summarizer_base_url(), refusing an openai-compatible
+#       backend with SUMMARIZER_BASE_URL missing or blank instead of
+#       falling back on the OpenAI SDK's own default endpoint.
 #  v1.4 2026-08-05
 #       Name the endpoint settings after the summarization stage rather
 #       than after a vendor: the ANTHROPIC_* and OPENAI_* variables
@@ -417,6 +422,24 @@ class Config:
             raise RuntimeError(
                 "SUMMARIZER_MODEL is required by "
                 "SUMMARIZER_BACKEND={0}.".format(self.summarizer_backend)
+            )
+
+    def validate_summarizer_base_url(self) -> None:
+        """
+        Raise when the openai-compatible backend has no endpoint target.
+
+        An empty SUMMARIZER_BASE_URL used to be passed on to the OpenAI
+        SDK unset, which let the SDK's own default endpoint decide where
+        the request went; ai-digest must choose that destination itself.
+        The anthropic-compatible backend is not checked here: an empty
+        value there means Anthropic itself, by design.
+        """
+        if (self.summarizer_backend == "openai-compatible"
+                and not (self.summarizer_base_url or "").strip()):
+            raise RuntimeError(
+                "SUMMARIZER_BASE_URL is required by "
+                "SUMMARIZER_BACKEND=openai-compatible; the OpenAI SDK's "
+                "own default endpoint is not used in its place."
             )
 
     def validate_retry_budget(self) -> None:

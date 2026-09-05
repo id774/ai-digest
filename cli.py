@@ -113,6 +113,9 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.6 2026-09-05
+#       Refuse a missing or blank SUMMARIZER_BASE_URL on the
+#       openai-compatible backend before collecting anything.
 #  v1.5 2026-08-05
 #       Name the endpoint options and settings after the summarization
 #       stage instead of a vendor: --anthropic-* and --openai-* become
@@ -375,6 +378,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         if use_api:
             config.validate_summarizer_auth()
             config.validate_summarizer_model()
+            config.validate_summarizer_base_url()
             config.validate_retry_budget()
             config.validate_output_budget()
             config.validate_summarizer_timeout()
@@ -573,9 +577,10 @@ def add_summarizer_options(parser: argparse.ArgumentParser) -> None:
                         help="model asked for on the endpoint "
                              "(SUMMARIZER_MODEL)")
     parser.add_argument("--summarizer-base-url",
-                        help="base URL of the endpoint; the "
-                             "openai-compatible backend expects the "
-                             "version path in it (SUMMARIZER_BASE_URL)")
+                        help="base URL of the endpoint; required by "
+                             "the openai-compatible backend, which "
+                             "expects the version path in it "
+                             "(SUMMARIZER_BASE_URL)")
     parser.add_argument("--summarizer-max-retries", type=non_negative_int,
                         help="retries the SDK may spend on one request "
                              "(SUMMARIZER_MAX_RETRIES)")

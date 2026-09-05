@@ -142,7 +142,7 @@ the viewer. See [Overriding a setting for one run](#overriding-a-setting-for-one
 | `SUMMARIZER_BACKEND` | `anthropic-compatible` | Wire protocol of the summarization endpoint. `anthropic-compatible` speaks the Anthropic Messages API. `openai-compatible` speaks the OpenAI Chat Completions API; see [OpenAI-compatible endpoints](#openai-compatible-endpoints). `plain` builds topics mechanically, with no credential and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). Any other value stops `cli.py run` before it collects anything, rather than falling back on the default. |
 | `SUMMARIZER_API_KEY` | none | API key of the endpoint. Mutually exclusive with `SUMMARIZER_AUTH_TOKEN`. |
 | `SUMMARIZER_AUTH_TOKEN` | none | Bearer token of the endpoint. Mutually exclusive with `SUMMARIZER_API_KEY`. |
-| `SUMMARIZER_BASE_URL` | none | Base URL of the endpoint. Empty means Anthropic itself. The `openai-compatible` backend expects the version path to be part of it, the `anthropic-compatible` one does not. |
+| `SUMMARIZER_BASE_URL` | none | Base URL of the endpoint. Optional on `anthropic-compatible`, where empty means Anthropic itself. Required on `openai-compatible`, whose base URL must include the version path; `cli.py run` refuses to start rather than let the OpenAI SDK fall back on its own default endpoint. |
 | `SUMMARIZER_MODEL` | `claude-sonnet-4-5` on `anthropic-compatible` | Model asked for on the endpoint. Required by `SUMMARIZER_BACKEND=openai-compatible`, whose model names are the endpoint's own. |
 | `SUMMARIZER_MAX_RETRIES` | `2` | Retries the SDK may spend on one request, on either API backend. `0` spends exactly one request per run. |
 | `SUMMARIZER_THINKING_MODE` | `default` | Read by `anthropic-compatible`. `default` sends no thinking parameter and keeps the provider default. `disabled` sends `thinking.type=disabled`, for a model that would otherwise think until the output budget is gone. |
@@ -232,7 +232,11 @@ SUMMARIZER_MODEL=<model-name>
 
 `SUMMARIZER_BASE_URL` carries the version path on this backend, which the
 `anthropic-compatible` one does not expect: switching between the two means
-rewriting that line as well as `SUMMARIZER_BACKEND`. This
+rewriting that line as well as `SUMMARIZER_BACKEND`. Unlike
+`anthropic-compatible`, an empty `SUMMARIZER_BASE_URL` is not accepted here:
+`cli.py run` refuses to start before collecting anything rather than let the
+OpenAI SDK fall back on its own default endpoint, so the request destination
+is always one this configuration chose explicitly. This
 backend needs the `openai` package, which is deliberately absent from
 `requirements.txt` so that the default installation does not include an API client used only by
 this optional backend:
