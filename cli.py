@@ -11,12 +11,14 @@
 #        -> deduplicate by title similarity
 #        -> edit into topics with the configured topic-editing backend
 #        -> resolve one image per topic (scrape, else generate)
-#        -> store report.json and the images under DATA_DIR
-#        -> render the report HTML and the composite summary PNG
+#        -> build report.json, the images and the HTML in a staging
+#           directory, then publish it as the report under DATA_DIR
 #
 #  It is meant to be started once a day from cron, and is independent
 #  from the Flask viewer: the viewer only reads what this script wrote,
-#  so a failed run never takes the site down.
+#  so a failed run never takes the site down, and a run that fails
+#  while building or publishing a report leaves the previously stored
+#  report, if any, exactly as it was.
 #
 #  The 'demo' command stores a report built from the sample bundled in
 #  ai_digest/demo, skipping collection and summarization, so that the
@@ -113,6 +115,9 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.7 2026-09-06
+#       Stage 'run', 'demo' and 'render' reports and publish them only
+#       once complete, instead of writing the date directory in place.
 #  v1.6 2026-09-05
 #       Refuse a missing or blank SUMMARIZER_BASE_URL on the
 #       openai-compatible backend before collecting anything.
@@ -163,8 +168,9 @@ from ai_digest.collectors import arxiv, news_rss
 from ai_digest.dedup import deduplicate
 from ai_digest.images import fallback, resolver
 from ai_digest.render import build, compose_image
-from ai_digest.storage import (ensure_report_dir, list_dates, load_report,
-                               save_report)
+from ai_digest.storage import (ReportPublicationError, copy_existing_report,
+                               list_dates, load_report, publication_workspace,
+                               report_dir, write_report_json)
 from config import (SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                     SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
                     Config, detect_font_path, load_config, split_csv)
@@ -362,6 +368,37 @@ def _model_label(config: Config, use_api: bool) -> str:
     return config.resolved_model if use_api else "plain"
 
 
+def build_and_publish_report(config: Config, date: str, topics: List[Topic],
+                             stats: Dict[str, Any], scrape: bool) -> bool:
+    """
+    Complete one report in a staging directory, then publish it.
+
+    Every artifact is generated in the staging directory a publication
+    workspace provides, and <DATA_DIR>/<date> is replaced by it as a
+    whole only once every one of them exists; a run that fails partway
+    through never leaves a half-written or mixed-version report where a
+    complete one used to be, or should now be.
+
+    Returns:
+        True once the report is published. False when generation or
+        publication failed; either failure is logged before returning.
+    """
+    try:
+        with publication_workspace(config.data_dir, date) as staging_dir:
+            attach_images(topics, staging_dir, config, scrape=scrape)
+            write_report_json(staging_dir, date, topics, stats)
+            compose_image.compose(date, topics, staging_dir, config.font_path,
+                                  stats["lookback_hours"])
+            build.write_report_html(staging_dir, date, topics, stats)
+    except ReportPublicationError as error:
+        logger.error("publishing the report for %s failed: %s", date, error)
+        return False
+    except Exception as error:  # generation can fail in more ways than one
+        logger.error("building the report for %s failed: %s", date, error)
+        return False
+    return True
+
+
 def command_run(args: argparse.Namespace, config: Config) -> int:
     """ Execute the whole pipeline for one date. """
     date = args.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -444,9 +481,6 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         logger.error("the model returned no usable topic")
         return 1
 
-    report_dir = ensure_report_dir(config.data_dir, date)
-    attach_images(topics, report_dir, config, scrape=not args.no_images)
-
     stats = {
         "collected": len(collected),
         "deduplicated": len(unique),
@@ -455,11 +489,11 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
         "lookback_hours": config.lookback_hours,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
-    save_report(config.data_dir, date, topics, stats)
-    compose_image.compose(date, topics, report_dir, config.font_path,
-                          config.lookback_hours)
-    build.write_report_html(report_dir, date, topics, stats)
-    logger.info("report for %s written to %s", date, report_dir)
+    if not build_and_publish_report(config, date, topics, stats,
+                                    scrape=not args.no_images):
+        return 1
+    logger.info("report for %s written to %s", date,
+               report_dir(config.data_dir, date))
     return 0
 
 
@@ -476,10 +510,6 @@ def command_demo(args: argparse.Namespace, config: Config) -> int:
         return 1
 
     date = args.date or sample_date
-    report_dir = ensure_report_dir(config.data_dir, date)
-    # Scraping stays off, so that a demo run touches nothing but disk.
-    attach_images(topics, report_dir, config, scrape=False)
-
     stats = {
         "collected": collected,
         "deduplicated": collected,
@@ -488,11 +518,11 @@ def command_demo(args: argparse.Namespace, config: Config) -> int:
         "lookback_hours": config.lookback_hours,
         "generated_at": "{0}T00:00:00+00:00".format(date),
     }
-    save_report(config.data_dir, date, topics, stats)
-    compose_image.compose(date, topics, report_dir, config.font_path,
-                          config.lookback_hours)
-    build.write_report_html(report_dir, date, topics, stats)
-    logger.info("demo report for %s written to %s", date, report_dir)
+    # Scraping stays off, so that a demo run touches nothing but disk.
+    if not build_and_publish_report(config, date, topics, stats, scrape=False):
+        return 1
+    logger.info("demo report for %s written to %s", date,
+               report_dir(config.data_dir, date))
     return 0
 
 
@@ -505,17 +535,34 @@ def command_render(args: argparse.Namespace, config: Config) -> int:
     instead would make a report rebuilt after LOOKBACK_HOURS changed
     describe a period it was never built from. Reports stored before
     the window was recorded fall back on the configured one.
+
+    The authoritative report.json and the topic illustrations are
+    copied into a staging directory and only the derived artifacts are
+    regenerated there, so a failure partway through leaves the stored
+    report exactly as it was; only a complete rebuild replaces it.
     """
     report = load_report(config.data_dir, args.date)
     if report is None:
         logger.error("no stored report for %s", args.date)
         return 1
     stats = report["stats"]
-    report_dir = ensure_report_dir(config.data_dir, args.date)
-    compose_image.compose(args.date, report["topics"], report_dir,
-                          config.font_path,
-                          stats.get("lookback_hours", config.lookback_hours))
-    build.write_report_html(report_dir, args.date, report["topics"], stats)
+    try:
+        with publication_workspace(config.data_dir, args.date) as staging_dir:
+            copy_existing_report(config.data_dir, args.date, staging_dir)
+            compose_image.compose(args.date, report["topics"], staging_dir,
+                                  config.font_path,
+                                  stats.get("lookback_hours",
+                                           config.lookback_hours))
+            build.write_report_html(staging_dir, args.date, report["topics"],
+                                    stats)
+    except ReportPublicationError as error:
+        logger.error("publishing the re-rendered report for %s failed: %s",
+                     args.date, error)
+        return 1
+    except Exception as error:  # regeneration can fail in more ways than one
+        logger.error("re-rendering the report for %s failed: %s",
+                     args.date, error)
+        return 1
     return 0
 
 

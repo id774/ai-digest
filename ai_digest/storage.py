@@ -17,6 +17,15 @@
 #  validates the date strings it receives, because they arrive from URL
 #  path segments in the Flask viewer and must never escape DATA_DIR.
 #
+#  A report is built in a staging directory beside the archive dates,
+#  through publication_workspace(), and is only made visible under
+#  <DATA_DIR>/<date> once every artifact it needs is written. Publishing
+#  a date that already holds a complete report moves the previous tree
+#  aside first, so that a failure while putting the new one in place can
+#  restore it; the previous tree is discarded only once the new one has
+#  taken its place. Neither directory is named like a date, so neither
+#  is ever listed or served as a report of its own.
+#
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
@@ -27,6 +36,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.4 2026-09-06
+#       Add publication_workspace(), staging and publishing a report as
+#       a whole instead of writing the final date directory in place.
 #  v1.3 2026-08-19
 #       Reject a report whose stored date does not match its directory.
 #  v1.2 2026-08-11
@@ -40,12 +52,18 @@
 #
 ########################################################################
 
+import contextlib
 import json
+import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+import shutil
+import tempfile
+from typing import Any, Dict, Iterator, List, Optional
 
 from ai_digest import Topic
+
+logger = logging.getLogger(__name__)
 
 # Report directories are named after their date and nothing else. The
 # pattern is anchored with \A and \Z rather than ^ and $, because $ also
@@ -55,6 +73,18 @@ DATE_PATTERN = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 
 REPORT_FILENAME = "report.json"
 SUMMARY_FILENAME = "summary.png"
+
+# Staging and backup directories live beside the date directories, under
+# DATA_DIR, so that publishing them is a same-filesystem rename rather
+# than a cross-filesystem copy. Both prefixes start with a character
+# DATE_PATTERN never matches, and neither is a plain YYYY-MM-DD name, so
+# list_dates() and every date-validated lookup pass over them.
+STAGING_PREFIX = ".ai-digest-staging-"
+BACKUP_PREFIX = ".ai-digest-backup-"
+
+
+class ReportPublicationError(RuntimeError):
+    """ Raised when a staged report cannot be published as a whole. """
 
 
 def is_valid_date(date: str) -> bool:
@@ -82,10 +112,39 @@ def ensure_report_dir(data_dir: str, date: str) -> str:
     return path
 
 
+def write_report_json(directory: str, date: str, topics: List[Topic],
+                      stats: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Write report.json directly into an existing directory.
+
+    Unlike save_report(), the caller supplies the directory itself,
+    which is what lets a report be built in a staging directory instead
+    of the final archive location.
+
+    Args:
+        directory: Directory report.json is written into.
+        date: Report date in YYYY-MM-DD form, stored inside the file.
+        topics: Topics to store, in display order.
+        stats: Optional counters describing the run, stored as is.
+
+    Returns:
+        The path of the written JSON file.
+    """
+    path = os.path.join(directory, REPORT_FILENAME)
+    payload = {
+        "date": date,
+        "topics": [topic.to_dict() for topic in topics],
+        "stats": stats or {},
+    }
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+    return path
+
+
 def save_report(data_dir: str, date: str, topics: List[Topic],
                 stats: Optional[Dict[str, Any]] = None) -> str:
     """
-    Write report.json for one day.
+    Write report.json for one day directly under <data_dir>/<date>.
 
     Args:
         data_dir: Root directory of the archive.
@@ -96,15 +155,141 @@ def save_report(data_dir: str, date: str, topics: List[Topic],
     Returns:
         The path of the written JSON file.
     """
-    path = os.path.join(ensure_report_dir(data_dir, date), REPORT_FILENAME)
-    payload = {
-        "date": date,
-        "topics": [topic.to_dict() for topic in topics],
-        "stats": stats or {},
-    }
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2)
-    return path
+    return write_report_json(ensure_report_dir(data_dir, date), date, topics,
+                             stats)
+
+
+def _remove_best_effort(path: str) -> None:
+    """ Delete a staging or backup directory, logging rather than raising. """
+    try:
+        shutil.rmtree(path)
+    except OSError as error:
+        logger.warning("could not remove %s: %s", path, error)
+
+
+def _publish(staging_dir: str, final_dir: str, date: str) -> None:
+    """
+    Replace final_dir with the complete staging_dir, as a whole.
+
+    A date that is not yet published is a plain rename. One that is
+    already published is moved aside under a backup name first, so that
+    a failure renaming the new tree into place can restore it; the old
+    tree is discarded only once the new one has taken its place.
+
+    Raises:
+        ReportPublicationError: The new report could not be published.
+            When the previous report existed, the exception says whether
+            it was restored.
+    """
+    if not os.path.exists(final_dir):
+        try:
+            os.rename(staging_dir, final_dir)
+        except OSError as error:
+            _remove_best_effort(staging_dir)
+            raise ReportPublicationError(
+                "could not publish the new report for {0}: {1}".format(
+                    date, error)) from error
+        return
+
+    data_dir = os.path.dirname(final_dir)
+    backup_dir = os.path.join(data_dir, "{0}{1}-{2}".format(
+        BACKUP_PREFIX, date, os.path.basename(staging_dir)))
+    try:
+        os.rename(final_dir, backup_dir)
+    except OSError as error:
+        _remove_best_effort(staging_dir)
+        raise ReportPublicationError(
+            "could not move the existing report for {0} aside: {1}".format(
+                date, error)) from error
+
+    try:
+        os.rename(staging_dir, final_dir)
+    except OSError as error:
+        try:
+            os.rename(backup_dir, final_dir)
+        except OSError as rollback_error:
+            raise ReportPublicationError(
+                "publishing the report for {0} failed ({1}), and the "
+                "previous report could not be restored ({2}); it is kept "
+                "at {3}".format(date, error, rollback_error,
+                               backup_dir)) from rollback_error
+        _remove_best_effort(staging_dir)
+        raise ReportPublicationError(
+            "publishing the report for {0} failed and the previous report "
+            "was restored: {1}".format(date, error)) from error
+    else:
+        _remove_best_effort(backup_dir)
+
+
+@contextlib.contextmanager
+def publication_workspace(data_dir: str, date: str) -> Iterator[str]:
+    """
+    Yield an empty staging directory to build one report in.
+
+    The directory is created beside the date directories, on the same
+    file system as DATA_DIR, so that publishing it is a rename rather
+    than a cross-filesystem copy. Its name never matches DATE_PATTERN,
+    so it is invisible to list_dates() and to every date-validated
+    lookup even while the block below is still running.
+
+    On a clean exit of the block, the staging directory replaces
+    <data_dir>/<date> as a whole: a date not yet published appears for
+    the first time, and one that already holds a complete report is
+    replaced by it, with no artifact of the previous report left
+    standing. Raising out of the block leaves an existing final report
+    exactly as it was and removes the staging directory on a best
+    effort basis; that cleanup failure never replaces the original
+    error.
+
+    Args:
+        data_dir: Root directory of the archive.
+        date: Report date in YYYY-MM-DD form.
+
+    Yields:
+        The path of the staging directory to build the report in.
+
+    Raises:
+        ValueError: The date is not in YYYY-MM-DD form.
+        ReportPublicationError: The complete staging directory could
+            not be published.
+    """
+    final_dir = report_dir(data_dir, date)
+    os.makedirs(data_dir, exist_ok=True)
+    staging_dir = tempfile.mkdtemp(prefix=STAGING_PREFIX, dir=data_dir)
+    try:
+        yield staging_dir
+    except Exception:
+        _remove_best_effort(staging_dir)
+        raise
+    else:
+        _publish(staging_dir, final_dir, date)
+
+
+def copy_existing_report(data_dir: str, date: str, staging_dir: str) -> None:
+    """
+    Copy a stored report's files into a staging directory.
+
+    Used by 're-render' to bring the authoritative report.json and the
+    topic illustrations of an already published report into a staging
+    directory, without ever reading from or writing to the final
+    directory while the derived artifacts are being rebuilt.
+
+    Args:
+        data_dir: Root directory of the archive.
+        date: Report date in YYYY-MM-DD form.
+        staging_dir: Existing, empty staging directory to copy into.
+
+    Raises:
+        ValueError: The date is not in YYYY-MM-DD form.
+    """
+    source_dir = report_dir(data_dir, date)
+    for name in os.listdir(source_dir):
+        source_path = os.path.join(source_dir, name)
+        dest_path = os.path.join(staging_dir, name)
+        if os.path.isdir(source_path):
+            shutil.copytree(source_path, dest_path)
+        else:
+            shutil.copy2(source_path, dest_path)
 
 
 def load_report(data_dir: str, date: str) -> Optional[Dict[str, Any]]:

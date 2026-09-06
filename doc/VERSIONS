@@ -5,6 +5,8 @@ v1.3 (Release Date: TBD)
 ------------------------
 - Require an explicit SUMMARIZER_BASE_URL for SUMMARIZER_BACKEND=openai-compatible,
   failing before anything is collected when it is missing or blank.
+- Build a report in a staging directory and publish it as a whole only once complete,
+  so a failed run, demo or render can no longer leave a half-written or stale report.
 
 v1.2.2 (2026-08-26)
 -------------------
