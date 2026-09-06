@@ -69,10 +69,11 @@ At minimum set one credential — `SUMMARIZER_API_KEY`, or
 Set `SUMMARIZER_BACKEND=plain` instead to run without any credential at all, at
 the cost of translation and clustering. A host upgraded from an earlier release
 must unset the `ANTHROPIC_*` and `OPENAI_*` variables wherever they were
-exported, including this unit's `EnvironmentFile`: the batch refuses to start
-while one of them is present and names its replacement. Every setting is listed in
-[`.env.example`](../.env.example) and under
-[Configuration](../README.md#configuration).
+exported: `cli.py run` refuses to start while one of them is present and names
+its replacement. This `.env` is the batch's configuration source alone; the
+viewer never reads it, so a stale legacy name here stops only the batch, never
+the site. Every setting is listed in [`.env.example`](../.env.example) and
+under [Configuration](../README.md#configuration).
 
 `chmod 600` is part of the step rather than an afterthought. The file holds a
 credential and is read by one service user. `.env` is ignored by Git and must
@@ -103,7 +104,10 @@ the success condition. See [`DEMO.md`](DEMO.md).
 ## Start the viewer
 
 Review [`deploy/ai-digest.service`](../deploy/ai-digest.service) before copying
-it. Its user, paths and port must match the installation and `.env`.
+it. Its user and paths must match the installation. It does not read `.env`:
+`DATA_DIR` and `PORT` are set directly in the unit's `Environment=` lines, and
+`ExecStart` binds gunicorn to that same `PORT` rather than a separate literal,
+so adjust the port in one place. Edit both if the default 3000 is taken.
 
 ```sh
 sudo cp deploy/ai-digest.service /etc/systemd/system/
@@ -122,10 +126,11 @@ Read startup and request errors with:
 sudo journalctl -u ai-digest --since today
 ```
 
-The viewer needs no credential. It is worth confirming that: a viewer that
-cannot reach the API cannot spend one, and an `.env` readable only by the batch
-would be the stricter arrangement on a host where the two run as different
-users.
+The viewer needs no credential, and its unit is not given one: it resolves
+only `DATA_DIR` and `PORT`, never the batch's `.env`, so a credential the
+batch holds is not part of the viewer's process environment even when the two
+run under the same account. A viewer that cannot reach the API cannot spend
+one.
 
 ## Schedule the batch
 
@@ -292,14 +297,16 @@ sudo -u ai-digest .venv/bin/pip install -r requirements.txt
 sudo systemctl restart ai-digest
 ```
 
-Changing `.env` requires a restart of the viewer for the settings it reads
-(`DATA_DIR`, `PORT`); the batch reads the file on every run. Changing the unit
-requires `systemctl daemon-reload`. Changing the nginx block requires
-`nginx -t` and a reload.
+The viewer does not read `.env`, so changing it never requires restarting the
+viewer; the batch reads the file on every run, so it needs no restart step of
+its own either. Changing `DATA_DIR` or `PORT` in the unit's `Environment=`
+lines requires `systemctl daemon-reload` followed by a restart. Changing the
+nginx block requires `nginx -t` and a reload.
 
-**Rotate the API key** by replacing it in `.env` and restarting. The viewer does
-not use it, so the next batch run is the first thing that exercises the new one;
-run `cli.py run` by hand to confirm it rather than waiting for cron. Never put a
+**Rotate the API key** by replacing it in `.env`. The viewer does not use it
+and reads none of `.env`, so nothing needs restarting on its account; the next
+batch run is the first thing that exercises the new key, so run `cli.py run`
+by hand to confirm it rather than waiting for cron. Never put a
 key on a command line: `ps` is readable by every user of the host, which is why
 no credential has a command line option.
 

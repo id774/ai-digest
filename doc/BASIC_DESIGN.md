@@ -31,9 +31,10 @@ The following decisions shape everything below.
   facts.** Model-backed answers identify collected input items, and the real
   citation URLs are restored from collected data. The `plain` backend keeps the
   collected title and URL directly and does not ask a model for either one.
-- **Settings are resolved once, from the environment, in `config.py`.** No module
-  below reads `os.environ`, and every batch setting also has a command line
-  option.
+- **Settings are resolved in `config.py`, and each execution path resolves only
+  what it uses.** No module below reads `os.environ`, every batch setting also
+  has a command line option, and a setting outside a path's own scope cannot
+  stop it.
 - **Failure degrades where the material is optional and stops where the
   configuration is wrong.** A source, a scrape and an image each fall back; a
   setting the code has no branch for ends the run before any work is spent.
@@ -74,13 +75,16 @@ Mapped onto processes:
                     +------>  one dir per  <---+
                               day
                             config.py
-              every setting, resolved once, from the
-                environment and an optional .env
+                one loader per execution path, each
+                resolving only the settings it uses
 ```
 
-Both entry points call the same settings loader and nothing else configures
-either. The batch is the only writer of `DATA_DIR`, and the viewer opens no file
-whose path it did not get from `ai_digest/storage.py`.
+Both entry points resolve their configuration through `config.py`, and nothing
+else configures either. Each asks for its own scope — the viewer for
+`DATA_DIR` and `PORT`, a read-only subcommand for what it draws with, `run`
+for the full batch scope — so a setting outside that scope cannot stop it. The
+batch is the only writer of `DATA_DIR`, and the viewer opens no file whose
+path it did not get from `ai_digest/storage.py`.
 
 ## 4. Repository layout
 
@@ -556,25 +560,58 @@ distinguished for it.
 
 ## 16. Settings
 
-Resolved once from the environment, with an optional `.env` read underneath it,
-so that **an exported variable takes precedence over the file**. Command line
+Resolved from the environment, with an optional `.env` read underneath it, so
+that **an exported variable takes precedence over the file**. Command line
 options sit above both and apply to one invocation:
 
 ```text
    command line option  >  exported environment variable  >  .env  >  default
 ```
 
+### Execution scope
+
+`config.py` resolves configuration per execution path rather than all at once:
+a scope names the settings one path is allowed to depend on, and a loader
+resolves exactly that scope and nothing past it.
+
+| Loader | Used by | Resolves |
+|---|---|---|
+| `load_viewer_config()` | `app.py` | `DATA_DIR`, `PORT` |
+| `load_list_config()` | `cli.py list` | `DATA_DIR` |
+| `load_render_config()` | `cli.py render` | `DATA_DIR`, `AI_DIGEST_FONT_PATH`, `LOOKBACK_HOURS` |
+| `load_demo_config()` | `cli.py demo` | `DATA_DIR`, `AI_DIGEST_FONT_PATH`, `MAX_TOPICS`, `LOOKBACK_HOURS` |
+| `load_run_config()` | `cli.py run` | every batch and endpoint setting except `PORT` |
+
+`LOOKBACK_HOURS` belongs to `render` as well as `run`, because it is what a
+stored report predating that statistic falls back on when its window is
+redrawn. `PORT` belongs to the viewer alone: `run` never resolves it, so an
+invalid one cannot stop a batch run, exactly as a malformed batch setting
+cannot stop the viewer. `load_config()`, which resolves every setting `PORT`
+included, still exists for compatibility and for a test exercising a setting
+on its own, but no execution path calls it; `cli.py` calls the loader its
+subcommand registered, and `app.py` calls `load_viewer_config()` directly.
+
+Every scoped loader reads `.env` through `dotenv_values()`, which parses the
+file into a plain dictionary instead of exporting each line into
+`os.environ` the way `load_dotenv()` does. A lookup then checks the exported
+environment first and that dictionary second, which keeps the precedence
+chain above intact while it also keeps a setting the running scope never
+asked for — a summarizer credential, most pointedly — out of the process
+environment of a process that has no business holding it, the viewer above
+all.
+
 The settings module performs no network access and touches no file beyond
 `.env`, so it is safe to import anywhere. Beyond holding values it does four
 things.
 
-- **Refuses superseded names.** A variable from before the `SUMMARIZER_*` rename
-  is refused with its replacement named, and *presence* is refused rather than
-  value — an exported but empty one still says the host was set up for the old
-  names. The check runs in the loader, so it stops the viewer as well as the
-  batch: a host part way through a rename is exactly the one where an old name
-  still decides something, and a viewer that kept serving would hide that.
-  Superseded backend values are answered the same way.
+- **Refuses superseded names, within the scope that resolves them.** A
+  variable from before the `SUMMARIZER_*` rename is refused with its
+  replacement named, and *presence* is refused rather than value — an
+  exported but empty one still says the host was set up for the old names.
+  These are endpoint settings, so only `load_run_config()` checks for them:
+  a legacy name left over from before the rename must not stop the viewer or
+  an offline subcommand that never reads the setting it replaced. Superseded
+  backend values are answered the same way.
 - **Reads every numeric setting strictly, in the loader itself.** An unset or
   blank value uses the setting's default; an explicit value is parsed as a
   whole number and checked against the setting's minimum before `Config` is
@@ -582,7 +619,8 @@ things.
   the load instead of being silently replaced by the default. The command
   line option of the same setting enforces the same minimum, so a value is
   valid or invalid the same way whichever route set it; only the exit code
-  differs, `2` from the parser against `1` from a failed load.
+  differs, `2` from the parser against `1` from a failed load. This still
+  only reaches a setting the running scope actually resolves.
 - **Validates by concern, on demand.** Backend, credential, model, endpoint
   target, retry budget, output budget, timeout and protocol options are
   separate checks, and the batch calls the ones the selected backend needs
@@ -673,9 +711,11 @@ Four measures, each in one place so that none can be half applied.
   before it names a directory.
 
 The credential is needed by the batch alone and is read from the environment or
-`.env` only, never from an option. The application provides no authentication of
-its own; restricting who may read the viewer belongs to the reverse proxy, which
-is where the deployment examples put it.
+`.env` only, never from an option. `load_viewer_config()` never resolves it, so
+the deployed viewer unit does not source the batch's `.env` at all (see
+Execution scope in section 16, and Deployment shape below). The application
+provides no authentication of its own; restricting who may read the viewer
+belongs to the reverse proxy, which is where the deployment examples put it.
 
 ## 20. Deployment shape
 
@@ -696,7 +736,12 @@ front for TLS and access control, a persistent `DATA_DIR`, and log rotation.
 a crontab — and nothing else.
 
 **The two share nothing but `DATA_DIR`**, which is what keeps yesterday's report
-on the site while a batch fails.
+on the site while a batch fails. The example unit, `deploy/ai-digest.service`,
+sets `DATA_DIR` and `PORT` directly rather than sourcing the batch's `.env`, so
+the credential it holds is never part of the viewer's environment; `ExecStart`
+reads the port back from that same declaration instead of a second, separately
+maintained literal. The batch, run from cron, still reads `.env` in the
+repository root as its own configuration source.
 
 ### Backup
 
@@ -712,13 +757,13 @@ every test stubs the network and the API clients: no outbound access, no
 credential, no `.env`, and nothing under the archive touched.
 
 The modules map onto this design one for one — settings and backend validation,
-the command line overrides, collection and partial failure, persistence and its
-refusals, report publication and its rollback on a same-date failure, link
-schemes, each of the three backends, the protocol options and the fallback
-chain, the output budget, the request timeout, scraping, the card's line
-breaking, the summary image legend, the window a rebuild announces, and the
-sample. A passing suite says nothing about the sources or the endpoint being
-reachable.
+the command line overrides, execution scope isolation, collection and partial
+failure, persistence and its refusals, report publication and its rollback on
+a same-date failure, link schemes, each of the three backends, the protocol
+options and the fallback chain, the output budget, the request timeout,
+scraping, the card's line breaking, the summary image legend, the window a
+rebuild announces, and the sample. A passing suite says nothing about the
+sources or the endpoint being reachable.
 
 ## 22. Mapping to the requirements
 
@@ -739,7 +784,7 @@ reachable.
 | §18 browsing | the viewer, reading stored data only |
 | §19 failure | the isolation table and the exit codes in §17 |
 | §20 records | the statistics block of `report.json` |
-| §22 configuration | the precedence chain and the two budgets in §16 |
-| §23 security | the four measures in §19 |
+| §22 configuration | the precedence chain, the execution scope table and the two budgets in §16 |
+| §23 security | the four measures in §19, and the viewer's configuration scope in §16 |
 | §24 operation | the deployment shape and the backup unit in §20 |
 | §25 tests | §21, offline by construction |

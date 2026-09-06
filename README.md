@@ -26,7 +26,7 @@ result as a browsable HTML report together with a single composite PNG image.
 API-backed backends can translate and edit the topics in Japanese; `plain`
 mode remains mechanical and needs no credential.
 
-The batch pipeline and the web viewer are separate processes. `cli.py` performs the daily collection and generation, writes everything under `data/reports/<date>/`, and exits. `app.py` is a read only Flask application that serves what the batch already produced, so a failed or slow run never takes the site down and the web process needs no API key.
+The batch pipeline and the web viewer are separate processes. `cli.py` performs the daily collection and generation, writes everything under `data/reports/<date>/`, and exits. `app.py` is a read only Flask application that serves what the batch already produced, so a failed or slow run never takes the site down and the web process needs no API key. The two also resolve their configuration independently: the viewer reads only `DATA_DIR` and `PORT`, `cli.py list` reads only `DATA_DIR`, and a malformed or missing batch setting can never stop either one; see [Configuration](#configuration).
 
 Every topic carries an illustration. The application first tries to obtain a real image from the source, an `ar5iv` figure for arXiv papers or the Open Graph image for news articles, and draws a card locally with Pillow when that fails. Scraping is best effort by design; a publisher changing its markup degrades the look of the report, never its availability.
 
@@ -136,6 +136,8 @@ The first command prints the version, the second prints nothing on a fresh insta
 
 All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Settings used by the batch also have command-line overrides on `cli.py` except `SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN`; `PORT` belongs to
 the viewer. See [Overriding a setting for one run](#overriding-a-setting-for-one-run).
+
+Each execution path resolves only the settings it actually uses: `cli.py run` reads the full table below except `PORT`; `cli.py list` reads only `DATA_DIR`; `cli.py render` and `cli.py demo` add `AI_DIGEST_FONT_PATH`, `LOOKBACK_HOURS` and, for `demo`, `MAX_TOPICS`; the viewer reads only `DATA_DIR` and `PORT`. A setting outside that path's own scope being malformed, missing, or carrying a superseded name never stops it.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -585,8 +587,10 @@ A passing suite says nothing about the feeds or the API being reachable; those a
 
 The viewer runs under gunicorn and systemd; the batch runs from cron. The two
 share nothing but `DATA_DIR`, which is what keeps yesterday's report on the site
-while a batch fails. gunicorn listens on `127.0.0.1` only, and nginx provides
-HTTPS and access control.
+while a batch fails; the example unit sets the viewer's `DATA_DIR` and `PORT`
+directly rather than sourcing the batch's `.env`, so its credential is never
+part of the viewer's environment. gunicorn listens on `127.0.0.1` only, and
+nginx provides HTTPS and access control.
 
 [doc/DEPLOYMENT.md](doc/DEPLOYMENT.md) gives the complete Debian procedure:
 installation, TLS, reader restrictions, the API compatibility settings, the
@@ -675,7 +679,7 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 
 `tools/capture_screens.py` is a documentation helper. It is not imported by the application, and `playwright`, which only that script needs, is deliberately absent from `requirements.txt` so that neither the batch nor the viewer pulls in a browser.
 
-`app.py` imports nothing from `ai_digest.collectors` or `ai_digest.analyzer`. That is what keeps the viewer free of a credential and of outbound access: it cannot call an API because it does not carry the code that would.
+`app.py` imports nothing from `ai_digest.collectors` or `ai_digest.analyzer`. That is what keeps the viewer free of a credential and of outbound access: it cannot call an API because it does not carry the code that would. It also resolves its configuration through `config.py`'s `load_viewer_config()`, which reads only `DATA_DIR` and `PORT`, so a batch credential never becomes part of the viewer's configuration or its process environment either.
 
 ### Adding a collector
 
