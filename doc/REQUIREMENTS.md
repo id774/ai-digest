@@ -302,6 +302,9 @@ rather than being quietly read as its successor. The same holds for every
 numeric setting: the default is used only when it is unset or blank, and an
 explicit value that is not a whole number, or that falls outside the setting's
 range, is a configuration error rather than a silent fallback to the default.
+This strictness applies to a setting an execution path actually uses; a
+malformed or superseded value of a setting it does not use is not that path's
+concern, and does not stop it.
 
 ## 17. What is produced
 
@@ -397,6 +400,14 @@ viewer port, the archive directory, the sources, and the display limits.
 that a change can be tried without editing anything, and a run that overrode
 something says so in its log. Credentials are the exception in section 23.
 
+**Each execution path depends only on the settings it actually uses.** The
+viewer depends on the archive location and its own port; printing the stored
+dates depends on the archive location alone; rebuilding a stored report or the
+bundled sample depends on what they draw with; only the full collect-and-summarize
+run depends on the endpoint settings. A setting outside that dependency being
+malformed, missing, or carrying a superseded name must not stop an execution
+path that never reads it.
+
 Collector and scraper requests use a network-request limit, while an API-backed
 summarization request uses a longer summarization limit, because that wait covers
 the writing as well as the network. Retries multiply the summarization limit,
@@ -407,7 +418,10 @@ indefinitely for an API.**
 ## 23. Security
 
 - **Only the batch needs the endpoint credential.** The viewer is built so that
-  it does not need one and cannot use one.
+  it does not need one and cannot use one, and its configuration dependency
+  does not include it: a credential sitting in the batch's configuration
+  source reaches neither the viewer's resolved settings nor its process
+  environment.
 - **A credential is not passed on the command line**, because a command line is
   readable by every user of the host. It comes from the environment or from a
   local ignored file.

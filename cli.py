@@ -115,6 +115,8 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.8 2026-09-06
+#       Load configuration by subcommand instead of loading every setting.
 #  v1.7 2026-09-06
 #       Stage 'run', 'demo' and 'render' reports and publish them only
 #       once complete, instead of writing the date directory in place.
@@ -173,7 +175,9 @@ from ai_digest.storage import (ReportPublicationError, copy_existing_report,
                                report_dir, write_report_json)
 from config import (SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                     SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
-                    Config, detect_font_path, load_config, split_csv)
+                    Config, detect_font_path, load_demo_config,
+                    load_list_config, load_render_config, load_run_config,
+                    split_csv)
 
 logger = logging.getLogger("ai_digest.cli")
 
@@ -674,7 +678,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     add_summarizer_options(run_parser)
     add_font_option(run_parser)
     add_common_options(run_parser)
-    run_parser.set_defaults(handler=command_run)
+    run_parser.set_defaults(handler=command_run, loader=load_run_config)
 
     demo_parser = subparsers.add_parser(
         "demo", help="build the bundled sample report, no API key needed")
@@ -684,18 +688,19 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     add_topics_option(demo_parser)
     add_font_option(demo_parser)
     add_common_options(demo_parser)
-    demo_parser.set_defaults(handler=command_demo)
+    demo_parser.set_defaults(handler=command_demo, loader=load_demo_config)
 
     render_parser = subparsers.add_parser(
         "render", help="rebuild the artifacts of a stored report")
     render_parser.add_argument("date", help="report date, YYYY-MM-DD")
     add_font_option(render_parser)
     add_common_options(render_parser)
-    render_parser.set_defaults(handler=command_render)
+    render_parser.set_defaults(handler=command_render,
+                               loader=load_render_config)
 
     list_parser = subparsers.add_parser("list", help="list stored reports")
     add_common_options(list_parser)
-    list_parser.set_defaults(handler=command_list)
+    list_parser.set_defaults(handler=command_list, loader=load_list_config)
 
     return parser.parse_args(argv)
 
@@ -705,7 +710,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     configure_logging(getattr(args, "verbose", False))
     try:
-        config = load_config()
+        # Each subcommand resolves only the settings it actually uses,
+        # so an invalid setting outside its scope - a malformed batch
+        # setting for 'list', say - can never stop it.
+        config = args.loader()
     except RuntimeError as error:
         # A setting the project no longer reads is a configuration
         # problem, not a crash: it deserves the same one line every

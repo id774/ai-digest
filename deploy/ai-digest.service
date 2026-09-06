@@ -13,9 +13,14 @@ Type=simple
 User=ai-digest
 Group=ai-digest
 WorkingDirectory=/opt/ai-digest
-EnvironmentFile=/opt/ai-digest/.env
+# The viewer resolves only DATA_DIR and PORT (see config.py's
+# load_viewer_config()), so it takes them here rather than from the
+# batch's .env, which a service running as this unit's user need not
+# even be able to read.
+Environment=DATA_DIR=/opt/ai-digest/data/reports
+Environment=PORT=3000
 ExecStart=/opt/ai-digest/.venv/bin/gunicorn app:app \
-          --bind 127.0.0.1:3000 --workers 2 --timeout 60
+          --bind 127.0.0.1:${PORT} --workers 2 --timeout 60
 # The viewer only reads what the batch already wrote, so a crash is
 # never a half finished report and restarting is always safe.
 Restart=on-failure

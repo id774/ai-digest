@@ -132,6 +132,8 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v1.7 2026-09-06
+#       Resolve only the settings each execution path uses.
 #  v1.6 2026-09-06
 #       Reject invalid numeric settings instead of silently using defaults.
 #  v1.5 2026-09-05
@@ -176,11 +178,12 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
-    from dotenv import load_dotenv
+    from dotenv import dotenv_values, load_dotenv
 except ImportError:  # python-dotenv is optional at import time
+    dotenv_values = None
     load_dotenv = None
 
 # Directory holding this file, used to resolve default relative paths.
@@ -281,16 +284,48 @@ def split_csv(value: str) -> List[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def _env_int(name: str, default: int, minimum: int) -> int:
+def _dotenv_values() -> Dict[str, str]:
     """
-    Read an integer environment variable, strictly.
+    Return the repository's .env file, parsed but not exported.
 
-    An unset variable, or one that is empty or blank, yields default.
+    dotenv_values() reads the file into a plain dict instead of writing
+    every line into os.environ the way load_dotenv() does, which is
+    what lets a scoped loader honour a setting from .env without also
+    handing every other line of the file - a summarizer credential
+    included - to a caller whose scope never asked for it.
+    """
+    if load_dotenv is None:  # python-dotenv is not installed
+        return {}
+    return dict(dotenv_values(os.path.join(BASE_DIR, ".env")) or {})
+
+
+def _setting(env: Dict[str, str], name: str,
+            default: Optional[str] = None) -> Optional[str]:
+    """
+    Read one setting: the exported environment, then .env, then default.
+
+    Mirrors os.environ.get(name, default), merged over the two sources
+    a scoped loader is given, so a setting present but empty is still
+    distinguished from one that is absent from both.
+    """
+    if name in os.environ:
+        return os.environ[name]
+    if name in env:
+        return env[name]
+    return default
+
+
+def _env_int(env: Dict[str, str], name: str, default: int,
+            minimum: int) -> int:
+    """
+    Read an integer setting, strictly.
+
+    An unset setting, or one that is empty or blank, yields default.
     Every other value must parse as a whole number no smaller than
     minimum; a value that does not is a configuration error rather than
     a silent fallback, so a typo is caught here instead of acted on.
     """
-    raw = os.environ.get(name)
+    raw = _setting(env, name)
     if raw is None or not raw.strip():
         return default
     stripped = raw.strip()
@@ -305,17 +340,17 @@ def _env_int(name: str, default: int, minimum: int) -> int:
     return value
 
 
-def _env_token(name: str, default: str) -> str:
+def _env_token(env: Dict[str, str], name: str, default: str) -> str:
     """
-    Read a lower case token environment variable.
+    Read a lower case token setting.
 
-    An unset or empty variable yields the default. Any other value is
+    An unset or empty setting yields the default. Any other value is
     returned as it was configured, even when it is not a value the
     application knows: silently replacing it with the default is how a
     typo turns into a run that behaves nothing like the one intended.
     Validation belongs to the caller, which can report the bad value.
     """
-    raw = os.environ.get(name, "").strip().lower()
+    raw = (_setting(env, name) or "").strip().lower()
     return raw or default
 
 
@@ -539,17 +574,21 @@ class Config:
             )
 
 
-def _refuse_legacy_variables() -> None:
+def _refuse_legacy_variables(env: Dict[str, str]) -> None:
     """
     Refuse a superseded setting instead of reading it as its successor.
 
     Presence is what is refused, not the value: an exported but empty
     ANTHROPIC_BASE_URL still says the host was configured for the old
     names, and reading the new ones alongside it would leave the
-    operator with a run that ignores half of what they wrote.
+    operator with a run that ignores half of what they wrote. These are
+    endpoint settings, so only the scope that resolves the endpoint
+    checks for them; a legacy name left over from before the rename
+    must not stop the viewer or an offline subcommand that never reads
+    the setting it replaced.
     """
     for name in sorted(LEGACY_VARIABLES):
-        if name in os.environ:
+        if name in os.environ or name in env:
             raise RuntimeError(
                 "{0} is no longer read by ai-digest; use {1}.".format(
                     name, LEGACY_VARIABLES[name]
@@ -557,59 +596,134 @@ def _refuse_legacy_variables() -> None:
             )
 
 
-def load_config() -> Config:
-    """
-    Build a Config from environment variables.
-
-    A .env file in the repository root is loaded first when
-    python-dotenv is installed. Existing environment variables always
-    take precedence over .env entries.
-
-    A superseded variable stops the load, after .env is read so that a
-    stale line in the file is caught as well as a stale export.
-    """
-    if load_dotenv is not None:
-        load_dotenv(os.path.join(BASE_DIR, ".env"))
-
-    _refuse_legacy_variables()
-
-    data_dir = os.environ.get("DATA_DIR", "").strip()
+def _resolve_data_dir(env: Dict[str, str]) -> str:
+    """ Resolve DATA_DIR, the one setting every execution path shares. """
+    data_dir = (_setting(env, "DATA_DIR") or "").strip()
     if not data_dir:
         data_dir = os.path.join(BASE_DIR, "data", "reports")
+    return os.path.abspath(data_dir)
 
-    return Config(
-        summarizer_api_key=os.environ.get("SUMMARIZER_API_KEY") or None,
-        summarizer_auth_token=os.environ.get("SUMMARIZER_AUTH_TOKEN") or None,
-        summarizer_base_url=os.environ.get("SUMMARIZER_BASE_URL") or None,
-        summarizer_model=os.environ.get("SUMMARIZER_MODEL", "").strip(),
+
+def _resolve_batch_settings(env: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Resolve every setting 'run' depends on, other than PORT.
+
+    Shared by load_run_config() and the compatibility load_config():
+    both build the same batch configuration, and the caller decides
+    whether PORT, which only the viewer reads, is part of the result.
+    """
+    return dict(
+        summarizer_api_key=_setting(env, "SUMMARIZER_API_KEY") or None,
+        summarizer_auth_token=_setting(env, "SUMMARIZER_AUTH_TOKEN") or None,
+        summarizer_base_url=_setting(env, "SUMMARIZER_BASE_URL") or None,
+        summarizer_model=(_setting(env, "SUMMARIZER_MODEL") or "").strip(),
         summarizer_thinking_mode=_env_token(
-            "SUMMARIZER_THINKING_MODE", "default"
+            env, "SUMMARIZER_THINKING_MODE", "default"
         ),
         summarizer_tool_choice_mode=_env_token(
-            "SUMMARIZER_TOOL_CHOICE_MODE", "forced"
+            env, "SUMMARIZER_TOOL_CHOICE_MODE", "forced"
         ),
         summarizer_text_json_fallback=_env_token(
-            "SUMMARIZER_TEXT_JSON_FALLBACK", "disabled"
+            env, "SUMMARIZER_TEXT_JSON_FALLBACK", "disabled"
         ),
-        summarizer_max_retries=_env_int("SUMMARIZER_MAX_RETRIES", 2, 0),
-        max_output_tokens=_env_int("MAX_OUTPUT_TOKENS", 8000, 1),
-        summarizer_timeout=_env_int("SUMMARIZER_TIMEOUT", 180, 1),
+        summarizer_max_retries=_env_int(env, "SUMMARIZER_MAX_RETRIES", 2, 0),
+        max_output_tokens=_env_int(env, "MAX_OUTPUT_TOKENS", 8000, 1),
+        summarizer_timeout=_env_int(env, "SUMMARIZER_TIMEOUT", 180, 1),
         summarizer_backend=_env_token(
-            "SUMMARIZER_BACKEND", "anthropic-compatible"
+            env, "SUMMARIZER_BACKEND", "anthropic-compatible"
         ),
         arxiv_categories=split_csv(
-            os.environ.get("ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)
+            _setting(env, "ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)
         ),
-        arxiv_max_results=_env_int("ARXIV_MAX_RESULTS", 60, 1),
+        arxiv_max_results=_env_int(env, "ARXIV_MAX_RESULTS", 60, 1),
         news_feed_urls=split_csv(
-            os.environ.get("NEWS_FEED_URLS", DEFAULT_NEWS_FEED_URLS)
+            _setting(env, "NEWS_FEED_URLS", DEFAULT_NEWS_FEED_URLS)
         ),
-        lookback_hours=_env_int("LOOKBACK_HOURS", 24, 1),
-        max_topics=_env_int("MAX_TOPICS", 6, 1),
-        font_path=detect_font_path(os.environ.get("AI_DIGEST_FONT_PATH")),
-        data_dir=os.path.abspath(data_dir),
-        http_timeout=_env_int("HTTP_TIMEOUT", 60, 1),
-        user_agent=(os.environ.get("USER_AGENT", "").strip()
-                    or DEFAULT_USER_AGENT),
-        port=_env_int("PORT", 3000, 1),
+        lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
+        max_topics=_env_int(env, "MAX_TOPICS", 6, 1),
+        font_path=detect_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
+        data_dir=_resolve_data_dir(env),
+        http_timeout=_env_int(env, "HTTP_TIMEOUT", 60, 1),
+        user_agent=(_setting(env, "USER_AGENT") or "").strip()
+                  or DEFAULT_USER_AGENT,
     )
+
+
+def load_run_config() -> Config:
+    """
+    Build the configuration 'run' needs: every batch and endpoint
+    setting, other than PORT.
+
+    PORT is what only the viewer reads, so a run never resolves it: an
+    invalid PORT must not be able to stop a batch run. A superseded
+    endpoint setting stops the load here, because 'run' is the one
+    execution path that would otherwise read the setting it replaced.
+    """
+    env = _dotenv_values()
+    _refuse_legacy_variables(env)
+    return Config(**_resolve_batch_settings(env))
+
+
+def load_viewer_config() -> Config:
+    """
+    Build the configuration the Flask viewer needs: DATA_DIR and PORT.
+
+    Nothing else is resolved: a malformed or missing batch-only
+    setting, a legacy ANTHROPIC_*/OPENAI_* name, or a missing endpoint
+    credential can never stop the viewer from starting or from serving
+    an already stored report. .env is read through _dotenv_values(),
+    which parses it into a plain dict instead of exporting it, so a
+    summarizer credential sitting in .env is never written into the
+    viewer's process environment on the viewer's account.
+    """
+    env = _dotenv_values()
+    return Config(data_dir=_resolve_data_dir(env),
+                 port=_env_int(env, "PORT", 3000, 1))
+
+
+def load_list_config() -> Config:
+    """ Build the configuration 'list' needs: DATA_DIR alone. """
+    env = _dotenv_values()
+    return Config(data_dir=_resolve_data_dir(env))
+
+
+def load_render_config() -> Config:
+    """
+    Build the configuration 'render' needs: DATA_DIR,
+    AI_DIGEST_FONT_PATH, and LOOKBACK_HOURS, the last only as the
+    fallback for a stored report predating that statistic.
+    """
+    env = _dotenv_values()
+    return Config(
+        data_dir=_resolve_data_dir(env),
+        font_path=detect_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
+        lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
+    )
+
+
+def load_demo_config() -> Config:
+    """ Build the configuration 'demo' needs. """
+    env = _dotenv_values()
+    return Config(
+        data_dir=_resolve_data_dir(env),
+        font_path=detect_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
+        max_topics=_env_int(env, "MAX_TOPICS", 6, 1),
+        lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
+    )
+
+
+def load_config() -> Config:
+    """
+    Build a Config resolving every setting, PORT included.
+
+    Kept for compatibility and for tests that exercise a setting
+    independently of which execution path uses it. The application
+    itself never calls this: 'run' calls load_run_config(), the viewer
+    calls load_viewer_config(), and 'list', 'demo' and 'render' call
+    the loader of their own scope, each resolving only the settings
+    that execution path actually uses.
+    """
+    env = _dotenv_values()
+    _refuse_legacy_variables(env)
+    return Config(port=_env_int(env, "PORT", 3000, 1),
+                 **_resolve_batch_settings(env))

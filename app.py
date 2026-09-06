@@ -8,7 +8,10 @@
 #  This module serves the reports produced by cli.py. It is read only:
 #  no route collects data or calls a summarization endpoint, so the web
 #  process needs neither an endpoint credential nor outbound network
-#  access, and a slow or failing batch cannot affect the site.
+#  access, and a slow or failing batch cannot affect the site. Its
+#  configuration is resolved independently of the batch's, through
+#  config.py's load_viewer_config(), so a broken or missing batch
+#  setting cannot stop this process from starting either.
 #
 #  Routes:
 #      /                          list of the stored report dates
@@ -29,14 +32,18 @@
 #
 #  Options:
 #  - None. The viewer takes no command line option; DATA_DIR and PORT
-#    configure it, through the environment or .env, like every other
-#    setting collected in config.py.
+#    configure it, through the environment or .env. They are the only
+#    settings config.py resolves for the viewer, so a batch-only
+#    setting - malformed, missing or a superseded name - cannot stop
+#    it from starting.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Flask 3.x
 #
 #  Version History:
+#  v1.2 2026-09-06
+#       Load only viewer settings instead of batch configuration.
 #  v1.1 2026-08-02
 #       Register the safe_url filter used by the source links.
 #  v1.0 2026-07-25
@@ -52,9 +59,9 @@ from ai_digest import category_color, safe_url
 from ai_digest.render import STATIC_DIR, TEMPLATE_DIR
 from ai_digest.storage import (is_valid_date, list_dates, load_report,
                                report_dir, summary_image_path)
-from config import load_config
+from config import load_viewer_config
 
-config = load_config()
+config = load_viewer_config()
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 
