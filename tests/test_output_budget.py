@@ -13,9 +13,10 @@
 #  they configure differs from the default on purpose: reading nothing
 #  at all must not be able to pass.
 #
-#  A budget that is not positive is refused, since it would be refused
-#  by the SDK only after a whole collection has been spent, while a
-#  value that cannot be read as a number leaves the default in place.
+#  A budget that is not positive, or that cannot be read as a number, is
+#  a configuration error raised while loading the setting, rather than
+#  being refused by the SDK only after a whole collection has been
+#  spent, or silently replaced by the default.
 #
 #  No request is made. The API clients are replaced by stubs, so the
 #  suite needs no credential and no network.
@@ -34,8 +35,8 @@
 #  Test Cases:
 #    - Default to the constant the summarizer defines.
 #    - Read MAX_OUTPUT_TOKENS from the environment.
-#    - Reject a budget of zero, and a negative one.
-#    - Keep the default on a value that is not a number.
+#    - Reject a budget of zero, a negative one, and one that is not a
+#      number.
 #    - Carry the default budget into an Anthropic request.
 #    - Carry a configured budget into an Anthropic request.
 #    - Pass the budget through summarize() on the Anthropic backend.
@@ -93,23 +94,16 @@ class ConfigurationTest(unittest.TestCase):
         self.assertEqual(12000, loaded.max_output_tokens)
 
     def test_rejects_zero(self):
-        loaded = self.load({"MAX_OUTPUT_TOKENS": "0"})
-
-        with self.assertRaisesRegex(RuntimeError, "positive"):
-            loaded.validate_output_budget()
+        with self.assertRaisesRegex(RuntimeError, "MAX_OUTPUT_TOKENS"):
+            self.load({"MAX_OUTPUT_TOKENS": "0"})
 
     def test_rejects_a_negative_budget(self):
-        loaded = self.load({"MAX_OUTPUT_TOKENS": "-100"})
+        with self.assertRaisesRegex(RuntimeError, "MAX_OUTPUT_TOKENS"):
+            self.load({"MAX_OUTPUT_TOKENS": "-100"})
 
-        with self.assertRaisesRegex(RuntimeError, "positive"):
-            loaded.validate_output_budget()
-
-    def test_keeps_the_default_on_an_unparsable_value(self):
-        loaded = self.load({"MAX_OUTPUT_TOKENS": "lots"})
-
-        loaded.validate_output_budget()
-        self.assertEqual(summarizer.MAX_OUTPUT_TOKENS,
-                         loaded.max_output_tokens)
+    def test_rejects_an_unparsable_value(self):
+        with self.assertRaisesRegex(RuntimeError, "MAX_OUTPUT_TOKENS"):
+            self.load({"MAX_OUTPUT_TOKENS": "lots"})
 
 
 class AnthropicRequestTest(unittest.TestCase):

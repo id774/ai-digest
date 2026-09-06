@@ -213,10 +213,8 @@ class ConfigurationTest(unittest.TestCase):
             loaded.validate_protocol_options()
 
     def test_rejects_negative_retries(self):
-        loaded = self.load({"SUMMARIZER_MAX_RETRIES": "-1"})
-
-        with self.assertRaisesRegex(RuntimeError, "zero or more"):
-            loaded.validate_retry_budget()
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_MAX_RETRIES"):
+            self.load({"SUMMARIZER_MAX_RETRIES": "-1"})
 
     def test_openai_backend_needs_a_credential(self):
         loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible"})

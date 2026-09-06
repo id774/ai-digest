@@ -298,7 +298,10 @@ three: **plain**, **anthropic-compatible** and **openai-compatible**.
 is collected, rather than being read as the default, because a typo must not
 silently send a run that was meant to stay offline through a paid API. A setting
 that has been renamed is refused by its old name, with its replacement named,
-rather than being quietly read as its successor.
+rather than being quietly read as its successor. The same holds for every
+numeric setting: the default is used only when it is unset or blank, and an
+explicit value that is not a whole number, or that falls outside the setting's
+range, is a configuration error rather than a silent fallback to the default.
 
 ## 17. What is produced
 

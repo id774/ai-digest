@@ -12,10 +12,10 @@
 #  None when it is given nothing, so an unattended run cannot hang until
 #  the next one starts.
 #
-#  A timeout that is not positive is refused, since the SDK would refuse
-#  it only after the whole collection has been spent, or fall back on a
-#  default measured in minutes. A value that cannot be read as a number
-#  leaves the default in place.
+#  A timeout that is not positive, or that cannot be read as a number,
+#  is a configuration error raised while loading the setting, rather
+#  than being refused by the SDK only after the whole collection has
+#  been spent, or silently replaced by the default.
 #
 #  The last configuration case keeps the setting apart from HTTP_TIMEOUT
 #  on purpose. The two measure different things: a feed answers in
@@ -39,8 +39,8 @@
 #  Test Cases:
 #    - Default to the constant the summarizer defines.
 #    - Read SUMMARIZER_TIMEOUT from the environment.
-#    - Reject a timeout of zero, and a negative one.
-#    - Keep the default on a value that is not a number.
+#    - Reject a timeout of zero, a negative one, and one that is not a
+#      number.
 #    - Keep the setting independent of the collector timeout.
 #    - Carry the timeout to the Anthropic SDK, and keep its default on None.
 #    - Pass the timeout through summarize() on the Anthropic backend.
@@ -103,23 +103,16 @@ class ConfigurationTest(unittest.TestCase):
         # A timeout of zero would be refused by the SDK only after the
         # whole collection has been spent, or fall back on a default
         # measured in minutes.
-        loaded = self.load({"SUMMARIZER_TIMEOUT": "0"})
-
-        with self.assertRaisesRegex(RuntimeError, "positive"):
-            loaded.validate_summarizer_timeout()
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_TIMEOUT"):
+            self.load({"SUMMARIZER_TIMEOUT": "0"})
 
     def test_rejects_a_negative_timeout(self):
-        loaded = self.load({"SUMMARIZER_TIMEOUT": "-30"})
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_TIMEOUT"):
+            self.load({"SUMMARIZER_TIMEOUT": "-30"})
 
-        with self.assertRaisesRegex(RuntimeError, "positive"):
-            loaded.validate_summarizer_timeout()
-
-    def test_keeps_the_default_on_an_unparsable_value(self):
-        loaded = self.load({"SUMMARIZER_TIMEOUT": "soon"})
-
-        loaded.validate_summarizer_timeout()
-        self.assertEqual(summarizer.DEFAULT_TIMEOUT,
-                         loaded.summarizer_timeout)
+    def test_rejects_an_unparsable_value(self):
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_TIMEOUT"):
+            self.load({"SUMMARIZER_TIMEOUT": "soon"})
 
     def test_is_independent_of_the_collector_timeout(self):
         # The two measure different things: a feed answers in moments,

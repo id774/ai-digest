@@ -161,6 +161,12 @@ the viewer. See [Overriding a setting for one run](#overriding-a-setting-for-one
 | `USER_AGENT` | `ai-digest/1.0 ...` | User-Agent sent with every outgoing request. |
 | `PORT` | `3000` | Port of the development server and of gunicorn. |
 
+Every numeric setting above shares one rule: unset or blank uses the default
+shown; an explicit value that is not a whole number, or that is out of range,
+is refused instead of silently falling back to the default. `SUMMARIZER_MAX_RETRIES`
+accepts `0` and above; every other numeric setting requires `1` or above. The
+command-line option of the same setting enforces the same range.
+
 ### Anthropic-compatible APIs
 
 Set a base URL and Bearer token to use an Anthropic-compatible Messages API.

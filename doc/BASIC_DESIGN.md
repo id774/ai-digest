@@ -565,7 +565,7 @@ options sit above both and apply to one invocation:
 ```
 
 The settings module performs no network access and touches no file beyond
-`.env`, so it is safe to import anywhere. Beyond holding values it does three
+`.env`, so it is safe to import anywhere. Beyond holding values it does four
 things.
 
 - **Refuses superseded names.** A variable from before the `SUMMARIZER_*` rename
@@ -575,6 +575,14 @@ things.
   batch: a host part way through a rename is exactly the one where an old name
   still decides something, and a viewer that kept serving would hide that.
   Superseded backend values are answered the same way.
+- **Reads every numeric setting strictly, in the loader itself.** An unset or
+  blank value uses the setting's default; an explicit value is parsed as a
+  whole number and checked against the setting's minimum before `Config` is
+  built, so a value that is not a number, or falls outside its range, stops
+  the load instead of being silently replaced by the default. The command
+  line option of the same setting enforces the same minimum, so a value is
+  valid or invalid the same way whichever route set it; only the exit code
+  differs, `2` from the parser against `1` from a failed load.
 - **Validates by concern, on demand.** Backend, credential, model, endpoint
   target, retry budget, output budget, timeout and protocol options are
   separate checks, and the batch calls the ones the selected backend needs

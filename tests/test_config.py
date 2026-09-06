@@ -31,6 +31,13 @@
 #  default endpoint, while the anthropic-compatible and plain backends
 #  keep accepting no base URL at all, which is not a defect for either.
 #
+#  The numeric setting cases cover every integer setting alike, table
+#  driven: unset and blank both read as the default, an explicit value
+#  that is not a whole number is a configuration error rather than a
+#  silent fallback to the default, and the same holds for a value
+#  outside the setting's range. SUMMARIZER_MAX_RETRIES accepts zero; the
+#  other seven do not.
+#
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
@@ -62,6 +69,11 @@
 #    - Accept an explicit base URL on the OpenAI protocol.
 #    - Keep accepting a missing base URL on the Anthropic protocol and
 #      on plain.
+#    - Use the default for every numeric setting when it is unset or blank.
+#    - Reject an explicit numeric setting that is not a whole number.
+#    - Keep a valid explicit numeric setting.
+#    - Accept a retry budget of zero, and reject a negative one.
+#    - Reject zero and a negative value for the other numeric settings.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -277,6 +289,81 @@ class SummarizerBaseUrlTest(unittest.TestCase):
         loaded = self.load({"SUMMARIZER_BACKEND": "plain"})
 
         loaded.validate_summarizer_base_url()
+
+
+# (env var name, Config field, default, minimum) for every integer setting.
+NUMERIC_SETTINGS = (
+    ("SUMMARIZER_MAX_RETRIES", "summarizer_max_retries", 2, 0),
+    ("MAX_OUTPUT_TOKENS", "max_output_tokens", 8000, 1),
+    ("SUMMARIZER_TIMEOUT", "summarizer_timeout", 180, 1),
+    ("ARXIV_MAX_RESULTS", "arxiv_max_results", 60, 1),
+    ("LOOKBACK_HOURS", "lookback_hours", 24, 1),
+    ("MAX_TOPICS", "max_topics", 6, 1),
+    ("HTTP_TIMEOUT", "http_timeout", 60, 1),
+    ("PORT", "port", 3000, 1),
+)
+
+
+class NumericSettingTest(unittest.TestCase):
+    """
+    Every integer setting reads unset and blank alike as its default,
+    and refuses an explicit value that is not a whole number or that
+    falls outside its range, instead of silently keeping the default.
+    """
+
+    def load(self, environment):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with mock.patch.object(config, "load_dotenv", None):
+                return config.load_config()
+
+    def test_uses_the_default_when_unset(self):
+        for name, field, default, _minimum in NUMERIC_SETTINGS:
+            with self.subTest(name=name):
+                self.assertEqual(default, getattr(self.load({}), field))
+
+    def test_uses_the_default_when_blank(self):
+        for name, field, default, _minimum in NUMERIC_SETTINGS:
+            with self.subTest(name=name):
+                loaded = self.load({name: "   "})
+                self.assertEqual(default, getattr(loaded, field))
+
+    def test_rejects_a_non_integer_value(self):
+        for name, _field, _default, _minimum in NUMERIC_SETTINGS:
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(RuntimeError, name):
+                    self.load({name: "not-a-number"})
+
+    def test_keeps_a_valid_explicit_value(self):
+        for name, field, default, _minimum in NUMERIC_SETTINGS:
+            with self.subTest(name=name):
+                value = default + 1
+                loaded = self.load({name: str(value)})
+                self.assertEqual(value, getattr(loaded, field))
+
+    def test_retries_accepts_zero(self):
+        loaded = self.load({"SUMMARIZER_MAX_RETRIES": "0"})
+
+        self.assertEqual(0, loaded.summarizer_max_retries)
+
+    def test_retries_rejects_a_negative_value(self):
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_MAX_RETRIES"):
+            self.load({"SUMMARIZER_MAX_RETRIES": "-1"})
+
+    def test_the_other_settings_reject_zero(self):
+        for name, _field, _default, minimum in NUMERIC_SETTINGS:
+            if minimum == 0:
+                continue
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(RuntimeError, name):
+                    self.load({name: "0"})
+
+    def test_the_other_settings_reject_a_negative_value(self):
+        for name, _field, _default, minimum in NUMERIC_SETTINGS:
+            if minimum == 0:
+                continue
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(RuntimeError, name):
+                    self.load({name: "-1"})
 
 
 if __name__ == "__main__":
