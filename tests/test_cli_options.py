@@ -41,12 +41,16 @@
 #      other numeric option.
 #    - Reject a non-integer or a negative value on every numeric option.
 #    - Accept a known summarizer backend, and reject an unknown one.
+#    - Accept a real calendar date on 'run', 'demo' and 'render', and
+#      reject an impossible or a non-canonical one on all three.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.1 2026-09-06
+#       Reject impossible report dates at the parser boundary.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -173,6 +177,50 @@ class NumericOptionParityTest(unittest.TestCase):
         for option, _minimum in NUMERIC_OPTIONS:
             with self.subTest(option=option):
                 self.assertEqual(2, refused(["run", option, "-1"]))
+
+
+# A leap day only 2024 actually has, and a shape-valid but impossible
+# calendar date, for the three subcommands that take an explicit date.
+VALID_DATE = "2024-02-29"
+IMPOSSIBLE_DATE = "2026-02-31"
+NON_CANONICAL_DATE = "2026-2-1"
+
+
+class ReportDateOptionTest(unittest.TestCase):
+    """ 'run', 'demo' and 'render' reject an impossible date at the parser. """
+
+    def test_run_accepts_a_real_calendar_date(self):
+        args = cli.parse_args(["run", "--date", VALID_DATE])
+
+        self.assertEqual(VALID_DATE, args.date)
+
+    def test_demo_accepts_a_real_calendar_date(self):
+        args = cli.parse_args(["demo", "--date", VALID_DATE])
+
+        self.assertEqual(VALID_DATE, args.date)
+
+    def test_render_accepts_a_real_calendar_date(self):
+        args = cli.parse_args(["render", VALID_DATE])
+
+        self.assertEqual(VALID_DATE, args.date)
+
+    def test_run_rejects_an_impossible_calendar_date(self):
+        self.assertEqual(2, refused(["run", "--date", IMPOSSIBLE_DATE]))
+
+    def test_demo_rejects_an_impossible_calendar_date(self):
+        self.assertEqual(2, refused(["demo", "--date", IMPOSSIBLE_DATE]))
+
+    def test_render_rejects_an_impossible_calendar_date(self):
+        self.assertEqual(2, refused(["render", IMPOSSIBLE_DATE]))
+
+    def test_run_rejects_a_non_canonical_date(self):
+        self.assertEqual(2, refused(["run", "--date", NON_CANONICAL_DATE]))
+
+    def test_demo_rejects_a_non_canonical_date(self):
+        self.assertEqual(2, refused(["demo", "--date", NON_CANONICAL_DATE]))
+
+    def test_render_rejects_a_non_canonical_date(self):
+        self.assertEqual(2, refused(["render", NON_CANONICAL_DATE]))
 
 
 class ModeOptionTest(unittest.TestCase):

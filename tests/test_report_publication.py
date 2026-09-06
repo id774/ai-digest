@@ -43,6 +43,8 @@
 #    - 'demo' follows the same new-date and same-date publication
 #      contract as 'run', for one generation failure, one publication
 #      failure and a successful replacement.
+#    - 'demo' rejects an impossible sample date before any report work,
+#      when '--date' does not override it.
 #    - 'render' on a generation failure leaves the stored report
 #      untouched; on a publication failure it rolls the stored report
 #      back; on success it keeps the authoritative report.json and topic
@@ -59,6 +61,7 @@
 ########################################################################
 
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -286,6 +289,40 @@ class DemoPublicationTest(unittest.TestCase):
             self.assertFalse(os.path.isfile(stale_path))
             loaded = load_report(data_dir, DATE)
             self.assertNotEqual({"run": "old"}, loaded["stats"])
+
+    def test_an_impossible_sample_date_stops_before_any_report_work(self):
+        # '--date' is not given, so command_demo() falls back on the
+        # sample's own date, which this custom sample makes impossible.
+        sample = {
+            "date": "2026-02-31",
+            "entries": [{
+                "source_type": "paper",
+                "title": "A paper",
+                "url": "https://example.test/paper",
+            }],
+            "build_report": {"topics": [{
+                "category": "テスト",
+                "title": "見出し",
+                "bullets": ["箇条書き。"],
+                "source_indexes": [0],
+            }]},
+        }
+        with tempfile.TemporaryDirectory() as data_dir:
+            sample_path = os.path.join(data_dir, "sample.json")
+            with open(sample_path, "w", encoding="utf-8") as handle:
+                json.dump(sample, handle)
+            config = self.demo_config(data_dir)
+            args = cli.parse_args(["demo", "--input", sample_path])
+
+            with mock.patch("cli.compose_image.compose") as compose:
+                with mock.patch("cli.build.write_report_html") as write_html:
+                    with self.assertLogs("ai_digest.cli", "ERROR"):
+                        status = cli.command_demo(args, config)
+
+            self.assertEqual(1, status)
+            self.assertEqual([], list_dates(data_dir))
+            compose.assert_not_called()
+            write_html.assert_not_called()
 
 
 class RenderPublicationTest(unittest.TestCase):

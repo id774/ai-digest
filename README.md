@@ -413,6 +413,8 @@ python cli.py list                    # print the stored report dates
 
 `render` never calls the API, so it is the cheap way to try a layout change on an existing report.
 
+`--date` and `render`'s `DATE` argument must name a real calendar date, not merely a `YYYY-MM-DD`-shaped string: `--date 2026-02-31` is refused by the parser with exit status `2`, before anything is collected or an API request is spent.
+
 ### Overriding a setting for one run
 
 Every setting listed under [Configuration](#configuration), except the credentials and `PORT`, can be given as an option named after its variable, which wins over the environment and `.env` for that invocation only:
@@ -745,7 +747,7 @@ python cli.py demo --date 2026-08-01   # file it under another date
 python cli.py demo --input mine.json   # use another sample
 ```
 
-The date defaults to the one recorded in the sample, so repeated runs overwrite the same directory. Delete `data/reports/<date>/` to remove the demo again. [`doc/DEMO.md`](doc/DEMO.md) describes what the demo replaces and how it differs from a collected report.
+The date defaults to the one recorded in the sample, so repeated runs overwrite the same directory. Delete `data/reports/<date>/` to remove the demo again. A custom sample whose recorded date is not a real calendar date fails the command before anything is generated. [`doc/DEMO.md`](doc/DEMO.md) describes what the demo replaces and how it differs from a collected report.
 
 This is not the same as `SUMMARIZER_BACKEND=plain`, which still collects from the network and only skips the API; see [Standalone use, no API key](#standalone-use-no-api-key).
 
