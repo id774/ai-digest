@@ -7,6 +7,7 @@ v1.3 (Release Date: TBD)
   failing before anything is collected when it is missing or blank.
 - Build a report in a staging directory and publish it as a whole only once complete,
   so a failed run, demo or render can no longer leave a half-written or stale report.
+- Reject invalid numeric settings instead of silently using defaults or failing later in a run.
 
 v1.2.2 (2026-08-26)
 -------------------

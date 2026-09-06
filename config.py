@@ -132,6 +132,8 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v1.6 2026-09-06
+#       Reject invalid numeric settings instead of silently using defaults.
 #  v1.5 2026-09-05
 #       Add validate_summarizer_base_url(), refusing an openai-compatible
 #       backend with SUMMARIZER_BASE_URL missing or blank instead of
@@ -279,15 +281,28 @@ def split_csv(value: str) -> List[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def _env_int(name: str, default: int) -> int:
-    """ Read an integer environment variable, falling back on default. """
+def _env_int(name: str, default: int, minimum: int) -> int:
+    """
+    Read an integer environment variable, strictly.
+
+    An unset variable, or one that is empty or blank, yields default.
+    Every other value must parse as a whole number no smaller than
+    minimum; a value that does not is a configuration error rather than
+    a silent fallback, so a typo is caught here instead of acted on.
+    """
     raw = os.environ.get(name)
     if raw is None or not raw.strip():
         return default
+    stripped = raw.strip()
     try:
-        return int(raw.strip())
+        value = int(stripped)
     except ValueError:
-        return default
+        raise RuntimeError(
+            "{0} is '{1}'; expected a whole number.".format(name, stripped))
+    if value < minimum:
+        raise RuntimeError(
+            "{0} is {1}; expected {2} or more.".format(name, value, minimum))
+    return value
 
 
 def _env_token(name: str, default: str) -> str:
@@ -576,25 +591,25 @@ def load_config() -> Config:
         summarizer_text_json_fallback=_env_token(
             "SUMMARIZER_TEXT_JSON_FALLBACK", "disabled"
         ),
-        summarizer_max_retries=_env_int("SUMMARIZER_MAX_RETRIES", 2),
-        max_output_tokens=_env_int("MAX_OUTPUT_TOKENS", 8000),
-        summarizer_timeout=_env_int("SUMMARIZER_TIMEOUT", 180),
+        summarizer_max_retries=_env_int("SUMMARIZER_MAX_RETRIES", 2, 0),
+        max_output_tokens=_env_int("MAX_OUTPUT_TOKENS", 8000, 1),
+        summarizer_timeout=_env_int("SUMMARIZER_TIMEOUT", 180, 1),
         summarizer_backend=_env_token(
             "SUMMARIZER_BACKEND", "anthropic-compatible"
         ),
         arxiv_categories=split_csv(
             os.environ.get("ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)
         ),
-        arxiv_max_results=_env_int("ARXIV_MAX_RESULTS", 60),
+        arxiv_max_results=_env_int("ARXIV_MAX_RESULTS", 60, 1),
         news_feed_urls=split_csv(
             os.environ.get("NEWS_FEED_URLS", DEFAULT_NEWS_FEED_URLS)
         ),
-        lookback_hours=_env_int("LOOKBACK_HOURS", 24),
-        max_topics=_env_int("MAX_TOPICS", 6),
+        lookback_hours=_env_int("LOOKBACK_HOURS", 24, 1),
+        max_topics=_env_int("MAX_TOPICS", 6, 1),
         font_path=detect_font_path(os.environ.get("AI_DIGEST_FONT_PATH")),
         data_dir=os.path.abspath(data_dir),
-        http_timeout=_env_int("HTTP_TIMEOUT", 60),
+        http_timeout=_env_int("HTTP_TIMEOUT", 60, 1),
         user_agent=(os.environ.get("USER_AGENT", "").strip()
                     or DEFAULT_USER_AGENT),
-        port=_env_int("PORT", 3000),
+        port=_env_int("PORT", 3000, 1),
     )

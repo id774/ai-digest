@@ -37,6 +37,9 @@
 #    - Give no option to a credential.
 #    - Reject a window that is not a number, and one of zero.
 #    - Accept zero retries, and reject a negative retry budget.
+#    - Accept zero on --summarizer-max-retries only, rejecting it on every
+#      other numeric option.
+#    - Reject a non-integer or a negative value on every numeric option.
 #    - Accept a known summarizer backend, and reject an unknown one.
 #
 #  Requirements:
@@ -129,6 +132,47 @@ class NumericOptionTest(unittest.TestCase):
 
     def test_rejects_a_negative_retry_budget(self):
         self.assertRejected(["run", "--summarizer-max-retries", "-1"])
+
+
+# (option, minimum) for every numeric option 'run' accepts. Retries alone
+# allows zero; the environment variable of the same name shares this
+# minimum, which is what NumericSettingTest in test_config.py pins on
+# the other side of the same setting.
+NUMERIC_OPTIONS = (
+    ("--summarizer-max-retries", 0),
+    ("--max-topics", 1),
+    ("--lookback-hours", 1),
+    ("--arxiv-max-results", 1),
+    ("--http-timeout", 1),
+    ("--max-output-tokens", 1),
+    ("--summarizer-timeout", 1),
+)
+
+
+class NumericOptionParityTest(unittest.TestCase):
+    """ Every numeric option shares its minimum with the same setting read from the environment. """
+
+    def dest(self, option):
+        return option.lstrip("-").replace("-", "_")
+
+    def test_only_retries_accepts_zero(self):
+        for option, minimum in NUMERIC_OPTIONS:
+            with self.subTest(option=option):
+                if minimum == 0:
+                    args = cli.parse_args(["run", option, "0"])
+                    self.assertEqual(0, getattr(args, self.dest(option)))
+                else:
+                    self.assertEqual(2, refused(["run", option, "0"]))
+
+    def test_every_option_rejects_a_non_integer_value(self):
+        for option, _minimum in NUMERIC_OPTIONS:
+            with self.subTest(option=option):
+                self.assertEqual(2, refused(["run", option, "not-a-number"]))
+
+    def test_every_option_rejects_a_negative_value(self):
+        for option, _minimum in NUMERIC_OPTIONS:
+            with self.subTest(option=option):
+                self.assertEqual(2, refused(["run", option, "-1"]))
 
 
 class ModeOptionTest(unittest.TestCase):
