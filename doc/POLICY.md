@@ -240,6 +240,8 @@ These lines are not crossed by a setting, by an option or by an extension.
     entry by what it contains, not by the date edit.
 - The date of a `Version History` entry is the date of the change, written as
   `vX.Y YYYY-MM-DD`, with the newest entry first.
+- Each entry's description is at most two lines, and a single line at or
+  under 80 columns is preferred whenever practical.
 
 #### 1.8.2 Module Version Numbering
 - Versions use a two-level `major.minor` scheme.
@@ -288,30 +290,26 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Each entry opens with a heading of the form `vX.Y.Z (YYYY-MM-DD)`, or
   `vX.Y.Z (Release Date: TBD)` while it is unreleased, underlined with `-`
   characters, followed by one `-` bullet per change.
-- Write one coherent change on one physical line. This is the rule, qualified
-  once below for a file that has already settled on a form of its own. The file
-  is read as a list and reviewed as a diff, and both are served by an entry that
-  is not wrapped: one line is one change, added, removed or reworded as a whole.
-- That rule comes before the roughly 80 columns a plain text document otherwise
-  aims at. Near 100 columns is the usual target, and an entry that has to name
-  a file, a command, a function, an option or a setting may run to about 120
-  columns or beyond.
-- That is a deliberate exception in this file, not an oversight in it. Do not
-  rewrap `doc/VERSIONS` to 80 columns, and do not report a long entry here as a
-  violation of that width.
-- These widths are a prompt to check whether an entry explains more than it
-  needs to, not a limit to enforce.
+- Write one coherent change as one bullet, at most two physical lines. A
+  single line at or under 80 columns is preferred whenever practical. This is
+  an explicit limit, not a prompt to reread: an entry that runs past two
+  lines, or a single line that runs past 80 columns without necessity, must
+  be shortened. The file is read as a list and reviewed as a diff, and both
+  are served by an entry that stays within this limit.
+- An entry that has to name a file, a command, a function, an option or a
+  setting may pass 80 columns on its one or two lines when those names cannot
+  be shortened without losing meaning. The two-line ceiling still applies.
 - `doc/VERSIONS` carries these guidelines again at its foot, and an entry
-  written into it follows the reasons recorded there.
-- That qualification is this: where the file has settled on a width of its own,
-  a new entry is wrapped to that width and balanced against the lines already
-  standing, so that the version history stays of a piece, and that consistency
-  comes before the one physical line asked for above. Holding to a form the
-  file has established is how the rule is kept there, not a departure from it,
-  and the entries already written are not reflowed or rebuilt to suit it.
+  written into it follows the limit recorded there.
+- Where the file has settled on a width of its own, predating this limit, a
+  new entry is wrapped to that width and balanced against the lines already
+  standing, so that the version history stays of a piece. Wrapping to hold an
+  established form does not overturn the two-line, 80-column limit above; the
+  entries already written are not reflowed or rebuilt to suit it.
 - When an entry runs long, look first for what can be dropped or abstracted:
   the implementation detail, the example, the detailed reason, the secondary
-  effect. Consider that before wrapping the line.
+  effect. Wrap onto the second line only when the abstracted entry still
+  exceeds 80 columns.
 - Keep the changed target, the behavior visible from outside, the effect on
   compatibility, the effect on safety, and the identifiers that matter.
 - An entry that is long because it names the identifiers it needs is not
