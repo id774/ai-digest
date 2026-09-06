@@ -62,7 +62,7 @@
 #
 #  Version History:
 #  v1.0 2026-09-06
-#       Initial release, covering font path scope isolation as well.
+#       Initial release.
 #
 ########################################################################
 

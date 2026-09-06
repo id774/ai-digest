@@ -108,7 +108,7 @@ v1.0 (2026-07-31)
 
 v0.1 (2026-07-26)
 -----------------
-- The initial version of the project.
+- Initial release.
 
 Version History Guidelines
 ==========================
@@ -130,3 +130,5 @@ Version History Guidelines
   same file or feature.
 - Place closely related entries near each other.
 - Append an independent new change to the end of the current version entry.
+- The first entry, at the lowest version this file reaches, reads only
+  "Initial release." and nothing else.
