@@ -392,6 +392,48 @@ The following properties of this module carry weight:
 Listing returns only directories that are named like a date *and* hold a report,
 newest first.
 
+### Report publication
+
+`report.json`, the topic images, the summary image and the HTML are never
+written into `<DATA_DIR>/<date>` one at a time. `ai_digest/storage.py` provides
+a publication workspace: a staging directory created beside the date
+directories, on the same file system as `DATA_DIR`, that is not named like a
+date and is therefore invisible to `list_dates()`, to `load_report()` and to
+every other date-validated lookup while it exists. `run`, `demo` and `render`
+each generate every artifact their command needs inside that staging
+directory, and only once all of them exist is `<DATA_DIR>/<date>` replaced by
+it, as a single directory swap:
+
+- **A date not yet published** gets the staging directory renamed into place.
+  A run that fails before that rename removes the staging directory and
+  leaves no `<DATA_DIR>/<date>` at all — there is no point at which a reader
+  can observe a half-written report.
+- **A date that already holds a complete report** keeps that report exactly
+  as it is for as long as the new one is being staged. Publishing it moves the
+  previous directory aside under a backup name first, so that a failure
+  renaming the new tree into its place can restore the previous one; the
+  previous tree is only discarded once the new one has taken its place. This
+  is a directory replacement, not an append: whatever artifact only the
+  previous report had — a stale topic image, for instance — does not survive
+  into the replaced directory.
+- **A publication failure that can be rolled back** restores the previous
+  report and fails the command; one that cannot be rolled back still fails
+  the command, and keeps the previous report's backup copy on disk instead of
+  discarding it, so the two directories that exist afterward are the evidence
+  of what happened rather than a silently lost report.
+
+`render` reaches this same workspace from a stored report instead of from a
+fresh collection: it copies the authoritative `report.json` and the topic
+images into staging untouched, regenerates only the summary image and the
+HTML there, and publishes the same way, so a failed re-render never changes
+the report that was already on disk.
+
+The staging and backup directories are managed by `ai_digest/storage.py`
+alone, the module that already owns every path computation of the
+application; no other module builds one of their paths, and the viewer never
+sees or serves one, because its routes only ever resolve a validated
+`YYYY-MM-DD` name.
+
 ## 13. HTML and the summary image
 
 Both are generated from the stored topics, so the page and the image cannot be
@@ -450,18 +492,31 @@ replaced, so the log of a report says how it was produced.
 6. **Edit into topics** through the selected backend. Any exception — network,
    quota, protocol alike — is a logged summarization failure. An answer that
    validates into no topic fails too.
-7. **Create the report directory**, only now that there is something to put in
-   it.
-8. **Illustrate**, so that the stored topics carry their image file names.
-9. **Store** `report.json` with the topics and the run statistics.
-10. **Render** the summary image and the standalone HTML.
-11. **Succeed.**
+7. **Begin a publication workspace**, only now that there is something to put
+   in it: a staging directory beside the archive dates, not yet visible as any
+   report.
+8. **Illustrate** into staging, so that the stored topics carry their image
+   file names.
+9. **Store** `report.json` in staging, with the topics and the run statistics.
+10. **Render** the summary image and the standalone HTML into staging.
+11. **Publish** the complete staging directory as `<DATA_DIR>/<date>`. A date
+    not yet published gets it for the first time; one that already holds a
+    complete report is replaced by it as a whole.
+12. **Succeed.**
 
-`demo` enters at step 7 with topics built from the sample and validated by the
-same function. `render` enters at step 10 with topics loaded from storage, which
-is why it costs nothing and is the cheap way to try a layout change; the window
-it announces is read from the statistics the original run stored, not from the
-current configuration, so a rebuild does not relabel history.
+A failure at step 8, 9, 10 or 11 removes the staging directory and leaves
+whatever `<DATA_DIR>/<date>` held before step 7 — nothing, or a previously
+published complete report — exactly as it was, and the command fails.
+
+`demo` enters at step 8 with topics built from the sample and validated by the
+same function. `render` reaches the same publication workspace from a stored
+report instead: it copies the authoritative `report.json` and the topic
+images into staging unchanged, performs step 10 there, and publishes the same
+way, which is why it costs nothing beyond redrawing and is the cheap way to
+try a layout change; the window it announces is read from the statistics the
+original run stored, not from the current configuration, so a rebuild does
+not relabel history, and a rebuild that fails leaves the stored report
+untouched.
 
 ### The sample
 
@@ -554,8 +609,9 @@ collecting. The full table of settings and defaults is in the README.
 Isolation is arranged per stage: a collector localizes failure to one source, the
 image stage localizes it to one topic through the fallback card, validation
 localizes a malformed answer to one topic, the mechanical backend allows
-operation with no endpoint at all, and the viewer keeps serving stored days
-while a run fails.
+operation with no endpoint at all, publication localizes a failure to the
+report being staged, and the viewer keeps serving stored days while a run
+fails.
 
 | Situation | Result |
 |---|---|
@@ -569,6 +625,7 @@ while a run fails.
 | no usable topic after editing | error, run fails |
 | a structured answer that cannot be read | error, run fails |
 | a setting the code has no branch for | error before collecting, run fails |
+| an artifact cannot be built or published in staging | error, run fails, any previously published report is left exactly as it was |
 
 | Exit code | Meaning |
 |---|---|
@@ -648,9 +705,10 @@ credential, no `.env`, and nothing under the archive touched.
 
 The modules map onto this design one for one — settings and backend validation,
 the command line overrides, collection and partial failure, persistence and its
-refusals, link schemes, each of the three backends, the protocol options and the
-fallback chain, the output budget, the request timeout, scraping, the card's
-line breaking, the summary image legend, the window a rebuild announces, and the
+refusals, report publication and its rollback on a same-date failure, link
+schemes, each of the three backends, the protocol options and the fallback
+chain, the output budget, the request timeout, scraping, the card's line
+breaking, the summary image legend, the window a rebuild announces, and the
 sample. A passing suite says nothing about the sources or the endpoint being
 reachable.
 
@@ -660,7 +718,7 @@ reachable.
 |---|---|
 | §7 sources and the window | the two collectors; the window setting carried into prompt, HTML, image and statistics |
 | §7 time zone correctness | timestamps read as UTC, compared against a UTC cut-off |
-| §8 the daily process | the eleven ordered steps of §14, with the report directory created last-but-four |
+| §8 the daily process | the twelve ordered steps of §14, publishing the staged report only at the last-but-one step |
 | §9 citations | the index scheme and its restoration in §10 |
 | §10 deduplication | §7 mechanically; the model for the rest |
 | §11 topic editing | the tool schema and the shared prompt in §9 |
