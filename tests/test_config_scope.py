@@ -13,12 +13,13 @@
 #
 #  The isolation cases are the point of the suite. A setting outside a
 #  scope is never even looked at, so a malformed batch setting, an
-#  unknown backend, a missing credential or a legacy ANTHROPIC_*/
-#  OPENAI_* name must not stop the viewer, 'list', 'render' or 'demo';
-#  conversely, an invalid PORT must not stop 'run', and each scope still
-#  rejects its own invalid settings exactly as before. A dedicated case
-#  imports app.py itself, because the viewer resolves its configuration
-#  at import time and that is where a regression would actually surface.
+#  unknown backend, a missing credential, an unusable font path or a
+#  legacy ANTHROPIC_*/OPENAI_* name must not stop the viewer, 'list',
+#  'render' or 'demo'; conversely, an invalid PORT must not stop 'run',
+#  and each scope still rejects its own invalid settings, an unusable
+#  explicit font path included. A dedicated case imports app.py itself,
+#  because the viewer resolves its configuration at import time and
+#  that is where a regression would actually surface.
 #
 #  The credential isolation case guards the sharper property behind the
 #  viewer's independence: a summarizer credential sitting in .env must
@@ -41,11 +42,13 @@
 #  Test Cases:
 #    - Resolve exactly the settings section 6.1 assigns each scope.
 #    - Keep the exported-environment-over-.env-over-default precedence
-#      for a relevant setting, without exporting an unrelated .env entry.
-#    - Let the viewer, 'list', 'render' and 'demo' ignore a batch-only
-#      or legacy setting error, and still reject their own.
-#    - Let 'run' ignore an invalid PORT, and still reject its own
-#      invalid settings and a legacy endpoint variable.
+#      for a relevant setting, without exporting an unrelated .env entry,
+#      and never fall an invalid exported font path back to a valid .env one.
+#    - Let the viewer and 'list' ignore a batch-only or legacy setting
+#      error, an unusable AI_DIGEST_FONT_PATH included.
+#    - Let 'render', 'demo' and 'run' ignore what is out of their own
+#      scope, and still reject their own invalid setting, unusable font
+#      path and (for 'run') legacy endpoint variable alike.
 #    - Import app.py surviving a batch-only setting error, and failing
 #      on an invalid PORT.
 #    - Keep a summarizer credential out of the viewer's Config and out
@@ -55,11 +58,11 @@
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
-#  - See requirements.txt (the app.py case imports Flask)
+#  - See requirements.txt (the app.py case imports Flask; font cases use Pillow)
 #
 #  Version History:
 #  v1.0 2026-09-06
-#       Initial release.
+#       Initial release, covering font path scope isolation as well.
 #
 ########################################################################
 
@@ -112,7 +115,6 @@ class ScopeMatrixTest(unittest.TestCase):
     def test_render_resolves_its_scope(self):
         loaded = load_with(config.load_render_config, {
             "DATA_DIR": "/tmp/scope-c",
-            "AI_DIGEST_FONT_PATH": "/tmp/font.ttf",
             "LOOKBACK_HOURS": "48",
         })
 
@@ -169,6 +171,18 @@ class PrecedenceTest(unittest.TestCase):
 
             self.assertNotIn("SUMMARIZER_API_KEY", os.environ)
 
+    def test_an_invalid_exported_font_path_does_not_fall_back_to_dotenv(self):
+        # An unusable explicit value at the higher precedence source
+        # must fail outright, never fall through to a usable one below
+        # it - not even a valid path sitting right there in .env.
+        with mock.patch.object(config, "is_usable_font_path",
+                               side_effect=lambda p: p == "/valid/font.ttf"):
+            with self.assertRaisesRegex(RuntimeError, "AI_DIGEST_FONT_PATH"):
+                load_with_dotenv(
+                    config.load_run_config,
+                    {"AI_DIGEST_FONT_PATH": "/bad/font.ttf"},
+                    {"AI_DIGEST_FONT_PATH": "/valid/font.ttf"})
+
 
 class ViewerIsolationTest(unittest.TestCase):
 
@@ -178,6 +192,7 @@ class ViewerIsolationTest(unittest.TestCase):
             "SUMMARIZER_BACKEND": "unknown-backend",
             "ANTHROPIC_BASE_URL": "https://example.test",
             "HTTP_TIMEOUT": "not-a-number",
+            "AI_DIGEST_FONT_PATH": "/no/such/font.ttf",
         }
 
         loaded = load_with(config.load_viewer_config, environment)
@@ -196,6 +211,7 @@ class ListIsolationTest(unittest.TestCase):
             "PORT": "not-a-number",
             "SUMMARIZER_MAX_RETRIES": "not-a-number",
             "ANTHROPIC_BASE_URL": "https://example.test",
+            "AI_DIGEST_FONT_PATH": "/no/such/font.ttf",
         }
 
         loaded = load_with(config.load_list_config, environment)
@@ -221,6 +237,11 @@ class RenderIsolationTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "LOOKBACK_HOURS"):
             load_with(config.load_render_config, {"LOOKBACK_HOURS": "soon"})
 
+    def test_still_rejects_its_own_unusable_font_path(self):
+        with self.assertRaisesRegex(RuntimeError, "AI_DIGEST_FONT_PATH"):
+            load_with(config.load_render_config,
+                     {"AI_DIGEST_FONT_PATH": "/no/such/font.ttf"})
+
 
 class DemoIsolationTest(unittest.TestCase):
 
@@ -238,6 +259,11 @@ class DemoIsolationTest(unittest.TestCase):
     def test_still_rejects_its_own_invalid_max_topics(self):
         with self.assertRaisesRegex(RuntimeError, "MAX_TOPICS"):
             load_with(config.load_demo_config, {"MAX_TOPICS": "0"})
+
+    def test_still_rejects_its_own_unusable_font_path(self):
+        with self.assertRaisesRegex(RuntimeError, "AI_DIGEST_FONT_PATH"):
+            load_with(config.load_demo_config,
+                     {"AI_DIGEST_FONT_PATH": "/no/such/font.ttf"})
 
 
 class RunIsolationTest(unittest.TestCase):
@@ -257,6 +283,11 @@ class RunIsolationTest(unittest.TestCase):
             load_with(config.load_run_config,
                      {"SUMMARIZER_MAX_RETRIES": "not-a-number"})
 
+    def test_still_rejects_its_own_unusable_font_path(self):
+        with self.assertRaisesRegex(RuntimeError, "AI_DIGEST_FONT_PATH"):
+            load_with(config.load_run_config,
+                     {"AI_DIGEST_FONT_PATH": "/no/such/font.ttf"})
+
 
 class ViewerImportIsolationTest(unittest.TestCase):
     """ app.py resolves its configuration at import time. """
@@ -274,6 +305,7 @@ class ViewerImportIsolationTest(unittest.TestCase):
                 "DATA_DIR": data_dir,
                 "SUMMARIZER_MAX_RETRIES": "not-a-number",
                 "ANTHROPIC_BASE_URL": "https://example.test",
+                "AI_DIGEST_FONT_PATH": "/no/such/font.ttf",
             })
 
             self.assertEqual(3000, module.config.port)

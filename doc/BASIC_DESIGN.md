@@ -657,8 +657,19 @@ things.
   openai-compatible backend from reaching the SDK with no base URL of its
   own: the anthropic-compatible one accepts an empty one by design, so only
   the former can fail this check.
-- **Resolves the font**, honouring the explicit setting and otherwise probing the
-  usual CJK locations for the first that exists.
+- **Resolves the font, strictly, with `is_usable_font_path()` as the single
+  usability check** — a file that exists *and* that Pillow can load as a
+  scalable font — shared by every route a font path reaches this module by.
+  An unset or blank `AI_DIGEST_FONT_PATH` is automatic mode: `CJK_FONT_CANDIDATES`
+  is probed in its existing order, skipping a candidate that is missing or
+  unusable, and `None` is returned when none is, which the image generators
+  already treat as no CJK font installed. A nonblank value is an explicit
+  request for exactly that path: `resolve_font_path()` returns it unchanged
+  when usable and raises otherwise, never falling through to a probed
+  candidate or to the bitmap font. `--font-path` enforces the same check at
+  the `argparse` boundary, through `is_usable_font_path()` directly, so
+  `apply_overrides()` uses the value the parser already accepted instead of
+  resolving it again.
 
 One defaulting decision lives here: the anthropic-compatible backend falls back
 on a known model where none is configured, the openai-compatible one has nothing

@@ -116,8 +116,7 @@
 #
 #  Version History:
 #  v1.8 2026-09-06
-#       Load configuration by subcommand, and reject impossible report
-#       dates at the parser boundary, instead of loading every setting.
+#       Scope configuration and reject invalid dates and font paths early.
 #  v1.7 2026-09-06
 #       Stage 'run', 'demo' and 'render' reports and publish them only
 #       once complete, instead of writing the date directory in place.
@@ -177,7 +176,7 @@ from ai_digest.storage import (ReportPublicationError, copy_existing_report,
                                write_report_json)
 from config import (SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                     SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
-                    Config, detect_font_path, load_demo_config,
+                    Config, is_usable_font_path, load_demo_config,
                     load_list_config, load_render_config, load_run_config,
                     split_csv)
 
@@ -258,6 +257,25 @@ def report_date(value: str) -> str:
     return value
 
 
+def font_path_option(value: str) -> str:
+    """
+    Parse an explicit --font-path option, rejecting an unusable one.
+
+    The option is only present when the operator gave it, so unlike
+    AI_DIGEST_FONT_PATH there is no 'unset' meaning to fall back on:
+    a blank value is refused rather than treated as automatic mode,
+    and a value naming a font Pillow cannot load is refused as well,
+    at the parser boundary rather than being probed away to a
+    different font later.
+    """
+    if not value.strip():
+        raise argparse.ArgumentTypeError("the font path must not be blank")
+    if not is_usable_font_path(value):
+        raise argparse.ArgumentTypeError(
+            "'{0}' is not a font file Pillow can load".format(value))
+    return value
+
+
 def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
     """
     Replace the settings the command line gave, and only those.
@@ -278,10 +296,8 @@ def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
 
     if "data_dir" in overrides:
         overrides["data_dir"] = os.path.abspath(overrides["data_dir"])
-    # A path naming no file is probed as AI_DIGEST_FONT_PATH is, rather
-    # than left to fail later in the image generators.
-    if "font_path" in overrides:
-        overrides["font_path"] = detect_font_path(overrides["font_path"])
+    # font_path_option() already validated and returned the exact path
+    # the parser accepted; it is used as is, never re-resolved.
 
     logger.info("command line overrides: %s", ", ".join(
         "{0}={1}".format(name, overrides[name])
@@ -618,7 +634,7 @@ def add_topics_option(parser: argparse.ArgumentParser) -> None:
 
 def add_font_option(parser: argparse.ArgumentParser) -> None:
     """ Add the font option, for the subcommands that draw images. """
-    parser.add_argument("--font-path",
+    parser.add_argument("--font-path", type=font_path_option,
                         help="CJK font used for the images "
                              "(AI_DIGEST_FONT_PATH)")
 

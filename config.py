@@ -121,6 +121,8 @@
 #      end to end before the client sees any of it.
 #  - AI_DIGEST_FONT_PATH
 #      Path of a CJK capable TrueType font used for image generation.
+#      Unset or blank probes the usual CJK locations; a nonblank value
+#      is an explicit request and must be a font Pillow can load.
 #  - DATA_DIR
 #      Directory where generated reports are stored.
 #  - HTTP_TIMEOUT
@@ -133,7 +135,7 @@
 #
 #  Version History:
 #  v1.7 2026-09-06
-#       Resolve only the settings each execution path uses.
+#       Scope settings by execution path and reject unusable explicit fonts.
 #  v1.6 2026-09-06
 #       Reject invalid numeric settings instead of silently using defaults.
 #  v1.5 2026-09-05
@@ -179,6 +181,8 @@
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from PIL import ImageFont
 
 try:
     from dotenv import dotenv_values, load_dotenv
@@ -354,22 +358,69 @@ def _env_token(env: Dict[str, str], name: str, default: str) -> str:
     return raw or default
 
 
-def detect_font_path(explicit: Optional[str] = None) -> Optional[str]:
-    """
-    Return a usable CJK font path.
+# Size the usability probe loads a candidate at. The value drawn at
+# render time does not matter here; only whether Pillow can open the
+# file as a scalable font at all.
+_FONT_PROBE_SIZE = 10
 
-    The explicit argument wins when it points at an existing file.
-    Otherwise the well known locations in CJK_FONT_CANDIDATES are
-    probed. None is returned when no CJK font is installed, in which
-    case the image generators fall back to the bitmap font bundled with
-    Pillow and Japanese characters render as blank boxes.
+
+def is_usable_font_path(path: str) -> bool:
     """
-    if explicit and os.path.isfile(explicit):
-        return explicit
+    Return True when Pillow can load path as a scalable font.
+
+    A missing file, a directory, and a file Pillow cannot read as a
+    TrueType or OpenType font are all unusable; the extension is never
+    trusted on its own. This is the one place that decides usability,
+    for an automatic candidate, an explicit environment setting and the
+    --font-path option alike.
+    """
+    if not os.path.isfile(path):
+        return False
+    try:
+        ImageFont.truetype(path, _FONT_PROBE_SIZE)
+    except OSError:
+        return False
+    return True
+
+
+def detect_font_path() -> Optional[str]:
+    """
+    Return the first automatic CJK font Pillow can actually load.
+
+    Only used in automatic mode, when AI_DIGEST_FONT_PATH is unset or
+    blank: CJK_FONT_CANDIDATES is probed in its existing order, and a
+    candidate that is missing or unusable is skipped rather than
+    failing the load. None means nothing usable was found, which the
+    image generators already treat as no CJK font installed, falling
+    back to Pillow's bitmap font.
+    """
     for candidate in CJK_FONT_CANDIDATES:
-        if os.path.isfile(candidate):
+        if is_usable_font_path(candidate):
             return candidate
     return None
+
+
+def resolve_font_path(explicit: Optional[str]) -> Optional[str]:
+    """
+    Resolve AI_DIGEST_FONT_PATH from an environment or .env value.
+
+    A value that is unset or blank (whitespace only counts as blank)
+    asks for automatic detection. A nonblank value is an explicit
+    request for exactly that path: it is returned unchanged when usable,
+    and refused otherwise rather than silently replaced by a probed
+    candidate or repaired by trimming its content.
+
+    Raises:
+        RuntimeError: explicit names a path that is not a font Pillow
+            can load.
+    """
+    if explicit is None or not explicit.strip():
+        return detect_font_path()
+    if not is_usable_font_path(explicit):
+        raise RuntimeError(
+            "AI_DIGEST_FONT_PATH is '{0}'; expected a font file Pillow "
+            "can load.".format(explicit))
+    return explicit
 
 
 @dataclass
@@ -641,7 +692,7 @@ def _resolve_batch_settings(env: Dict[str, str]) -> Dict[str, Any]:
         ),
         lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
         max_topics=_env_int(env, "MAX_TOPICS", 6, 1),
-        font_path=detect_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
+        font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
         data_dir=_resolve_data_dir(env),
         http_timeout=_env_int(env, "HTTP_TIMEOUT", 60, 1),
         user_agent=(_setting(env, "USER_AGENT") or "").strip()
@@ -696,7 +747,7 @@ def load_render_config() -> Config:
     env = _dotenv_values()
     return Config(
         data_dir=_resolve_data_dir(env),
-        font_path=detect_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
+        font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
         lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
     )
 
@@ -706,7 +757,7 @@ def load_demo_config() -> Config:
     env = _dotenv_values()
     return Config(
         data_dir=_resolve_data_dir(env),
-        font_path=detect_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
+        font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
         max_topics=_env_int(env, "MAX_TOPICS", 6, 1),
         lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
     )
