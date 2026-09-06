@@ -242,6 +242,8 @@ These lines are not crossed by a setting, by an option or by an extension.
   `vX.Y YYYY-MM-DD`, with the newest entry first.
 - Each entry's description is at most two lines, and a single line at or
   under 80 columns is preferred whenever practical.
+- The first entry, at the lowest version the file's own history reaches,
+  reads only `Initial release.` and nothing else.
 
 #### 1.8.2 Module Version Numbering
 - Versions use a two-level `major.minor` scheme.
@@ -301,6 +303,8 @@ These lines are not crossed by a setting, by an option or by an extension.
   be shortened without losing meaning. The two-line ceiling still applies.
 - `doc/VERSIONS` carries these guidelines again at its foot, and an entry
   written into it follows the limit recorded there.
+- The first entry, at the lowest version `doc/VERSIONS` reaches, reads only
+  `Initial release.` and nothing else.
 - Where the file has settled on a width of its own, predating this limit, a
   new entry is wrapped to that width and balanced against the lines already
   standing, so that the version history stays of a piece. Wrapping to hold an
