@@ -37,29 +37,17 @@
 #
 #  Version History:
 #  v1.4 2026-08-05
-#       Name SUMMARIZER_THINKING_MODE and SUMMARIZER_TEXT_JSON_FALLBACK
-#       in the messages that ask for them, following the settings out
-#       of the vendor prefix they used to carry.
+#       Name SUMMARIZER_THINKING_MODE and SUMMARIZER_TEXT_JSON_FALLBACK in the messages that
+#       ask for them, following the settings out of the vendor prefix they used to carry.
 #  v1.3 2026-08-05
-#       Bound one request with an explicit timeout instead of leaving
-#       it to the SDK default, so that an endpoint which never answers
-#       cannot hold a nightly run open until the next one starts.
+#       Bound one request with an explicit timeout instead of leaving it to the SDK default, so that
+#       an endpoint which never answers cannot hold a nightly run open until the next one starts.
 #  v1.2 2026-08-03
 #       Name the configured look back window in the prompt instead of
 #       always announcing 24 hours.
 #  v1.1 2026-08-02
-#       Let the caller shape the request, so that an
-#       Anthropic-compatible endpoint which returns no tool_use block
-#       can be configured to return one: the thinking output can be
-#       disabled, the tool choice can be named, unnamed or automatic, a
-#       report written as JSON text can be accepted, the SDK retries can
-#       be capped at one request per run, and the output budget comes
-#       from the caller rather than the module constant. Report the
-#       stop reason and the
-#       block types when the tool call is missing, report a truncated or
-#       unparsable set of arguments as such, accept only a build_report
-#       block, summarize the response at info level and keep the full
-#       body for debug level.
+#       Let the caller configure thinking, tool choice, JSON fallback, retry cap
+#       and output budget; report the stop reason on a missing tool call.
 #  v1.0 2026-07-25
 #       Initial release.
 #
