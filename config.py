@@ -139,40 +139,20 @@
 #  v1.6 2026-09-06
 #       Reject invalid numeric settings instead of silently using defaults.
 #  v1.5 2026-09-05
-#       Add validate_summarizer_base_url(), refusing an openai-compatible
-#       backend with SUMMARIZER_BASE_URL missing or blank instead of
-#       falling back on the OpenAI SDK's own default endpoint.
+#       Add validate_summarizer_base_url(), refusing an openai-compatible backend with SUMMARIZER_BASE_URL
+#       missing or blank instead of falling back on the OpenAI SDK's own default endpoint.
 #  v1.4 2026-08-05
-#       Name the endpoint settings after the summarization stage rather
-#       than after a vendor: the ANTHROPIC_* and OPENAI_* variables
-#       become one SUMMARIZER_* set, because one endpoint answers at a
-#       time and neither prefix described what the value addressed. The
-#       old names are refused at startup instead of being read, so that
-#       an ANTHROPIC_BASE_URL exported for another tool cannot decide
-#       where a digest is sent. SUMMARIZER_BACKEND now names the wire
-#       protocol, 'anthropic-compatible' or 'openai-compatible', and
-#       reports the replacement when it finds the former 'claude' or
-#       'openai'.
+#       Rename ANTHROPIC_*/OPENAI_* to a single SUMMARIZER_* set naming the wire
+#       protocol; refuse the old variable names at startup.
 #  v1.3 2026-08-05
-#       Give the summarization request a timeout of its own,
-#       SUMMARIZER_TIMEOUT, so that no outgoing request is left without
-#       one. Raise the defaults of MAX_OUTPUT_TOKENS to 8000 and
-#       HTTP_TIMEOUT to 60, and move the viewer to port 3000.
+#       Give the summarization request a timeout of its own, SUMMARIZER_TIMEOUT, so that no outgoing request is left without
+#       one. Raise the defaults of MAX_OUTPUT_TOKENS to 8000 and HTTP_TIMEOUT to 60, and move the viewer to port 3000.
 #  v1.2 2026-08-04
-#       Expose the comma separated list parser as split_csv(), so that
-#       the command line reads a list exactly as the environment does.
-#       Fall back on the default User-Agent when USER_AGENT is set but
-#       empty, as every other string setting already does.
+#       Expose the comma separated list parser as split_csv(), so that the command line reads a list exactly as the environment
+#       does. Fall back on the default User-Agent when USER_AGENT is set but empty, as every other string setting already does.
 #  v1.1 2026-08-02
-#       Reject an unknown SUMMARIZER_BACKEND instead of falling back on
-#       the default, and drop the unused require_api_key(). Add
-#       ANTHROPIC_THINKING_MODE, ANTHROPIC_TOOL_CHOICE_MODE with its
-#       'any' value, ANTHROPIC_TEXT_JSON_FALLBACK and
-#       ANTHROPIC_MAX_RETRIES, so that the request an
-#       Anthropic-compatible endpoint receives can be set explicitly.
-#       Add the OpenAI compatible backend with its key, base URL and
-#       model, and read MAX_OUTPUT_TOKENS from the environment instead
-#       of leaving it to the summarizer constant.
+#       Reject an unknown SUMMARIZER_BACKEND, add ANTHROPIC_THINKING_MODE and
+#       related settings, and add the OpenAI-compatible backend.
 #  v1.0 2026-07-25
 #       Initial release.
 #

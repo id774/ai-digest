@@ -29,13 +29,11 @@
 #
 #  Version History:
 #  v1.2 2026-08-04
-#       Treat an image refused as a decompression bomb like any other
-#       undecodable one. Pillow raises that error outside OSError, so
-#       it escaped and ended the daily run instead of yielding a card.
+#       Treat an image refused as a decompression bomb like any other undecodable one. Pillow raises
+#       that error outside OSError, so it escaped and ended the daily run instead of yielding a card.
 #  v1.1 2026-08-02
-#       Enforce the size limit while reading a response instead of
-#       after the whole body has been buffered, and request only http
-#       and https URLs.
+#       Enforce the size limit while reading a response instead of after the
+#       whole body has been buffered, and request only http and https URLs.
 #  v1.0 2026-07-25
 #       Initial release.
 #

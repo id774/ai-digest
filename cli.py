@@ -124,33 +124,20 @@
 #       Refuse a missing or blank SUMMARIZER_BASE_URL on the
 #       openai-compatible backend before collecting anything.
 #  v1.5 2026-08-05
-#       Name the endpoint options and settings after the summarization
-#       stage instead of a vendor: --anthropic-* and --openai-* become
-#       one --summarizer-* set, matching the SUMMARIZER_* variables
-#       they override, and one credential serves whichever backend is
-#       selected.
+#       Name the endpoint options and settings after the summarization stage instead of a vendor: --anthropic-* and --openai-* become one
+#       --summarizer-* set, matching the SUMMARIZER_* variables they override, and one credential serves whichever backend is selected.
 #  v1.4 2026-08-05
-#       Bound the summarization request with SUMMARIZER_TIMEOUT, and
-#       check it before anything is collected, so that an endpoint
-#       which never answers cannot hold a nightly run open.
+#       Bound the summarization request with SUMMARIZER_TIMEOUT, and check it before anything
+#       is collected, so that an endpoint which never answers cannot hold a nightly run open.
 #  v1.3 2026-08-04
-#       Accept every setting except the credentials as an option, so
-#       that a one off run needs neither the environment edited nor a
-#       variable prefixed. Record the look back window a run used in
-#       its statistics, so that 'render' redraws the summary image with
-#       the period the report was built from.
+#       Accept every non-credential setting as a CLI option, and record the
+#       lookback window so 'render' redraws with the matching period.
 #  v1.2 2026-08-03
-#       Pass the look back window to the summarizers and to the summary
-#       image, so that both describe the period actually collected.
-#       Report why a run collected nothing, distinguishing sources that
-#       could not be reached from sources that offered nothing recent.
+#       Pass the look back window to the summarizers and to the summary image, so that both describe the period actually collected.
+#       Report why a run collected nothing, distinguishing sources that could not be reached from sources that offered nothing recent.
 #  v1.1 2026-08-02
-#       Stop 'run' on an unknown SUMMARIZER_BACKEND value, and validate
-#       the thinking and tool choice settings before collecting
-#       anything, so that a bad value costs no API call. Run the OpenAI
-#       compatible backend when it is selected, and pass the text JSON
-#       fallback, the retry budget and the output budget to the
-#       summarizer.
+#       Reject an unknown SUMMARIZER_BACKEND before collecting anything, and run
+#       the OpenAI-compatible backend when selected.
 #  v1.0 2026-07-25
 #       Initial release.
 #

@@ -16,9 +16,8 @@ v1.2.2 (2026-08-26)
 -------------------
 - Add doc/REQUIREMENTS.md and doc/BASIC_DESIGN.md, separating what the system
   is required to do from how it is built, and reference both from README.
-- Treat structurally invalid report files as corrupt so that they cannot crash
-  the viewer or the render command, and reject a stored date that does not
-  match the report directory so that one report cannot use another day's assets.
+- Treat structurally invalid report files as corrupt so that they cannot crash the viewer or the render command, and
+  reject a stored date that does not match the report directory so that one report cannot use another day's assets.
 - Complete the versioning rules in doc/POLICY.md.
 - Make the summary-image attribution backend-neutral so plain reports are not
   labeled as AI-generated.
@@ -28,9 +27,8 @@ v1.2.1 (2026-08-09)
 - Add .gitattributes, marking the Markdown documents for diff.
 - Rename doc/POLICY and doc/LICENSE to doc/POLICY.md and doc/LICENSE.md, so
   that GitHub renders them, and update the references to them.
-- Expand doc/POLICY.md into a standalone policy covering environment
-  differences, repeated execution, naming, the scope and history of a pull
-  request, and the width a version history entry keeps.
+- Expand doc/POLICY.md into a standalone policy covering environment differences, repeated execution,
+  naming, the scope and history of a pull request, and the width a version history entry keeps.
 - Summarize the entries of this file to one bullet per change, as
   doc/POLICY.md has always asked.
 - Add the shared version history description guidelines to the end of this
@@ -38,18 +36,14 @@ v1.2.1 (2026-08-09)
 
 v1.2 (2026-08-05)
 -----------------
-- Rename the endpoint settings from ANTHROPIC_* and OPENAI_* to a single
-  SUMMARIZER_* set, and name the wire protocol in SUMMARIZER_BACKEND as
-  anthropic-compatible or openai-compatible; the command line options
-  follow the variables they override.
+- Rename the endpoint settings from ANTHROPIC_*/OPENAI_* to a single
+  SUMMARIZER_* set naming the wire protocol; CLI options follow suit.
 - Refuse the superseded setting names at startup. Upgrading a host means
   unsetting them wherever they were exported, not only editing .env.
-- Bound the summarization request with SUMMARIZER_TIMEOUT, defaulting to
-  180 seconds, so that HTTP_TIMEOUT now covers only the collectors and the
-  scraper.
-- Raise the MAX_OUTPUT_TOKENS default to 8000 and the HTTP_TIMEOUT default
-  to 60 seconds, and move the viewer from port 5000 to 3000. A deployment
-  relying on the defaults answers on the new port after an upgrade.
+- Bound the summarization request with SUMMARIZER_TIMEOUT, defaulting to 180
+  seconds, so that HTTP_TIMEOUT now covers only the collectors and the scraper.
+- Raise the MAX_OUTPUT_TOKENS default to 8000 and the HTTP_TIMEOUT default to 60 seconds, and move the viewer
+  from port 5000 to 3000. A deployment relying on the defaults answers on the new port after an upgrade.
 - Document USER_AGENT in .env.example.
 - Add doc/DEPLOYMENT.md and deploy/, covering the Debian and nginx
   procedure and the routine operations.
@@ -64,22 +58,18 @@ v1.1.1 (2026-08-04)
   east of UTC had been losing the offset from its look back window.
 - Name the configured look back window in the prompt and in the summary
   image instead of always announcing 24 hours.
-- Report why a run collected nothing, distinguishing unreachable sources,
-  sources with nothing published inside the window, and no source
-  configured; a run that loses only some of its sources continues and says
-  so.
+- Report why a run collected nothing, distinguishing unreachable sources, sources with nothing published inside
+  the window, and no source configured; a run that loses only some of its sources continues and says so.
 - Copy the composite image of the captured report into doc/screenshots from
   tools/capture_screens.py.
-- Accept every setting as a command line option on cli.py, each named after
-  the variable it replaces. The three credentials deliberately have none,
-  because a command line is readable by every user of the host.
+- Accept every setting as a command line option on cli.py, each named after the variable it replaces. The
+  three credentials deliberately have none, because a command line is readable by every user of the host.
 - Keep the categories of the leading topics in the legend of the summary
   image.
 - Draw a card instead of ending the run when an image is refused as a
   decompression bomb.
-- Record the look back window a run collected in the statistics of its
-  report, so that 'cli.py render' redraws the summary image with the period
-  the report was built from.
+- Record the look back window a run collected in the statistics of its report, so that
+  'cli.py render' redraws the summary image with the period the report was built from.
 - Fall back on the default identity when USER_AGENT is set but empty.
 - Apply the line limit of wrap_text() to an explicit line break as well.
 
@@ -89,39 +79,31 @@ v1.1 (2026-08-02)
   back on the default, and remove the unused Config.require_api_key().
 - Accept only http and https links from the collectors, and neutralize the
   ones already stored when a report is rendered.
-- Enforce the image size limit while the response is being read rather than
-  after the whole body has been buffered, and request image sources over
-  http and https only.
+- Enforce the image size limit while the response is being read rather than after the
+  whole body has been buffered, and request image sources over http and https only.
 - Anchor the report date pattern with \A and \Z.
 - Cover the configuration, the report paths, the link filtering, the capped
   download and the plain backend with unit tests.
-- Add ANTHROPIC_THINKING_MODE and ANTHROPIC_TOOL_CHOICE_MODE, the latter
-  taking 'any' as well as a named tool, for an endpoint that otherwise
-  never returns a tool_use block. The defaults leave the request unchanged.
+- Add ANTHROPIC_THINKING_MODE and ANTHROPIC_TOOL_CHOICE_MODE, the latter taking 'any' as well as a named tool,
+  for an endpoint that otherwise never returns a tool_use block. The defaults leave the request unchanged.
 - Add ANTHROPIC_TEXT_JSON_FALLBACK, off by default, which reads a report an
   endpoint wrote as JSON text rather than as a tool call.
 - Read MAX_OUTPUT_TOKENS from the environment, where it had been a constant
   in the summarizer.
 - Add ANTHROPIC_MAX_RETRIES.
-- Add SUMMARIZER_BACKEND=openai, an OpenAI-compatible Chat Completions path
-  validated through the same to_topics(); the openai package stays out of
-  requirements.txt and is imported only when that backend runs.
-- Name the stop reason and the content block types when the summarizer
-  finds no build_report call, report truncated or unparsable arguments as
-  such, accept only a block named build_report, and log one summary line
-  per response.
+- Add SUMMARIZER_BACKEND=openai, an OpenAI-compatible Chat Completions path validated through the same
+  to_topics(); the openai package stays out of requirements.txt and is imported only when that backend runs.
+- Name the stop reason and the content block types when the summarizer finds no build_report call, report truncated
+  or unparsable arguments as such, accept only a block named build_report, and log one summary line per response.
 - Add doc/POLICY, the ai-digest implementation policy adapted for a single
   Python project from the shared id774/scripts policy.
 
 v1.0 (2026-07-31)
 -----------------
-- Add the 'demo' command, which builds a report from the sample bundled in
-  ai_digest/demo without collecting anything or calling the API, and
-  document the output with screenshots captured from it by
-  tools/capture_screens.py.
-- Add SUMMARIZER_BACKEND=plain, letting the batch pipeline run without an
-  Anthropic API key by building topics mechanically instead of calling the
-  Claude API.
+- Add the 'demo' command, which builds a report from the sample bundled in ai_digest/demo without collecting anything
+  or calling the API, and document the output with screenshots captured from it by tools/capture_screens.py.
+- Add SUMMARIZER_BACKEND=plain, letting the batch pipeline run without an Anthropic
+  API key by building topics mechanically instead of calling the Claude API.
 - Support custom Anthropic-compatible API URLs and Bearer authentication.
 
 v0.1 (2026-07-26)

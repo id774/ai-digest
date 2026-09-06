@@ -42,7 +42,7 @@
 #       Name the configured look back window in the prompt, like the
 #       Anthropic path.
 #  v1.0 2026-08-02
-#       Initial release, with the output budget taken from the caller.
+#       Initial release.
 #
 ########################################################################
 

@@ -39,9 +39,8 @@
 #       Make fixed summary-image attribution backend-neutral so plain
 #       reports are not described as AI-generated.
 #  v1.2 2026-08-04
-#       Choose the legend entries before drawing them, so that a row
-#       too narrow for every category drops the trailing ones instead
-#       of the leading, most important ones.
+#       Choose the legend entries before drawing them, so that a row too narrow for every
+#       category drops the trailing ones instead of the leading, most important ones.
 #  v1.1 2026-08-03
 #       Name the configured look back window in the header and the
 #       footer instead of always announcing 24 hours.

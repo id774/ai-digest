@@ -71,9 +71,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-06
-#       Cover publication_workspace(), copy_existing_report(), the
-#       failure-atomic publish/replace/rollback semantics they add, and
-#       is_valid_date() rejecting an impossible calendar date.
+#       Cover publication_workspace(), copy_existing_report(), the failure-atomic publish/replace/rollback
+#       semantics they add, and is_valid_date() rejecting an impossible calendar date.
 #  v1.0 2026-08-05
 #       Initial release.
 #

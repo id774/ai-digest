@@ -31,10 +31,8 @@
 #
 #  Version History:
 #  v1.2 2026-08-03
-#       Read the parsed timestamps as UTC, which is what feedparser
-#       returns, instead of as local time. Return a CollectionResult
-#       describing the outcome of every category instead of a bare
-#       entry list.
+#       Read the parsed timestamps as UTC, which is what feedparser returns, instead of as local time.
+#       Return a CollectionResult describing the outcome of every category instead of a bare entry list.
 #  v1.1 2026-08-02
 #       Drop entries whose link is not an http or https URL.
 #  v1.0 2026-07-25
