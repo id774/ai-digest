@@ -44,6 +44,10 @@
 #    - Reject anything that could escape the archive, a trailing newline included.
 #    - Refuse a traversal in report_dir() with a ValueError.
 #    - Return None from a lookup rather than raising on a crafted date.
+#    - Accept a leap day in a leap year, and reject one shape-valid but
+#      impossible calendar date after another - a non-leap Feb 29, Feb 31,
+#      April 31, month 13, month 0, day 0 - from is_valid_date(),
+#      report_dir(), a lookup and list_dates() alike.
 #    - Return None for syntactically valid JSON with an invalid structure.
 #    - Return None when the stored date does not match its directory.
 #    - Save a report and load it back, listing its date in the archive.
@@ -67,8 +71,9 @@
 #
 #  Version History:
 #  v1.1 2026-09-06
-#       Cover publication_workspace(), copy_existing_report() and the
-#       failure-atomic publish/replace/rollback semantics they add.
+#       Cover publication_workspace(), copy_existing_report(), the
+#       failure-atomic publish/replace/rollback semantics they add, and
+#       is_valid_date() rejecting an impossible calendar date.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -97,6 +102,17 @@ TRAVERSAL_DATES = (
     "",
 )
 
+# Dates with the exact YYYY-MM-DD shape that name no real calendar day.
+IMPOSSIBLE_CALENDAR_DATES = (
+    "2026-02-29",  # 2026 is not a leap year
+    "2026-02-30",
+    "2026-02-31",
+    "2026-04-31",  # April has 30 days
+    "2026-13-01",  # no month 13
+    "2026-00-01",  # no month 0
+    "2026-01-00",  # no day 0
+)
+
 
 class DateValidationTest(unittest.TestCase):
 
@@ -120,6 +136,24 @@ class DateValidationTest(unittest.TestCase):
         # archive.
         self.assertIsNone(load_report("/tmp/archive", "../../etc"))
         self.assertIsNone(summary_image_path("/tmp/archive", "../../etc"))
+
+    def test_accepts_a_leap_day_in_a_leap_year(self):
+        self.assertTrue(is_valid_date("2024-02-29"))
+
+    def test_rejects_a_shape_valid_but_impossible_calendar_date(self):
+        for date in IMPOSSIBLE_CALENDAR_DATES:
+            with self.subTest(date=date):
+                self.assertFalse(is_valid_date(date))
+
+    def test_report_dir_refuses_an_impossible_calendar_date(self):
+        for date in IMPOSSIBLE_CALENDAR_DATES:
+            with self.subTest(date=date):
+                with self.assertRaises(ValueError):
+                    report_dir("/tmp/archive", date)
+
+    def test_lookups_return_none_for_an_impossible_calendar_date(self):
+        self.assertIsNone(load_report("/tmp/archive", "2026-02-31"))
+        self.assertIsNone(summary_image_path("/tmp/archive", "2026-02-31"))
 
 
 class RoundTripTest(unittest.TestCase):
@@ -169,6 +203,16 @@ class RoundTripTest(unittest.TestCase):
     def test_ignores_directories_that_are_not_dates(self):
         with tempfile.TemporaryDirectory() as data_dir:
             os.makedirs(os.path.join(data_dir, "scratch"))
+
+            self.assertEqual([], list_dates(data_dir))
+
+    def test_ignores_a_directory_named_after_an_impossible_calendar_date(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            directory = os.path.join(data_dir, "2026-02-31")
+            os.makedirs(directory)
+            path = os.path.join(directory, "report.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"date": "2026-02-31", "topics": []}, handle)
 
             self.assertEqual([], list_dates(data_dir))
 

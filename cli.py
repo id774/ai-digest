@@ -116,7 +116,8 @@
 #
 #  Version History:
 #  v1.8 2026-09-06
-#       Load configuration by subcommand instead of loading every setting.
+#       Load configuration by subcommand, and reject impossible report
+#       dates at the parser boundary, instead of loading every setting.
 #  v1.7 2026-09-06
 #       Stage 'run', 'demo' and 'render' reports and publish them only
 #       once complete, instead of writing the date directory in place.
@@ -171,8 +172,9 @@ from ai_digest.dedup import deduplicate
 from ai_digest.images import fallback, resolver
 from ai_digest.render import build, compose_image
 from ai_digest.storage import (ReportPublicationError, copy_existing_report,
-                               list_dates, load_report, publication_workspace,
-                               report_dir, write_report_json)
+                               is_valid_date, list_dates, load_report,
+                               publication_workspace, report_dir,
+                               write_report_json)
 from config import (SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                     SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
                     Config, detect_font_path, load_demo_config,
@@ -238,6 +240,22 @@ def bounded_int(value: str, minimum: int) -> int:
         raise argparse.ArgumentTypeError(
             "{0} is below the minimum of {1}".format(number, minimum))
     return number
+
+
+def report_date(value: str) -> str:
+    """
+    Parse an explicit report date, rejecting one that cannot exist.
+
+    A date used to be accepted whenever it merely looked like
+    YYYY-MM-DD, so '2026-02-31' reached collection and summarization
+    before anything noticed. is_valid_date() is the same calendar
+    check storage.py uses for every stored report, so a date the
+    parser accepts is one the archive can actually hold.
+    """
+    if not is_valid_date(value):
+        raise argparse.ArgumentTypeError(
+            "'{0}' is not a real YYYY-MM-DD date".format(value))
+    return value
 
 
 def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
@@ -514,6 +532,13 @@ def command_demo(args: argparse.Namespace, config: Config) -> int:
         return 1
 
     date = args.date or sample_date
+    # --date, when given, was already validated by the parser; a sample
+    # date never passes through that boundary, so it is checked here,
+    # before anything is generated or published.
+    if not is_valid_date(date):
+        logger.error("the demo sample's date '%s' is not a real "
+                     "YYYY-MM-DD date", date)
+        return 1
     stats = {
         "collected": collected,
         "deduplicated": collected,
@@ -670,7 +695,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
     run_parser = subparsers.add_parser(
         "run", help="collect, summarize and render a new report")
-    run_parser.add_argument("--date", help="report date, YYYY-MM-DD")
+    run_parser.add_argument("--date", type=report_date,
+                            help="report date, YYYY-MM-DD")
     run_parser.add_argument("--no-images", action="store_true",
                             help="never scrape, generate every card")
     add_topics_option(run_parser)
@@ -682,7 +708,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
     demo_parser = subparsers.add_parser(
         "demo", help="build the bundled sample report, no API key needed")
-    demo_parser.add_argument("--date", help="report date, YYYY-MM-DD")
+    demo_parser.add_argument("--date", type=report_date,
+                             help="report date, YYYY-MM-DD")
     demo_parser.add_argument("--input", help="sample JSON to use instead "
                                              "of the bundled one")
     add_topics_option(demo_parser)
@@ -692,7 +719,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
     render_parser = subparsers.add_parser(
         "render", help="rebuild the artifacts of a stored report")
-    render_parser.add_argument("date", help="report date, YYYY-MM-DD")
+    render_parser.add_argument("date", type=report_date,
+                               help="report date, YYYY-MM-DD")
     add_font_option(render_parser)
     add_common_options(render_parser)
     render_parser.set_defaults(handler=command_render,

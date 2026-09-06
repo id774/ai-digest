@@ -439,8 +439,12 @@ Further rules follow from rendering other people's text in a browser:
   sentence inside one of them that addresses the system is part of the material.
 - **A link is published only when it is an absolute ordinary web URL**, whatever
   route put it into the archive.
-- **A date arriving from a URL is validated before it names anything on disk**,
-  and a value that fails is refused rather than repaired.
+- **A report date is `YYYY-MM-DD` naming a real calendar date, not merely a
+  string of that shape.** `2026-02-31` is refused exactly as a traversal
+  attempt is. A date arriving from a URL is validated before it names
+  anything on disk, and a value that fails is refused rather than repaired.
+  An explicit date given to the batch is rejected before any work begins,
+  not once collection or an API request is already underway.
 
 ## 24. Operation
 

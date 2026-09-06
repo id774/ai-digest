@@ -386,15 +386,33 @@ from it and are kept in the same directory.
 The following properties of this module carry weight:
 
 - **The date pattern is anchored** so that a trailing newline cannot make a date
-  from a URL name a directory of its own.
+  from a URL name a directory of its own, and so a path traversal segment
+  never reaches the file system as part of one.
+- **A report date must be a real calendar date, not merely a string shaped
+  like one.** `is_valid_date()` checks the anchored `YYYY-MM-DD` pattern
+  first, for the path-safe canonical form, and only then parses the result
+  for calendar validity with the standard library, so `2026-02-31` is
+  refused even though it matches the pattern. It is the single source of
+  truth every path computation, lookup and listing in this module builds
+  on — `report_dir()`, `ensure_report_dir()`, `load_report()`,
+  `summary_image_path()`, `list_dates()` and `publication_workspace()` all
+  call it, directly or through `report_dir()` — so calendar validity and
+  path safety are checked exactly once, in exactly one place, for every
+  route a date reaches this module by. The CLI's explicit `--date` and
+  `DATE` arguments are validated against the same function at the
+  `argparse` boundary, described in section 14, so the same string is
+  accepted or refused the same way whether it names a URL segment or a
+  command line argument.
 - **The reader is defensive.** A missing file, an unreadable one, a syntax
   error, a payload that is not a mapping, topics that are not a list of
   mappings, statistics that are not a mapping, or a topic that will not rebuild
   all mean "no report". The viewer turns that into a 404, so one corrupt day
-  cannot take the archive down.
+  cannot take the archive down; an impossible calendar date reaches this same
+  defensive path, since `report_dir()` raising `ValueError` for it is caught
+  where every other lookup failure is.
 
-Listing returns only directories that are named like a date *and* hold a report,
-newest first.
+Listing returns only directories that are named like a date, hold a report,
+*and* name a calendar date that actually exists, newest first.
 
 ### Report publication
 
@@ -482,6 +500,17 @@ them. Which options a subcommand takes follows from what it does: the archive
 directory everywhere, the collection and endpoint settings on `run`, the font on
 the three subcommands that draw. A run that overrode something logs what it
 replaced, so the log of a report says how it was produced.
+
+`run --date`, `demo --date` and `render DATE` all take `report_date()` as their
+`argparse` type, which calls `ai_digest.storage.is_valid_date()` — the same
+function `report_dir()` uses — and raises `ArgumentTypeError` for anything it
+refuses. An impossible explicit date therefore never reaches a handler at all:
+`parse_args()` exits `2` before `main()` loads any configuration or a single
+source is collected, which is what keeps a mistyped `--date` from spending a
+network request or an API call. `demo` reads its date from the bundled or a
+custom sample when `--date` is not given; that date bypasses the parser, so
+`command_demo()` checks it with the same `is_valid_date()` before staging,
+illustrating or writing anything, failing the command instead.
 
 ### One run, in order
 

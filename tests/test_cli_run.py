@@ -44,6 +44,8 @@
 #      explicit base URL that the Config lacks.
 #    - Leave the anthropic-compatible and plain backends unaffected by
 #      the same preflight check.
+#    - Never reach collect_entries() for an impossible --date, rejected
+#      by main() before command_run() runs.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -110,6 +112,22 @@ class OpenAiCompatibleBaseUrlPreflightTest(unittest.TestCase):
             cli.command_run(args, applied)
 
         collect.assert_called_once()
+
+
+class ExplicitDateEarlyRejectionTest(unittest.TestCase):
+    """ An impossible --date must never reach collect_entries(). """
+
+    def test_impossible_date_never_reaches_collection(self):
+        # The rejection happens inside parse_args(), called by main()
+        # before configuration is loaded or command_run() runs, so this
+        # goes through main() rather than command_run() directly.
+        with mock.patch.object(cli, "collect_entries",
+                              return_value=CollectionResult()) as collect:
+            with self.assertRaises(SystemExit) as raised:
+                cli.main(["run", "--date", "2026-02-31"])
+
+        self.assertEqual(2, raised.exception.code)
+        collect.assert_not_called()
 
 
 class OtherBackendPreflightTest(unittest.TestCase):

@@ -37,8 +37,7 @@
 #
 #  Version History:
 #  v1.4 2026-09-06
-#       Add publication_workspace(), staging and publishing a report as
-#       a whole instead of writing the final date directory in place.
+#       Publish reports atomically and reject impossible calendar dates.
 #  v1.3 2026-08-19
 #       Reject a report whose stored date does not match its directory.
 #  v1.2 2026-08-11
@@ -59,6 +58,7 @@ import os
 import re
 import shutil
 import tempfile
+from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional
 
 from ai_digest import Topic
@@ -88,8 +88,22 @@ class ReportPublicationError(RuntimeError):
 
 
 def is_valid_date(date: str) -> bool:
-    """ Return True when the string is a plain YYYY-MM-DD date. """
-    return bool(DATE_PATTERN.match(date))
+    """
+    Return True when the string names a real Gregorian calendar date.
+
+    The exact YYYY-MM-DD shape is checked first, anchored so that a
+    trailing newline or a path traversal segment cannot pass. Only a
+    string with that shape is then parsed for calendar validity, so a
+    date that merely looks right - '2026-02-31', a non-leap
+    '2026-02-29', an out-of-range month - is refused as well.
+    """
+    if not DATE_PATTERN.match(date):
+        return False
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
 
 
 def report_dir(data_dir: str, date: str) -> str:
