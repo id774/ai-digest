@@ -43,6 +43,8 @@
 #    - Accept a known summarizer backend, and reject an unknown one.
 #    - Accept a real calendar date on 'run', 'demo' and 'render', and
 #      reject an impossible or a non-canonical one on all three.
+#    - Accept a usable --font-path, and reject one that is blank, missing,
+#      a directory, or a file Pillow cannot load, on all three subcommands.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -50,7 +52,7 @@
 #
 #  Version History:
 #  v1.1 2026-09-06
-#       Reject impossible report dates at the parser boundary.
+#       Reject impossible report dates and unusable font paths early.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -59,8 +61,10 @@
 import contextlib
 import io
 import os
+import tempfile
 import unittest
 from dataclasses import replace
+from unittest import mock
 
 import cli
 from config import Config
@@ -221,6 +225,47 @@ class ReportDateOptionTest(unittest.TestCase):
 
     def test_render_rejects_a_non_canonical_date(self):
         self.assertEqual(2, refused(["render", NON_CANONICAL_DATE]))
+
+
+class FontPathOptionTest(unittest.TestCase):
+    """
+    'run', 'demo' and 'render' reject an unusable --font-path at the
+    parser boundary. is_usable_font_path() is mocked for the usable and
+    the Pillow-refused cases, so nothing here depends on a font actually
+    installed on the host; the missing-file and directory cases need no
+    mock, since they fail the existence check on their own.
+    """
+
+    def test_accepts_a_usable_path(self):
+        with mock.patch.object(cli, "is_usable_font_path", return_value=True):
+            args = cli.parse_args(["run", "--font-path", "/some/font.ttf"])
+
+        self.assertEqual("/some/font.ttf", args.font_path)
+
+    def test_rejects_a_path_pillow_cannot_load(self):
+        with mock.patch.object(cli, "is_usable_font_path",
+                               return_value=False):
+            self.assertEqual(
+                2, refused(["run", "--font-path", "/bad/font.ttf"]))
+
+    def test_rejects_a_missing_file(self):
+        self.assertEqual(
+            2, refused(["run", "--font-path", "/no/such/font.ttf"]))
+
+    def test_rejects_a_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(2, refused(["run", "--font-path", directory]))
+
+    def test_rejects_a_blank_value(self):
+        self.assertEqual(2, refused(["run", "--font-path", ""]))
+
+    def test_rejects_a_whitespace_only_value(self):
+        self.assertEqual(2, refused(["run", "--font-path", "   "]))
+
+    def test_demo_and_render_reject_the_same_way(self):
+        self.assertEqual(2, refused(["demo", "--font-path", ""]))
+        self.assertEqual(
+            2, refused(["render", "2026-08-02", "--font-path", ""]))
 
 
 class ModeOptionTest(unittest.TestCase):

@@ -157,7 +157,7 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `MAX_TOPICS` | `6` | Maximum topics per report. Six fills the summary image grid. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
 | `SUMMARIZER_TIMEOUT` | `180` | Seconds allowed for one summarization request, on either API backend. Each retry spends it again; see [Timeouts](#timeouts). |
-| `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. |
+| `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. Blank probes automatically; an explicit value must be a font Pillow can load, or the command fails; see [Japanese font](#japanese-font). |
 | `DATA_DIR` | `data/reports` | Directory holding the generated reports. |
 | `HTTP_TIMEOUT` | `60` | Timeout in seconds of every collector and scraper request. The summarization request uses `SUMMARIZER_TIMEOUT`. |
 | `USER_AGENT` | `ai-digest/1.0 ...` | User-Agent sent with every outgoing request. |
@@ -323,16 +323,20 @@ collection has been spent.
 
 ### Japanese font
 
-`AI_DIGEST_FONT_PATH` overrides the font used by the image generators. When it is empty, these locations are probed in order and the first existing file wins:
+`AI_DIGEST_FONT_PATH` and `--font-path` name the font used by the image generators, and the two modes this setting has do not blend into each other:
 
-```
-/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
-/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf
-/usr/share/fonts/truetype/fonts-japanese-gothic.ttf
-/usr/share/fonts/truetype/vlgothic/VL-Gothic-Regular.ttf
-```
+- **Unset or blank** (whitespace only counts as blank) asks for automatic detection. These locations are probed in order, and the first one Pillow can actually load as a font wins, skipping over one that is missing, a directory, or unloadable:
 
-When no CJK font is found, the batch logs a warning once and keeps running with the Pillow bitmap font; the HTML report stays correct, but the images lose their text.
+  ```
+  /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+  /usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf
+  /usr/share/fonts/truetype/fonts-japanese-gothic.ttf
+  /usr/share/fonts/truetype/vlgothic/VL-Gothic-Regular.ttf
+  ```
+
+  When none of them is usable, the batch logs a warning once and keeps running with the Pillow bitmap font; the HTML report stays correct, but the images lose their text.
+
+- **A nonblank value is an explicit request for exactly that path.** It must be a font Pillow can load, or the command fails rather than silently trying another candidate or falling back to the bitmap font: `AI_DIGEST_FONT_PATH=/does/not/exist.ttf` is a configuration error (exit `1`), and `--font-path /does/not/exist.ttf` is refused by the parser (exit `2`), in both cases before anything is collected or generated.
 
 ## Standalone use, no API key
 

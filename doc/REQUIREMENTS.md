@@ -98,6 +98,12 @@ The host needs outbound HTTPS to the sources and, unless the API free mode is
 used, to the summarization endpoint, plus a CJK capable TrueType font, because Japanese text can appear in the
 report images and must remain renderable.
 
+**An explicit font setting must name a font file that can actually be loaded**,
+or the command that read it fails rather than silently repairing the value by
+trying another font. Best-effort detection, and the image fallback that draws
+without CJK glyphs when nothing suitable is found, apply only when no explicit
+font was requested.
+
 A platform whose file system does not survive a restart can host the viewer as a
 demonstration only. The archive is exactly what must survive.
 

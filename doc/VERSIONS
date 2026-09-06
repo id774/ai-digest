@@ -10,6 +10,7 @@ v1.2.3 (Release Date: TBD)
 - Reject invalid numeric settings instead of silently using defaults or failing later in a run.
 - Scope configuration to each command and the viewer so unrelated settings cannot stop independent paths.
 - Reject impossible calendar dates before report work begins or archive paths are accepted.
+- Reject unusable explicit font paths instead of silently selecting another font.
 
 v1.2.2 (2026-08-26)
 -------------------

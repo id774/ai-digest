@@ -38,6 +38,13 @@
 #  outside the setting's range. SUMMARIZER_MAX_RETRIES accepts zero; the
 #  other seven do not.
 #
+#  The font cases cover the same distinction for AI_DIGEST_FONT_PATH:
+#  unset or blank probes CJK_FONT_CANDIDATES for the first Pillow can
+#  actually load, skipping one it cannot, while a nonblank value is an
+#  explicit request that is used exactly or refused, never silently
+#  replaced by a probed candidate. The Pillow load itself is mocked
+#  throughout, so no case depends on a font installed on the host.
+#
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
@@ -74,18 +81,25 @@
 #    - Keep a valid explicit numeric setting.
 #    - Accept a retry budget of zero, and reject a negative one.
 #    - Reject zero and a negative value for the other numeric settings.
+#    - Judge font usability by existence and by Pillow loadability alike.
+#    - Probe automatic font candidates in order, skipping an unusable one.
+#    - Resolve an unset or blank font setting automatically, and refuse
+#      an unusable explicit one without probing a candidate.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
-#  - Standard library only
+#  - Pillow
 #
 #  Version History:
+#  v1.1 2026-09-06
+#       Resolve font paths per execution scope; explicit invalid values fail.
 #  v1.0 2026-08-05
 #       Initial release.
 #
 ########################################################################
 
 import os
+import tempfile
 import unittest
 from dataclasses import replace
 from unittest import mock
@@ -364,6 +378,136 @@ class NumericSettingTest(unittest.TestCase):
             with self.subTest(name=name):
                 with self.assertRaisesRegex(RuntimeError, name):
                     self.load({name: "-1"})
+
+
+class FontUsabilityTest(unittest.TestCase):
+    """
+    is_usable_font_path() is the one place that decides whether a font
+    file is usable, for an automatic candidate, an explicit setting and
+    the CLI option alike. The Pillow load itself is mocked, so no case
+    here depends on a font actually installed on the host.
+    """
+
+    def test_a_missing_path_is_unusable(self):
+        self.assertFalse(config.is_usable_font_path("/no/such/font.ttf"))
+
+    def test_a_directory_is_unusable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertFalse(config.is_usable_font_path(directory))
+
+    def test_an_existing_file_pillow_can_load_is_usable(self):
+        with tempfile.NamedTemporaryFile(suffix=".ttf") as handle:
+            with mock.patch.object(config.ImageFont, "truetype") as truetype:
+                self.assertTrue(config.is_usable_font_path(handle.name))
+            truetype.assert_called_once()
+
+    def test_an_existing_file_pillow_cannot_load_is_unusable(self):
+        with tempfile.NamedTemporaryFile(suffix=".ttf") as handle:
+            with mock.patch.object(config.ImageFont, "truetype",
+                                   side_effect=OSError("not a font")):
+                self.assertFalse(config.is_usable_font_path(handle.name))
+
+
+class AutomaticFontDetectionTest(unittest.TestCase):
+    """ detect_font_path() probes CJK_FONT_CANDIDATES for automatic mode. """
+
+    def test_selects_the_first_usable_candidate(self):
+        with mock.patch.object(config, "CJK_FONT_CANDIDATES",
+                              ("a", "b", "c")):
+            with mock.patch.object(config, "is_usable_font_path",
+                                   side_effect=lambda path: path == "b"):
+                self.assertEqual("b", config.detect_font_path())
+
+    def test_probes_candidates_in_the_existing_order(self):
+        probed = []
+
+        def record(path):
+            probed.append(path)
+            return False
+
+        with mock.patch.object(config, "CJK_FONT_CANDIDATES",
+                              ("a", "b", "c")):
+            with mock.patch.object(config, "is_usable_font_path",
+                                   side_effect=record):
+                config.detect_font_path()
+
+        self.assertEqual(["a", "b", "c"], probed)
+
+    def test_none_when_no_candidate_is_usable(self):
+        with mock.patch.object(config, "CJK_FONT_CANDIDATES", ("a", "b")):
+            with mock.patch.object(config, "is_usable_font_path",
+                                   return_value=False):
+                self.assertIsNone(config.detect_font_path())
+
+
+class ExplicitFontPathTest(unittest.TestCase):
+    """
+    resolve_font_path() is what an environment or .env value goes
+    through: automatic detection when unset or blank, and a strict,
+    non-repaired check of the exact path otherwise.
+    """
+
+    def test_none_uses_automatic_detection(self):
+        with mock.patch.object(config, "detect_font_path",
+                               return_value="/auto/font.ttf") as detect:
+            self.assertEqual("/auto/font.ttf", config.resolve_font_path(None))
+
+        detect.assert_called_once()
+
+    def test_blank_and_whitespace_only_use_automatic_detection(self):
+        with mock.patch.object(config, "detect_font_path",
+                               return_value="/auto/font.ttf") as detect:
+            self.assertEqual("/auto/font.ttf", config.resolve_font_path(""))
+            self.assertEqual("/auto/font.ttf",
+                            config.resolve_font_path("   "))
+
+        self.assertEqual(2, detect.call_count)
+
+    def test_a_valid_explicit_path_is_used_exactly(self):
+        with mock.patch.object(config, "is_usable_font_path",
+                               return_value=True):
+            self.assertEqual("/explicit/font.ttf",
+                            config.resolve_font_path("/explicit/font.ttf"))
+
+    def test_an_invalid_explicit_path_is_refused_without_probing(self):
+        with mock.patch.object(config, "is_usable_font_path",
+                               return_value=False):
+            with mock.patch.object(config, "detect_font_path") as detect:
+                with self.assertRaisesRegex(RuntimeError,
+                                            "AI_DIGEST_FONT_PATH"):
+                    config.resolve_font_path("/bad/font.ttf")
+
+        detect.assert_not_called()
+
+
+class FontPathConfigurationTest(unittest.TestCase):
+    """ AI_DIGEST_FONT_PATH resolved end to end through load_config(). """
+
+    def load(self, environment):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with mock.patch.object(config, "load_dotenv", None):
+                return config.load_config()
+
+    def test_unset_font_path_uses_automatic_detection(self):
+        with mock.patch.object(config, "detect_font_path",
+                               return_value="/auto/font.ttf") as detect:
+            loaded = self.load({})
+
+        self.assertEqual("/auto/font.ttf", loaded.font_path)
+        detect.assert_called_once()
+
+    def test_valid_explicit_font_path_is_used_exactly(self):
+        with mock.patch.object(config, "is_usable_font_path",
+                               return_value=True):
+            loaded = self.load({"AI_DIGEST_FONT_PATH": "/explicit/font.ttf"})
+
+        self.assertEqual("/explicit/font.ttf", loaded.font_path)
+
+    def test_invalid_explicit_font_path_fails_the_load(self):
+        with mock.patch.object(config, "is_usable_font_path",
+                               return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "AI_DIGEST_FONT_PATH"):
+                self.load({"AI_DIGEST_FONT_PATH": "/bad/font.ttf"})
 
 
 if __name__ == "__main__":
