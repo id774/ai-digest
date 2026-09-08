@@ -85,12 +85,17 @@
 #    - Probe automatic font candidates in order, skipping an unusable one.
 #    - Resolve an unset or blank font setting automatically, and refuse
 #      an unusable explicit one without probing a candidate.
+#    - Require every configured news feed to be an absolute HTTPS URL, and
+#      keep load_config() itself from enforcing it, so a valid CLI
+#      override still wins over an invalid lower-priority raw value.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow
 #
 #  Version History:
+#  v1.2 2026-09-08
+#       Cover HTTPS validation of configured news feeds.
 #  v1.1 2026-09-06
 #       Resolve font paths per execution scope; explicit invalid values fail.
 #  v1.0 2026-08-05
@@ -508,6 +513,75 @@ class FontPathConfigurationTest(unittest.TestCase):
                                return_value=False):
             with self.assertRaisesRegex(RuntimeError, "AI_DIGEST_FONT_PATH"):
                 self.load({"AI_DIGEST_FONT_PATH": "/bad/font.ttf"})
+
+
+class NewsFeedUrlsTest(unittest.TestCase):
+    """
+    validated_news_feed_urls() and Config.validate_news_feed_urls() must
+    require every configured feed to be an absolute HTTPS URL, without
+    load_config() itself rejecting a non-HTTPS value: that is what lets a
+    valid --news-feed-urls override win over an invalid lower-priority
+    environment or .env value for one invocation.
+    """
+
+    def load(self, environment):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with mock.patch.object(config, "load_dotenv", None):
+                return config.load_config()
+
+    def test_the_default_list_passes(self):
+        config.validated_news_feed_urls(config.split_csv(
+            config.DEFAULT_NEWS_FEED_URLS))
+
+    def test_a_plain_https_url_passes(self):
+        self.assertEqual(
+            ["https://example.test/feed"],
+            config.validated_news_feed_urls(["https://example.test/feed"]))
+
+    def test_a_port_and_query_https_url_passes(self):
+        url = "https://example.test:8443/feed?format=atom"
+        self.assertEqual([url], config.validated_news_feed_urls([url]))
+
+    def test_an_http_url_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "NEWS_FEED_URLS"):
+            config.validated_news_feed_urls(["http://example.test/feed"])
+
+    def test_a_relative_url_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "NEWS_FEED_URLS"):
+            config.validated_news_feed_urls(["example.test/feed"])
+
+    def test_a_hostless_https_url_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "NEWS_FEED_URLS"):
+            config.validated_news_feed_urls(["https:///feed"])
+
+    def test_a_mixed_list_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "NEWS_FEED_URLS"):
+            config.validated_news_feed_urls(
+                ["https://example.test/good", "http://example.test/bad"])
+
+    def test_an_empty_list_passes(self):
+        self.assertEqual([], config.validated_news_feed_urls([]))
+
+    def test_a_blank_setting_resolves_to_an_empty_list_and_passes(self):
+        loaded = self.load({"NEWS_FEED_URLS": ""})
+
+        self.assertEqual([], loaded.news_feed_urls)
+        loaded.validate_news_feed_urls()
+
+    def test_config_validate_news_feed_urls_rejects_a_non_https_url(self):
+        loaded = self.load({"NEWS_FEED_URLS": "http://example.test/feed"})
+
+        with self.assertRaisesRegex(RuntimeError, "NEWS_FEED_URLS"):
+            loaded.validate_news_feed_urls()
+
+    def test_the_load_itself_does_not_reject_a_non_https_url(self):
+        # Loading must not enforce this so that a valid CLI override can
+        # still win over an invalid lower-priority raw value; only the
+        # explicit call is where an invalid effective value fails.
+        loaded = self.load({"NEWS_FEED_URLS": "http://example.test/feed"})
+
+        self.assertEqual(["http://example.test/feed"],
+                         loaded.news_feed_urls)
 
 
 if __name__ == "__main__":

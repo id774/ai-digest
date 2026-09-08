@@ -79,6 +79,11 @@ These lines are not crossed by a setting, by an option or by an extension.
   collectors filter what they store and `safe_url` neutralizes what is already
   stored, so that a report written before the filter existed, or edited by hand,
   cannot put another scheme into an `href`.
+- Collection and illustration retrieval use absolute HTTPS request targets only.
+  Redirects are followed only while the resolved target remains HTTPS; an HTTP
+  downgrade is refused before that request is sent. This is separate from the
+  report-link rule above, which continues to allow absolute http and https
+  citations.
 - One misbehaving source never ends the run. An unreachable feed, a page that
   does not scrape, an image that is refused: each degrades to a warning and a
   fallback, and the run continues with what it has.

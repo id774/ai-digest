@@ -59,7 +59,7 @@ see [Standalone use, no API key](#standalone-use-no-api-key).
 - Python 3.9 or later
 - A credential for an endpoint speaking the Anthropic Messages API or the OpenAI Chat Completions API, unless `SUMMARIZER_BACKEND=plain` (see [Standalone use, no API key](#standalone-use-no-api-key))
 - A CJK capable TrueType font, for example the `fonts-noto-cjk` package; see [Japanese font](#japanese-font)
-- Outbound HTTPS access to `export.arxiv.org`, the configured feeds and, unless running standalone, the configured summarization endpoint
+- Outbound HTTPS access to `export.arxiv.org`, the configured feeds, source pages used for optional illustrations and, unless running standalone, the configured summarization endpoint
 
 Python dependencies are listed in `requirements.txt`:
 
@@ -152,7 +152,7 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `SUMMARIZER_TEXT_JSON_FALLBACK` | `disabled` | Read by `anthropic-compatible`. `enabled` also accepts a report written as JSON text when no tool call came back; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
-| `NEWS_FEED_URLS` | list defined by `DEFAULT_NEWS_FEED_URLS` in `config.py` | RSS or Atom feeds to collect, comma separated. |
+| `NEWS_FEED_URLS` | list defined by `DEFAULT_NEWS_FEED_URLS` in `config.py` | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL; blank disables news-feed collection. |
 | `LOOKBACK_HOURS` | `24` | Age limit of the collected entries. |
 | `MAX_TOPICS` | `6` | Maximum topics per report. Six fills the summary image grid. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
@@ -168,6 +168,12 @@ shown; an explicit value that is not a whole number, or that is out of range,
 is refused instead of silently falling back to the default. `SUMMARIZER_MAX_RETRIES`
 accepts `0` and above; every other numeric setting requires `1` or above. The
 command-line option of the same setting enforces the same range.
+
+Source retrieval is HTTPS-only. Feed and scraper redirects are followed only
+while their resolved targets remain HTTPS; an HTTP downgrade is refused before
+the next request is sent. This does not change citation compatibility: reports
+may still contain ordinary absolute HTTP or HTTPS source links, but the batch
+does not fetch an HTTP source page for illustration.
 
 ### Anthropic-compatible APIs
 

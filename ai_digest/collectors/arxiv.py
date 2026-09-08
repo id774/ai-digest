@@ -30,6 +30,8 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.3 2026-09-08
+#       Fetch arXiv only over HTTPS, including redirects.
 #  v1.2 2026-08-03
 #       Read the parsed timestamps as UTC, which is what feedparser returns, instead of as local time.
 #       Return a CollectionResult describing the outcome of every category instead of a bare entry list.
@@ -51,8 +53,9 @@ import feedparser
 import requests
 
 from ai_digest import CollectionResult, Entry, is_safe_url
+from ai_digest.transport import https_get
 
-API_ENDPOINT = "http://export.arxiv.org/api/query"
+API_ENDPOINT = "https://export.arxiv.org/api/query"
 
 # Delay between two consecutive API requests, in seconds, to respect the
 # rate limit recommended by arXiv.
@@ -105,14 +108,13 @@ def _fetch_category(category: str, max_results: int, timeout: int,
     })
     url = "{0}?{1}".format(API_ENDPOINT, query)
     try:
-        response = requests.get(
-            url, timeout=timeout, headers={"User-Agent": user_agent}
-        )
-        response.raise_for_status()
+        with https_get(url, timeout, user_agent) as response:
+            response.raise_for_status()
+            content = response.content
     except requests.RequestException as error:
         logger.warning("arXiv request failed for %s: %s", category, error)
         return [], "{0}".format(error)
-    parsed = feedparser.parse(response.content)
+    parsed = feedparser.parse(content)
     if not parsed.entries and getattr(parsed, "bozo", 0):
         error = getattr(parsed, "bozo_exception", "unknown parse error")
         logger.warning("arXiv response unusable for %s: %s", category, error)

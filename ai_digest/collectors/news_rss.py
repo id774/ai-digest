@@ -27,6 +27,8 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.3 2026-09-08
+#       Fetch configured feeds only over HTTPS, including redirects.
 #  v1.2 2026-08-03
 #       Read the parsed timestamps as UTC, which is what feedparser returns, instead of as local time.
 #       Return a CollectionResult describing the outcome of every feed instead of a bare entry list.
@@ -48,6 +50,7 @@ import feedparser
 import requests
 
 from ai_digest import CollectionResult, Entry, is_safe_url
+from ai_digest.transport import https_get
 
 # Strip HTML markup from feed summaries; feeds mix plain text, escaped
 # HTML and full articles, and only the readable text is useful here.
@@ -116,17 +119,16 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
 
     for url in feed_urls:
         try:
-            response = requests.get(
-                url, timeout=timeout, headers={"User-Agent": user_agent}
-            )
-            response.raise_for_status()
+            with https_get(url, timeout, user_agent) as response:
+                response.raise_for_status()
+                content = response.content
         except requests.RequestException as error:
             logger.warning("feed request failed for %s: %s", url, error)
             result.sources_failed += 1
             result.failures.append("{0}: {1}".format(url, error))
             continue
 
-        parsed_feed = feedparser.parse(response.content)
+        parsed_feed = feedparser.parse(content)
         if not parsed_feed.entries and getattr(parsed_feed, "bozo", 0):
             error = getattr(parsed_feed, "bozo_exception",
                             "unknown parse error")

@@ -52,12 +52,18 @@
 #    - Say that the sources answered with nothing inside the window.
 #    - Say that the sources answered with no item at all.
 #    - Name the failed sources of a partial pass.
+#    - Never request a directly configured http feed URL.
+#    - Request the HTTPS arXiv endpoint.
+#    - Map a transport refusal to an ordinary source failure, continuing
+#      with the remaining sources.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.1 2026-09-08
+#       Cover HTTPS-only source collection and transport failures.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -71,7 +77,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import cli
-from ai_digest import CollectionResult
+from ai_digest import CollectionResult, transport
 from ai_digest.collectors import arxiv, news_rss
 
 
@@ -132,15 +138,30 @@ class LookBackWindowTest(unittest.TestCase):
             self.assertLess(age, timedelta(hours=24))
 
 
+class _FakeHttpsResponse:
+    """ Minimal stand in for the response https_get() yields. """
+
+    def __init__(self, content):
+        self.content = content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exception):
+        return False
+
+    def raise_for_status(self):
+        return None
+
+
 def _collect_news(links, lookback_hours=24):
     """ Run the news collector over stubbed feed entries. """
     parsed = SimpleNamespace(
         feed=SimpleNamespace(title="Feed"),
         entries=[_feed_entry(link) for link in links],
     )
-    response = mock.Mock(content=b"<rss/>")
-    response.raise_for_status = mock.Mock()
-    with mock.patch.object(news_rss.requests, "get", return_value=response):
+    response = _FakeHttpsResponse(b"<rss/>")
+    with mock.patch.object(news_rss, "https_get", return_value=response):
         with mock.patch.object(news_rss.feedparser, "parse",
                                return_value=parsed):
             return news_rss.collect(["https://feed.test/rss"], lookback_hours)
@@ -152,10 +173,10 @@ class NewsLinkFilterTest(unittest.TestCase):
         return _collect_news(links).entries
 
     def test_keeps_http_links(self):
-        entries = self.collect(["https://example.test/a"])
+        entries = self.collect(["http://example.test/a"])
 
         self.assertEqual(1, len(entries))
-        self.assertEqual("https://example.test/a", entries[0].url)
+        self.assertEqual("http://example.test/a", entries[0].url)
 
     def test_drops_a_script_link(self):
         with self.assertLogs(news_rss.logger, "WARNING") as logged:
@@ -185,9 +206,10 @@ class ArxivLinkFilterTest(unittest.TestCase):
                 return arxiv.collect(["cs.AI"], 10, 24).entries
 
     def test_keeps_http_links(self):
-        entries = self.collect(["https://arxiv.org/abs/2601.00001"])
+        entries = self.collect(["http://arxiv.org/abs/2601.00001"])
 
         self.assertEqual(1, len(entries))
+        self.assertEqual("http://arxiv.org/abs/2601.00001", entries[0].url)
 
     def test_drops_a_script_link(self):
         with self.assertLogs(arxiv.logger, "WARNING") as logged:
@@ -197,12 +219,80 @@ class ArxivLinkFilterTest(unittest.TestCase):
         self.assertIn("unusable link", logged.output[0])
 
 
+class NewsDirectHttpTargetTest(unittest.TestCase):
+    """ A configured feed URL that is not HTTPS must never be requested. """
+
+    def test_a_direct_http_feed_url_is_never_requested(self):
+        with mock.patch.object(transport.requests, "Session") as session_cls:
+            result = news_rss.collect(["http://feed.test/rss"], 24)
+
+        session_cls.assert_not_called()
+        self.assertEqual([], result.entries)
+        self.assertEqual(1, result.sources_total)
+        self.assertEqual(1, result.sources_failed)
+        self.assertTrue(result.failures)
+
+
+class ArxivEndpointTest(unittest.TestCase):
+    """ The arXiv collector must request the HTTPS endpoint. """
+
+    def test_fetch_category_requests_the_https_endpoint(self):
+        response = _FakeHttpsResponse(b"<feed></feed>")
+        parsed = SimpleNamespace(entries=[], bozo=0)
+        with mock.patch.object(arxiv, "https_get",
+                               return_value=response) as getter:
+            with mock.patch.object(arxiv.feedparser, "parse",
+                                   return_value=parsed):
+                arxiv._fetch_category("cs.AI", 10, 15, "ai-digest")
+
+        url = getter.call_args.args[0]
+        self.assertTrue(url.startswith(
+            "https://export.arxiv.org/api/query?"))
+
+
+class TransportFailureMappingTest(unittest.TestCase):
+    """
+    A transport refusal (HTTPSOnlyError, TooManyRedirects) must be
+    counted as an ordinary source failure, and the remaining sources
+    must still be attempted.
+    """
+
+    def test_https_only_error_fails_an_arxiv_category(self):
+        with mock.patch.object(arxiv, "https_get",
+                               side_effect=transport.HTTPSOnlyError(
+                                   "refusing downgrade")):
+            with mock.patch.object(time, "sleep"):
+                result = arxiv.collect(["cs.AI", "cs.LG"], 10, 24)
+
+        self.assertEqual(2, result.sources_failed)
+        self.assertEqual(0, result.sources_read)
+
+    def test_too_many_redirects_fails_one_feed_and_the_rest_continue(self):
+        good_response = _FakeHttpsResponse(b"<rss/>")
+        parsed = SimpleNamespace(
+            feed=SimpleNamespace(title="Feed"),
+            entries=[_feed_entry("https://example.test/a")],
+        )
+        with mock.patch.object(news_rss, "https_get", side_effect=[
+            transport.requests.TooManyRedirects("redirect loop"),
+            good_response,
+        ]):
+            with mock.patch.object(news_rss.feedparser, "parse",
+                                   return_value=parsed):
+                result = news_rss.collect(
+                    ["https://feed.test/a", "https://feed.test/b"], 24)
+
+        self.assertEqual(2, result.sources_total)
+        self.assertEqual(1, result.sources_failed)
+        self.assertEqual(1, len(result.entries))
+
+
 class CollectionOutcomeTest(unittest.TestCase):
     """ An empty pass must say whether the sources could be read. """
 
     def test_reports_a_failed_feed(self):
         error = news_rss.requests.ConnectionError("name resolution failed")
-        with mock.patch.object(news_rss.requests, "get", side_effect=error):
+        with mock.patch.object(news_rss, "https_get", side_effect=error):
             with self.assertLogs(news_rss.logger, "WARNING"):
                 result = news_rss.collect(["https://feed.test/rss"], 24)
 

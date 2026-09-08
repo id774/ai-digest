@@ -19,6 +19,12 @@
 #  checked the other way, proving that preflight lets it reach
 #  collect_entries() rather than failing on the same check.
 #
+#  The NEWS_FEED_URLS cases cover the same shape of check for the
+#  effective, post-override feed list: an invalid one fails before
+#  collecting regardless of backend, and a valid --news-feed-urls
+#  override still reaches collect_entries() despite an invalid
+#  lower-priority raw value underneath it.
+#
 #  No network is used and no source is read: collect_entries() is
 #  replaced by a stub for every case.
 #
@@ -46,12 +52,18 @@
 #      the same preflight check.
 #    - Never reach collect_entries() for an impossible --date, rejected
 #      by main() before command_run() runs.
+#    - Fail with exit status 1 on an invalid effective NEWS_FEED_URLS,
+#      before collecting.
+#    - Reach collect_entries() when a valid --news-feed-urls override
+#      replaces an invalid lower-priority raw value.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Standard library only (collect_entries() is stubbed, never called)
 #
 #  Version History:
+#  v1.1 2026-09-08
+#       Cover HTTPS feed preflight and effective CLI override validation.
 #  v1.0 2026-09-05
 #       Initial release.
 #
@@ -149,6 +161,42 @@ class OtherBackendPreflightTest(unittest.TestCase):
         with mock.patch.object(cli, "collect_entries",
                               return_value=CollectionResult()) as collect:
             cli.command_run(args, config)
+
+        collect.assert_called_once()
+
+
+class NewsFeedUrlsPreflightTest(unittest.TestCase):
+    """
+    An invalid effective NEWS_FEED_URLS must fail command_run() before
+    collect_entries() is ever called, and a valid --news-feed-urls
+    override must let a lower-priority invalid raw value through to
+    collection for that one invocation.
+    """
+
+    def test_an_invalid_effective_value_fails_before_collecting(self):
+        config = Config(summarizer_backend="plain",
+                        news_feed_urls=["http://example.test/feed"])
+        args = cli.parse_args(["run"])
+
+        with mock.patch.object(cli, "collect_entries",
+                              return_value=CollectionResult()) as collect:
+            status = cli.command_run(args, config)
+
+        self.assertEqual(1, status)
+        collect.assert_not_called()
+
+    def test_a_valid_override_reaches_collection_despite_the_invalid_base(self):
+        config = Config(summarizer_backend="plain",
+                        news_feed_urls=["http://old.example/feed"])
+        args = cli.parse_args(
+            ["run", "--news-feed-urls", "https://new.example/feed"])
+        applied = cli.apply_overrides(config, args)
+
+        self.assertEqual(["https://new.example/feed"],
+                         applied.news_feed_urls)
+        with mock.patch.object(cli, "collect_entries",
+                              return_value=CollectionResult()) as collect:
+            cli.command_run(args, applied)
 
         collect.assert_called_once()
 

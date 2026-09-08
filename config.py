@@ -102,7 +102,9 @@
 #  - ARXIV_MAX_RESULTS
 #      Upper bound of arXiv entries fetched per run.
 #  - NEWS_FEED_URLS
-#      Comma separated RSS/Atom feed URLs to collect.
+#      Comma separated RSS/Atom feed URLs to collect. Every non-empty
+#      item must be an absolute HTTPS URL; blank disables news-feed
+#      collection.
 #  - LOOKBACK_HOURS
 #      Age limit, in hours, of collected entries.
 #  - MAX_TOPICS
@@ -129,11 +131,13 @@
 #      Timeout, in seconds, applied to every collector and scraper
 #      request. The summarization request uses SUMMARIZER_TIMEOUT.
 #  - USER_AGENT
-#      User-Agent header sent with every outgoing HTTP request.
+#      User-Agent header sent with every collector and scraper request.
 #  - PORT
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v1.8 2026-09-08
+#       Validate configured news feeds as HTTPS retrieval targets.
 #  v1.7 2026-09-06
 #       Scope settings by execution path and reject unusable explicit fonts.
 #  v1.6 2026-09-06
@@ -163,6 +167,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from PIL import ImageFont
+
+from ai_digest.transport import is_https_url
 
 try:
     from dotenv import dotenv_values, load_dotenv
@@ -266,6 +272,23 @@ def split_csv(value: str) -> List[str]:
     option is read exactly like the same list given in the environment.
     """
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def validated_news_feed_urls(urls: List[str]) -> List[str]:
+    """
+    Return urls unchanged, raising when one is not an absolute HTTPS URL.
+
+    NEWS_FEED_URLS is a retrieval target, not a citation, so every item
+    must be requestable over HTTPS; a non-HTTPS item is a configuration
+    error rather than a URL silently repaired or skipped.
+    """
+    for url in urls:
+        if not is_https_url(url):
+            raise RuntimeError(
+                "NEWS_FEED_URLS contains '{0}'; expected an absolute "
+                "HTTPS URL.".format(url)
+            )
+    return urls
 
 
 def _dotenv_values() -> Dict[str, str]:
@@ -603,6 +626,10 @@ class Config:
                 "SUMMARIZER_TIMEOUT is {0}; expected a positive number "
                 "of seconds.".format(self.summarizer_timeout)
             )
+
+    def validate_news_feed_urls(self) -> None:
+        """ Raise when a configured news feed is not an HTTPS target. """
+        validated_news_feed_urls(self.news_feed_urls)
 
 
 def _refuse_legacy_variables(env: Dict[str, str]) -> None:

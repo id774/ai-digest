@@ -78,7 +78,8 @@
 #      --lookback-hours N (LOOKBACK_HOURS)
 #      --arxiv-categories LIST (ARXIV_CATEGORIES)
 #      --arxiv-max-results N (ARXIV_MAX_RESULTS)
-#      --news-feed-urls LIST (NEWS_FEED_URLS)
+#      --news-feed-urls LIST (NEWS_FEED_URLS), every non-empty item
+#          must be an absolute HTTPS URL
 #      --summarizer-backend NAME (SUMMARIZER_BACKEND)
 #      --summarizer-model NAME (SUMMARIZER_MODEL)
 #      --summarizer-base-url URL (SUMMARIZER_BASE_URL)
@@ -103,7 +104,8 @@
 #       because no topic could be built, because the credential is
 #       missing, because SUMMARIZER_BACKEND,
 #       SUMMARIZER_THINKING_MODE or SUMMARIZER_TOOL_CHOICE_MODE holds
-#       an unknown value, or because a setting this project no longer
+#       an unknown value, because the effective NEWS_FEED_URLS holds a
+#       non-HTTPS item, or because a setting this project no longer
 #       reads is still exported.
 #  - 2: The command line was rejected, for example because an option
 #       expecting a positive number received something else.
@@ -115,6 +117,8 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v1.9 2026-09-08
+#       Reject non-HTTPS news-feed overrides before collection.
 #  v1.8 2026-09-06
 #       Scope configuration and reject invalid dates and font paths early.
 #  v1.7 2026-09-06
@@ -165,7 +169,7 @@ from config import (SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                     SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
                     Config, is_usable_font_path, load_demo_config,
                     load_list_config, load_render_config, load_run_config,
-                    split_csv)
+                    split_csv, validated_news_feed_urls)
 
 logger = logging.getLogger("ai_digest.cli")
 
@@ -261,6 +265,15 @@ def font_path_option(value: str) -> str:
         raise argparse.ArgumentTypeError(
             "'{0}' is not a font file Pillow can load".format(value))
     return value
+
+
+def news_feed_urls_option(value: str) -> List[str]:
+    """ Parse and validate HTTPS news-feed overrides. """
+    urls = split_csv(value)
+    try:
+        return validated_news_feed_urls(urls)
+    except RuntimeError as error:
+        raise argparse.ArgumentTypeError(str(error))
 
 
 def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
@@ -446,6 +459,12 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
             config.validate_summarizer_timeout()
         if use_anthropic:
             config.validate_protocol_options()
+    except RuntimeError as error:
+        logger.error("%s", error)
+        return 1
+
+    try:
+        config.validate_news_feed_urls()
     except RuntimeError as error:
         logger.error("%s", error)
         return 1
@@ -637,8 +656,8 @@ def add_collection_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--arxiv-max-results", type=positive_int,
                         help="entries fetched per arXiv category "
                              "(ARXIV_MAX_RESULTS)")
-    parser.add_argument("--news-feed-urls", type=split_csv,
-                        help="comma separated RSS or Atom feeds "
+    parser.add_argument("--news-feed-urls", type=news_feed_urls_option,
+                        help="comma separated HTTPS RSS or Atom feeds "
                              "(NEWS_FEED_URLS)")
     parser.add_argument("--http-timeout", type=positive_int,
                         help="timeout of every request, in seconds "

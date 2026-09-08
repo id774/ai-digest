@@ -45,12 +45,16 @@
 #      reject an impossible or a non-canonical one on all three.
 #    - Accept a usable --font-path, and reject one that is blank, missing,
 #      a directory, or a file Pillow cannot load, on all three subcommands.
+#    - Accept --news-feed-urls made only of absolute HTTPS URLs, or blank,
+#      and reject an http, a relative, a hostless or a mixed list.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.2 2026-09-08
+#       Reject non-HTTPS news-feed overrides at the parser boundary.
 #  v1.1 2026-09-06
 #       Reject impossible report dates and unusable font paths early.
 #  v1.0 2026-08-05
@@ -279,6 +283,53 @@ class ModeOptionTest(unittest.TestCase):
 
     def test_rejects_an_unknown_backend(self):
         self.assertEqual(2, refused(["run", "--summarizer-backend", "claud"]))
+
+
+class NewsFeedUrlsOptionTest(unittest.TestCase):
+    """
+    --news-feed-urls must reject any non-HTTPS item at the parser
+    boundary, the same place --font-path and --date do it, so an
+    override reaches command_run() only once every item is HTTPS.
+    """
+
+    def test_accepts_a_single_https_url(self):
+        args = cli.parse_args(
+            ["run", "--news-feed-urls", "https://a.example/feed"])
+
+        self.assertEqual(["https://a.example/feed"], args.news_feed_urls)
+
+    def test_accepts_several_https_urls(self):
+        args = cli.parse_args([
+            "run", "--news-feed-urls",
+            "https://a.example/feed,https://b.example/feed",
+        ])
+
+        self.assertEqual(
+            ["https://a.example/feed", "https://b.example/feed"],
+            args.news_feed_urls)
+
+    def test_accepts_a_blank_value_as_an_empty_list(self):
+        args = cli.parse_args(["run", "--news-feed-urls", ""])
+
+        self.assertEqual([], args.news_feed_urls)
+
+    def test_rejects_an_http_url(self):
+        self.assertEqual(
+            2, refused(["run", "--news-feed-urls", "http://a.example/feed"]))
+
+    def test_rejects_a_relative_value(self):
+        self.assertEqual(
+            2, refused(["run", "--news-feed-urls", "a.example/feed"]))
+
+    def test_rejects_a_hostless_https_url(self):
+        self.assertEqual(
+            2, refused(["run", "--news-feed-urls", "https:///feed"]))
+
+    def test_rejects_a_mixed_list(self):
+        self.assertEqual(2, refused([
+            "run", "--news-feed-urls",
+            "https://a.example/feed,http://b.example/feed",
+        ]))
 
 
 if __name__ == "__main__":
