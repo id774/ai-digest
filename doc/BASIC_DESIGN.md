@@ -97,6 +97,7 @@ path it did not get from `ai_digest/storage.py`.
 ├── .env.example             the settings, with no value that is a credential
 ├── ai_digest/
 │   ├── __init__.py          Entry, Topic, CollectionResult, link guard, colors
+│   ├── transport.py         HTTPS-only retrieval and redirect boundary
 │   ├── dedup.py             mechanical duplicate removal
 │   ├── storage.py           every path computation, and the report format
 │   ├── collectors/          where material comes from
@@ -161,6 +162,22 @@ same collection rules.
   contributes nothing, records its reason in the outcome, and lets the run
   continue. One misbehaving source never invalidates the others.
 - **Every request carries a timeout and the configured User-Agent.**
+- **Every collector request goes through one HTTPS transport boundary.**
+  The initial target and each resolved redirect target must be absolute HTTPS;
+  a downgrade is refused before the next request is sent.
+
+```text
+configured target
+    -> HTTPS validation
+    -> request without automatic redirects
+    -> HTTPS redirect validation
+    -> response
+```
+
+This is a retrieval rule, not the citation rule of section 5's `is_safe_url()`
+guard: a published entry link may still be an ordinary absolute `http` or
+`https` URL, and rendering it is that guard's responsibility, not
+`ai_digest/transport.py`'s.
 
 **arXiv** is queried once per category, sorted newest first, so the age filter
 can stop as soon as older entries appear rather than reading a whole page of
@@ -330,6 +347,11 @@ image-byte cap, and a minimum image side **while reading** rather than after
 buffering, so oversized or unusable material is rejected before it is fully
 retained, and a decoder refusing an image is an ordinary "no image" rather than
 the end of a run.
+
+The resolver reaches a page or an image through the same shared HTTPS
+transport boundary as section 6's collectors. An HTTP article citation is
+never fetched for illustration, an HTTP image candidate is never downloaded,
+and either case degrades to the normal fallback card rather than the run.
 
 The fallback draws a panel in the category colour with the label and the
 headline wrapped to the width, and it also owns the font loading, measuring and
@@ -514,10 +536,11 @@ illustrating or writing anything, failing the command instead.
 
 ### One run, in order
 
-1. **Validate the settings the selected backend needs** — the backend name
+1. **Validate the settings needed before collection** — the backend name
    first, then the credential, model, retry budget, output budget and timeout,
-   and for the anthropic-compatible backend the three protocol options. Nothing
-   has been collected and no request spent at this point.
+   and for the anthropic-compatible backend the three protocol options, then
+   the effective `NEWS_FEED_URLS` as HTTPS targets. Nothing has been collected
+   and no request spent at this point.
 2. **Collect**, papers then news, merged into one outcome.
 3. **Nothing collected?** Log which of the four cases it was, and fail.
 4. **Some sources failed?** Warn, naming how many, and continue.
@@ -657,6 +680,11 @@ things.
   openai-compatible backend from reaching the SDK with no base URL of its
   own: the anthropic-compatible one accepts an empty one by design, so only
   the former can fail this check.
+- **Validates `NEWS_FEED_URLS` as HTTPS targets only after `apply_overrides()`.**
+  The loaders read it as an ordinary list, unchecked; `Config.validate_news_feed_urls()`
+  is called on the effective value `run` is about to collect from, so an
+  invalid lower-priority environment or `.env` value never blocks a valid
+  `--news-feed-urls` override for that invocation.
 - **Resolves the font, strictly, with `is_usable_font_path()` as the single
   usability check** — a file that exists *and* that Pillow can load as a
   scalable font — shared by every route a font path reaches this module by.

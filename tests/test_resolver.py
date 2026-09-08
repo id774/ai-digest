@@ -12,15 +12,21 @@
 #  rather than being buffered in full and measured afterwards, so that
 #  an endless response cannot exhaust the memory of the host.
 #
-#  The rest is the best-effort contract. A non http URL is refused
-#  without a request being made, a host that fails and an image Pillow
-#  refuses both yield None, and a decompression bomb, which is small
-#  enough to pass the byte limit and only refused on open, yields None
-#  as well. The caller has to be able to draw a fallback card in every
-#  one of those cases rather than lose the run.
+#  The rest is the best-effort contract. Retrieval is HTTPS-only: a
+#  direct http source and an http redirect target are both refused
+#  without a plaintext request ever being sent, a host that fails and an
+#  image Pillow refuses both yield None, and a decompression bomb, which
+#  is small enough to pass the byte limit and only refused on open,
+#  yields None as well. The caller has to be able to draw a fallback
+#  card in every one of those cases rather than lose the run. This is
+#  separate from published citation compatibility: an http citation can
+#  still derive an HTTPS ar5iv URL to fetch.
 #
-#  No request is made. requests.get is replaced by a stub returning a
-#  stand-in response, so the suite needs no network.
+#  No request is made. resolver.https_get is replaced by a stub
+#  returning a stand-in response for most cases; the direct HTTP source
+#  cases go through the real transport helper with requests.Session
+#  mocked instead, so that "no Session is ever created" is proven rather
+#  than assumed. The suite needs no network either way.
 #
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
@@ -38,18 +44,23 @@
 #    - Stop reading once the limit is exceeded.
 #    - Abandon the response instead of reading the whole body first.
 #    - Stream the request and close the response.
-#    - Refuse a non http URL without requesting it.
 #    - Give up on an oversized body.
 #    - Return None when the host fails.
 #    - Skip an oversized image.
 #    - Pass MAX_IMAGE_BYTES as the limit when fetching an image.
 #    - Return None for a decompression bomb instead of raising.
+#    - Refuse a direct http page and a direct http image candidate
+#      without ever creating a Session.
+#    - Refuse an HTTPS to http downgrade redirect target.
+#    - Derive the HTTPS ar5iv URL from an http arXiv citation.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow, requests, beautifulsoup4
 #
 #  Version History:
+#  v1.1 2026-09-08
+#       Cover HTTPS-only page and image retrieval.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -61,7 +72,9 @@ from unittest import mock
 
 from PIL import Image
 
+from ai_digest import transport
 from ai_digest.images import resolver
+from ai_digest.transport import HTTPSOnlyError
 
 
 class FakeResponse:
@@ -121,7 +134,7 @@ class FetchTest(unittest.TestCase):
 
     def fetch(self, url, chunks=(b"body",), limit=1024):
         response = FakeResponse(list(chunks))
-        with mock.patch.object(resolver.requests, "get",
+        with mock.patch.object(resolver, "https_get",
                                return_value=response) as getter:
             result = resolver._fetch(url, 5, "ai-digest", limit)
         return result, getter, response
@@ -133,12 +146,6 @@ class FetchTest(unittest.TestCase):
         self.assertTrue(getter.call_args.kwargs["stream"])
         self.assertTrue(response.closed)
 
-    def test_refuses_a_non_http_url_without_requesting_it(self):
-        result, getter, _response = self.fetch("file:///etc/passwd")
-
-        self.assertIsNone(result)
-        getter.assert_not_called()
-
     def test_gives_up_on_an_oversized_body(self):
         result, _getter, _response = self.fetch(
             "https://example.test/huge", chunks=(b"x" * 2048,), limit=1024)
@@ -146,11 +153,42 @@ class FetchTest(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_returns_none_when_the_host_fails(self):
-        with mock.patch.object(resolver.requests, "get",
+        with mock.patch.object(resolver, "https_get",
                                side_effect=resolver.requests.RequestException(
                                    "boom")):
             self.assertIsNone(
                 resolver._fetch("https://example.test/x", 5, "ai-digest", 10))
+
+    def test_returns_none_on_a_downgrade_redirect(self):
+        with mock.patch.object(resolver, "https_get",
+                               side_effect=HTTPSOnlyError(
+                                   "refusing non-HTTPS redirect target")):
+            self.assertIsNone(
+                resolver._fetch("https://example.test/x", 5, "ai-digest", 10))
+
+
+class DirectHttpSourceTest(unittest.TestCase):
+    """
+    A direct http source must never create a Session: the refusal
+    happens inside https_get() before any network object exists, not
+    only inside _fetch()'s own error handling.
+    """
+
+    def test_a_direct_http_page_is_never_requested(self):
+        with mock.patch.object(transport.requests, "Session") as session_cls:
+            result = resolver._fetch("http://example.test/page", 5,
+                                     "ai-digest", 1024)
+
+        self.assertIsNone(result)
+        session_cls.assert_not_called()
+
+    def test_a_direct_http_image_candidate_is_never_requested(self):
+        with mock.patch.object(transport.requests, "Session") as session_cls:
+            result = resolver._download_image("http://example.test/i.png",
+                                              5, "ai-digest")
+
+        self.assertIsNone(result)
+        session_cls.assert_not_called()
 
 
 class DownloadImageTest(unittest.TestCase):
@@ -184,6 +222,24 @@ class DownloadImageTest(unittest.TestCase):
             self.assertIsNone(
                 resolver._download_image("https://example.test/i.png",
                                          5, "ai-digest"))
+
+
+class ArxivFigureUrlTest(unittest.TestCase):
+    """
+    An http arXiv citation is a valid published link, but the figure is
+    still fetched from the HTTPS ar5iv rendering: the citation itself is
+    never requested.
+    """
+
+    def test_derives_the_https_ar5iv_url_from_an_http_citation(self):
+        with mock.patch.object(resolver, "_fetch",
+                               return_value=None) as fetcher:
+            resolver.arxiv_figure_url("http://arxiv.org/abs/2601.00001",
+                                      5, "ai-digest")
+
+        fetcher.assert_called_once()
+        self.assertEqual("https://ar5iv.labs.arxiv.org/html/2601.00001",
+                         fetcher.call_args.args[0])
 
 
 if __name__ == "__main__":

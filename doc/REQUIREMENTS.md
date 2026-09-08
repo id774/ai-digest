@@ -98,6 +98,12 @@ The host needs outbound HTTPS to the sources and, unless the API free mode is
 used, to the summarization endpoint, plus a CJK capable TrueType font, because Japanese text can appear in the
 report images and must remain renderable.
 
+All collection and illustration requests use HTTPS, and a redirect is followed
+only when its resolved target is also HTTPS; a downgrade target is refused
+before a plaintext request is sent. This retrieval rule is separate from
+citation compatibility: an ordinary absolute HTTP source link may remain in a
+report even though the batch will not fetch it.
+
 **An explicit font setting must name a font file that can actually be loaded**,
 or the command that read it fails rather than silently repairing the value by
 trying another font. Best-effort detection, and the image fallback that draws
@@ -112,6 +118,9 @@ demonstration only. The archive is exactly what must survive.
 **Papers** from a configured set of arXiv categories, and **news** from a
 configured list of RSS or Atom feeds. Both lists are settings: adding or
 removing a source is configuration, not a code change.
+
+Every non-empty NEWS_FEED_URLS item is an absolute HTTPS URL. A malformed or
+non-HTTPS effective value is a configuration error before collection begins.
 
 Only material published inside a **look back window** is kept — twenty four
 hours by default, and configurable, because a quiet weekend is answered by
@@ -265,6 +274,9 @@ succeeding.** A publisher changing its markup degrades the look of a report,
 never its availability, and a locally drawn card is a normal outcome rather than
 a degraded one.
 
+An HTTP article citation is not fetched for illustration; when no HTTPS
+retrieval path yields an image, the normal locally drawn card is used.
+
 ## 15. Running without a model
 
 The system must remain usable where no summarization API is available. A
@@ -341,7 +353,8 @@ The batch runs unattended, so how it fails is part of what it is.
 
 **Continue** — a partial failure that still leaves a usable report:
 
-- some sources could not be read, but others yielded valid items,
+- some sources could not be read — unreachable, a TLS failure, or an HTTP
+  downgrade refused before a plaintext request — but others yielded valid items,
 - some external images could not be obtained,
 - some individual topics returned by an API-backed model were malformed.
 

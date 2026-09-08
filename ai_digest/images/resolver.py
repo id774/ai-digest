@@ -28,6 +28,8 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
+#  v1.3 2026-09-08
+#       Fetch source pages and images only over HTTPS.
 #  v1.2 2026-08-04
 #       Treat an image refused as a decompression bomb like any other undecodable one. Pillow raises
 #       that error outside OSError, so it escaped and ended the daily run instead of yielding a card.
@@ -49,7 +51,7 @@ import requests
 from bs4 import BeautifulSoup
 from PIL import Image, UnidentifiedImageError
 
-from ai_digest import is_safe_url
+from ai_digest.transport import HTTPSOnlyError, https_get
 
 # arXiv abstract, PDF and versioned URLs all embed the same identifier.
 ARXIV_ID_PATTERN = re.compile(r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})")
@@ -102,15 +104,13 @@ def _fetch(url: str, timeout: int, user_agent: str,
 
     Returns the body together with the URL the response came from, so
     that relative links can be resolved against it, or None on any
-    failure. Only http and https are requested: the candidate URLs come
-    from third party pages, and no other scheme has a meaning here.
+    failure. Only HTTPS is requested, and a redirect to a downgraded
+    target is refused before it is followed: the candidate URLs come
+    from third party pages, and no other scheme or protocol has a
+    meaning here.
     """
-    if not is_safe_url(url):
-        logger.info("refusing non-http image source: %s", url)
-        return None
     try:
-        with requests.get(url, timeout=timeout, stream=True,
-                          headers={"User-Agent": user_agent}) as response:
+        with https_get(url, timeout, user_agent, stream=True) as response:
             response.raise_for_status()
             body = _read_capped(response, limit)
             if body is None:
@@ -118,6 +118,9 @@ def _fetch(url: str, timeout: int, user_agent: str,
                             limit, url)
                 return None
             return body, response.url
+    except HTTPSOnlyError as error:
+        logger.info("refusing image source %s: %s", url, error)
+        return None
     except requests.RequestException as error:
         logger.info("image source unreachable %s: %s", url, error)
         return None
