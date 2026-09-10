@@ -20,7 +20,7 @@
 #  many papers the readable ones offered, so that the caller can tell an
 #  unreachable API from a window that simply holds nothing.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
