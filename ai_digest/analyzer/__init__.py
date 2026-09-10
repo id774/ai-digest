@@ -11,7 +11,7 @@
 #  OpenAI-compatible Chat Completions route, and plain builds the same
 #  Topic structure mechanically without a language model.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com

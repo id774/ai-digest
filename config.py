@@ -33,7 +33,7 @@
 #  in this module performs network access or touches the file system
 #  beyond reading .env, so it is safe to import from anywhere.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com

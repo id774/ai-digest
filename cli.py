@@ -24,7 +24,7 @@
 #  ai_digest/demo, skipping collection and summarization, so that the
 #  viewer has something to show before an API key is configured.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com

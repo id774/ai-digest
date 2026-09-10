@@ -22,7 +22,7 @@
 #  absent from requirements.txt: only this backend needs it, and the
 #  default installation should not carry a second API client.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com

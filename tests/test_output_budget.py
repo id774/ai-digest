@@ -21,7 +21,7 @@
 #  No request is made. The API clients are replaced by stubs, so the
 #  suite needs no credential and no network.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com

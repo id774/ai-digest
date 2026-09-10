@@ -45,7 +45,7 @@
 #  replaced by a probed candidate. The Pillow load itself is mocked
 #  throughout, so no case depends on a font installed on the host.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
