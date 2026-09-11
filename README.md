@@ -237,6 +237,12 @@ OpenAI-compatible Chat Completions API, reading the answer from
 fallback: both backends validate the parsed arguments identically, so a report
 does not differ by the route it took.
 
+This backend offers `build_report` as the only tool and sends
+`tool_choice="required"` rather than naming that function explicitly. Since
+`build_report` is the only tool available, requiring a tool call still means
+requiring a `build_report` call; no provider, model or URL is inspected to
+choose between a required and a named tool choice.
+
 ```env
 SUMMARIZER_BACKEND=openai-compatible
 SUMMARIZER_API_KEY=<UUID>:<secret>
@@ -283,6 +289,13 @@ default and its response may carry a `reasoning_content` field
 alongside the tool call; `ai-digest` reads only the final tool-call
 arguments, and this configuration adds no Kimi-specific setting to
 control, display, store or log that thinking output.
+
+Kimi K3's thinking mode is not compatible with a named function tool
+choice, so a request naming `build_report` explicitly is refused. The
+`openai-compatible` backend instead sends `tool_choice="required"` for
+every endpoint, and since `build_report` is the only tool it offers,
+that still requires a `build_report` call from Kimi K3. No Kimi-specific
+backend, setting or fallback exists for this.
 
 ### Renamed settings
 

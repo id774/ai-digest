@@ -7,9 +7,9 @@
 #  Description:
 #  This test suite covers the OpenAI compatible summarizer backend. It
 #  pins that the function tool is the Anthropic schema reused rather
-#  than a second copy that could drift from it, that the request names
-#  the tool it wants called, and that the collected window reaches the
-#  prompt.
+#  than a second copy that could drift from it, that the request
+#  requires a tool call without naming a function choice, and that the
+#  collected window reaches the prompt.
 #
 #  The reading of an answer is where most of the cases sit. A call by
 #  another name, a missing call, arguments that are not JSON and
@@ -52,7 +52,7 @@
 #    - Reject arguments that are not an object.
 #    - Reject an answer that carries no choice.
 #    - Call nothing when there is no entry to summarize.
-#    - Name the tool in the request and in tool_choice.
+#    - Require the sole tool in the request without naming a function choice.
 #    - Build topics through the validation shared with the Anthropic path.
 #    - Drop a topic citing a source index that does not exist.
 #    - Pass the base URL and the retry budget to the SDK.
@@ -67,6 +67,9 @@
 #  - Standard library only (the openai package is stubbed, never imported)
 #
 #  Version History:
+#  v1.1 2026-09-12
+#       Require the sole OpenAI-compatible report tool without naming a
+#       function choice.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -179,13 +182,12 @@ class SummarizeTest(unittest.TestCase):
                 [], api_key="key", model="m", max_topics=6))
         builder.assert_not_called()
 
-    def test_names_the_tool_in_the_request(self):
+    def test_requires_the_only_tool(self):
         _topics, create = self.build(_response())
 
         request = create.call_args.kwargs
-        self.assertEqual(
-            {"type": "function", "function": {"name": "build_report"}},
-            request["tool_choice"])
+        self.assertEqual("required", request["tool_choice"])
+        self.assertEqual(1, len(request["tools"]))
         self.assertEqual("build_report",
                          request["tools"][0]["function"]["name"])
 

@@ -32,6 +32,9 @@
 #  - openai, installed separately: pip install openai
 #
 #  Version History:
+#  v1.4 2026-09-12
+#       Use required tool choice so thinking models can call the sole
+#       build_report tool.
 #  v1.3 2026-09-05
 #       Refuse a missing or blank base_url in _build_client(), and name
 #       the current backend in the missing-package error.
@@ -216,10 +219,7 @@ def summarize(entries: List[Entry], api_key: str, model: str,
                                      lookback_hours)},
         ],
         tools=[build_function_tool()],
-        tool_choice={
-            "type": "function",
-            "function": {"name": BUILD_REPORT_TOOL["name"]},
-        },
+        tool_choice="required",
     )
 
     # Same shape as the Anthropic path logs, so that two runs against
