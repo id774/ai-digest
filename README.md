@@ -259,6 +259,31 @@ this optional backend:
 pip install openai
 ```
 
+### Kimi K3
+
+Kimi K3 is used over this same `openai-compatible` backend; no
+Kimi-specific backend is added for it:
+
+```env
+SUMMARIZER_BACKEND=openai-compatible
+SUMMARIZER_API_KEY=<Kimi API key>
+SUMMARIZER_BASE_URL=https://api.moonshot.ai/v1
+SUMMARIZER_MODEL=kimi-k3
+```
+
+The base URL is `https://api.moonshot.ai/v1` and the model is
+`kimi-k3`. This backend still needs the `openai` package described
+above; run `pip install openai` if it is not already installed.
+`ai-digest` sends Kimi K3 the same `build_report` function tool, the
+same prompt and the same validation as any other `openai-compatible`
+endpoint; none of these are changed for Kimi K3. If a response does not
+satisfy the existing tool-call contract, the run fails rather than
+falling back to another provider or backend. Kimi K3 uses thinking by
+default and its response may carry a `reasoning_content` field
+alongside the tool call; `ai-digest` reads only the final tool-call
+arguments, and this configuration adds no Kimi-specific setting to
+control, display, store or log that thinking output.
+
 ### Renamed settings
 
 The endpoint settings used to be spelled `ANTHROPIC_*` and `OPENAI_*`, one set
