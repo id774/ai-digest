@@ -258,6 +258,12 @@ arguments, and validates identically — so **a report does not differ by the
 route it took.** Its SDK is imported inside the call, because only that backend
 needs it.
 
+The OpenAI-compatible backend translates `BUILD_REPORT_TOOL` into one function
+tool, offers that tool alone, and requires a tool call with
+`tool_choice="required"`. Because `build_report` is the only available tool,
+requiring a tool preserves the same output contract without selecting a
+provider-specific named function choice.
+
 ### What the model is asked for
 
 The prompt numbers every candidate and asks for topics in decreasing importance.
@@ -289,6 +295,12 @@ The defaults leave the request unchanged from what the reference implementation
 expects. The text fallback stays off until a raw response has shown that an
 endpoint really answers that way, and a run that takes it logs a warning naming
 the setting that allowed it.
+
+These three settings are compatibility controls for the `anthropic-compatible`
+backend only. The `openai-compatible` backend has no compatibility setting of
+its own: it always offers `build_report` as its sole tool and always requires
+a tool call, so no provider, model or base URL is inspected to pick a
+different request shape.
 
 ### The mechanical backend
 

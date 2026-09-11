@@ -3,6 +3,8 @@ ai-digest Repository Version History
 
 v1.2.3 (Release Date: TBD)
 --------------------------
+- Require the sole build_report tool on the OpenAI-compatible backend without
+  using a named function choice, allowing thinking models such as Kimi K3.
 - Require an explicit SUMMARIZER_BASE_URL for the openai-compatible backend,
   failing early when it is missing or blank.
 - Build a report in a staging directory and publish it whole only once complete,
