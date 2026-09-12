@@ -40,6 +40,8 @@
 #    - Accept zero on --summarizer-max-retries only, rejecting it on every
 #      other numeric option.
 #    - Reject a non-integer or a negative value on every numeric option.
+#    - Accept --max-topics at its lower and upper bound, 1 and 6, on run and
+#      demo, and reject 7 on both with exit code 2.
 #    - Accept a known summarizer backend, and reject an unknown one.
 #    - Accept a real calendar date on 'run', 'demo' and 'render', and
 #      reject an impossible or a non-canonical one on all three.
@@ -53,6 +55,8 @@
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.3 2026-09-12
+#       Cover the six-topic upper bound of --max-topics.
 #  v1.2 2026-09-08
 #       Reject non-HTTPS news-feed overrides at the parser boundary.
 #  v1.1 2026-09-06
@@ -146,29 +150,30 @@ class NumericOptionTest(unittest.TestCase):
         self.assertRejected(["run", "--summarizer-max-retries", "-1"])
 
 
-# (option, minimum) for every numeric option 'run' accepts. Retries alone
-# allows zero; the environment variable of the same name shares this
-# minimum, which is what NumericSettingTest in test_config.py pins on
-# the other side of the same setting.
+# (option, minimum, maximum) for every numeric option 'run' accepts.
+# Retries alone allows zero; --max-topics alone has an upper bound, the
+# six topics the summary image grid can draw. The environment variable
+# of the same name shares each bound, which is what NumericSettingTest
+# in test_config.py pins on the other side of the same setting.
 NUMERIC_OPTIONS = (
-    ("--summarizer-max-retries", 0),
-    ("--max-topics", 1),
-    ("--lookback-hours", 1),
-    ("--arxiv-max-results", 1),
-    ("--http-timeout", 1),
-    ("--max-output-tokens", 1),
-    ("--summarizer-timeout", 1),
+    ("--summarizer-max-retries", 0, None),
+    ("--max-topics", 1, 6),
+    ("--lookback-hours", 1, None),
+    ("--arxiv-max-results", 1, None),
+    ("--http-timeout", 1, None),
+    ("--max-output-tokens", 1, None),
+    ("--summarizer-timeout", 1, None),
 )
 
 
 class NumericOptionParityTest(unittest.TestCase):
-    """ Every numeric option shares its minimum with the same setting read from the environment. """
+    """ Every numeric option shares its bounds with the same setting read from the environment. """
 
     def dest(self, option):
         return option.lstrip("-").replace("-", "_")
 
     def test_only_retries_accepts_zero(self):
-        for option, minimum in NUMERIC_OPTIONS:
+        for option, minimum, _maximum in NUMERIC_OPTIONS:
             with self.subTest(option=option):
                 if minimum == 0:
                     args = cli.parse_args(["run", option, "0"])
@@ -177,14 +182,63 @@ class NumericOptionParityTest(unittest.TestCase):
                     self.assertEqual(2, refused(["run", option, "0"]))
 
     def test_every_option_rejects_a_non_integer_value(self):
-        for option, _minimum in NUMERIC_OPTIONS:
+        for option, _minimum, _maximum in NUMERIC_OPTIONS:
             with self.subTest(option=option):
                 self.assertEqual(2, refused(["run", option, "not-a-number"]))
 
     def test_every_option_rejects_a_negative_value(self):
-        for option, _minimum in NUMERIC_OPTIONS:
+        for option, _minimum, _maximum in NUMERIC_OPTIONS:
             with self.subTest(option=option):
                 self.assertEqual(2, refused(["run", option, "-1"]))
+
+    def test_only_max_topics_has_a_maximum(self):
+        for option, _minimum, maximum in NUMERIC_OPTIONS:
+            with self.subTest(option=option):
+                if maximum is None:
+                    args = cli.parse_args(["run", option, "1000000"])
+                    self.assertEqual(1000000, getattr(args, self.dest(option)))
+                else:
+                    args = cli.parse_args(["run", option, str(maximum)])
+                    self.assertEqual(maximum, getattr(args, self.dest(option)))
+                    self.assertEqual(
+                        2, refused(["run", option, str(maximum + 1)]))
+
+
+class MaxTopicsOptionTest(unittest.TestCase):
+    """
+    --max-topics is bounded to 1 through 6, the topics the fixed 3x2
+    summary image grid can draw, on 'run' and 'demo' alike, so a report's
+    HTML, report.json and summary.png always describe the same topic set.
+    """
+
+    def test_run_accepts_the_lower_bound(self):
+        args = cli.parse_args(["run", "--max-topics", "1"])
+
+        self.assertEqual(1, args.max_topics)
+
+    def test_run_accepts_the_upper_bound(self):
+        args = cli.parse_args(["run", "--max-topics", "6"])
+
+        self.assertEqual(6, args.max_topics)
+
+    def test_run_rejects_seven(self):
+        self.assertEqual(2, refused(["run", "--max-topics", "7"]))
+
+    def test_run_rejects_zero(self):
+        self.assertEqual(2, refused(["run", "--max-topics", "0"]))
+
+    def test_demo_accepts_the_lower_bound(self):
+        args = cli.parse_args(["demo", "--max-topics", "1"])
+
+        self.assertEqual(1, args.max_topics)
+
+    def test_demo_accepts_the_upper_bound(self):
+        args = cli.parse_args(["demo", "--max-topics", "6"])
+
+        self.assertEqual(6, args.max_topics)
+
+    def test_demo_rejects_seven(self):
+        self.assertEqual(2, refused(["demo", "--max-topics", "7"]))
 
 
 # A leap day only 2024 actually has, and a shape-valid but impossible

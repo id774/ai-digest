@@ -154,7 +154,7 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
 | `NEWS_FEED_URLS` | list defined by `DEFAULT_NEWS_FEED_URLS` in `config.py` | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL; blank disables news-feed collection. |
 | `LOOKBACK_HOURS` | `24` | Age limit of the collected entries. |
-| `MAX_TOPICS` | `6` | Maximum topics per report. Six fills the summary image grid. |
+| `MAX_TOPICS` | `6` | Maximum topics per report, `1` through `6`. Six fills the summary image grid; report.json, the HTML and summary.png always describe the same topic set. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
 | `SUMMARIZER_TIMEOUT` | `180` | Seconds allowed for one summarization request, on either API backend. Each retry spends it again; see [Timeouts](#timeouts). |
 | `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. Blank probes automatically; an explicit value must be a font Pillow can load, or the command fails; see [Japanese font](#japanese-font). |
@@ -166,8 +166,9 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 Every numeric setting above shares one rule: unset or blank uses the default
 shown; an explicit value that is not a whole number, or that is out of range,
 is refused instead of silently falling back to the default. `SUMMARIZER_MAX_RETRIES`
-accepts `0` and above; every other numeric setting requires `1` or above. The
-command-line option of the same setting enforces the same range.
+accepts `0` and above; `MAX_TOPICS` accepts `1` through `6`; every other
+numeric setting requires `1` or above. The command-line option of the same
+setting enforces the same range.
 
 Source retrieval is HTTPS-only. Feed and scraper redirects are followed only
 while their resolved targets remain HTTPS; an HTTP downgrade is refused before

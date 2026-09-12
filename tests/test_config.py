@@ -36,7 +36,9 @@
 #  that is not a whole number is a configuration error rather than a
 #  silent fallback to the default, and the same holds for a value
 #  outside the setting's range. SUMMARIZER_MAX_RETRIES accepts zero; the
-#  other seven do not.
+#  other seven do not. MAX_TOPICS is also the one setting bounded above,
+#  since it names how many cards the fixed summary image grid can draw:
+#  1 through 6 are accepted and 7 is refused.
 #
 #  The font cases cover the same distinction for AI_DIGEST_FONT_PATH:
 #  unset or blank probes CJK_FONT_CANDIDATES for the first Pillow can
@@ -81,6 +83,7 @@
 #    - Keep a valid explicit numeric setting.
 #    - Accept a retry budget of zero, and reject a negative one.
 #    - Reject zero and a negative value for the other numeric settings.
+#    - Accept MAX_TOPICS at its lower and upper bound, 1 and 6, and reject 7.
 #    - Judge font usability by existence and by Pillow loadability alike.
 #    - Probe automatic font candidates in order, skipping an unusable one.
 #    - Resolve an unset or blank font setting automatically, and refuse
@@ -94,6 +97,8 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.3 2026-09-12
+#       Cover the MAX_TOPICS upper bound as well as numeric minima.
 #  v1.2 2026-09-08
 #       Cover HTTPS validation of configured news feeds.
 #  v1.1 2026-09-06
@@ -310,16 +315,21 @@ class SummarizerBaseUrlTest(unittest.TestCase):
         loaded.validate_summarizer_base_url()
 
 
-# (env var name, Config field, default, minimum) for every integer setting.
+# (env var name, Config field, default, minimum, maximum, a valid sample
+# strictly inside the setting's range) for every integer setting.
+# MAX_TOPICS is the one setting bounded above, since it names how many
+# cards the fixed summary image grid can draw; its sample is 5, not
+# default + 1 (7), which is outside that range. Every other setting has
+# no maximum, and its sample is simply default + 1.
 NUMERIC_SETTINGS = (
-    ("SUMMARIZER_MAX_RETRIES", "summarizer_max_retries", 2, 0),
-    ("MAX_OUTPUT_TOKENS", "max_output_tokens", 8000, 1),
-    ("SUMMARIZER_TIMEOUT", "summarizer_timeout", 180, 1),
-    ("ARXIV_MAX_RESULTS", "arxiv_max_results", 60, 1),
-    ("LOOKBACK_HOURS", "lookback_hours", 24, 1),
-    ("MAX_TOPICS", "max_topics", 6, 1),
-    ("HTTP_TIMEOUT", "http_timeout", 60, 1),
-    ("PORT", "port", 3000, 1),
+    ("SUMMARIZER_MAX_RETRIES", "summarizer_max_retries", 2, 0, None, 3),
+    ("MAX_OUTPUT_TOKENS", "max_output_tokens", 8000, 1, None, 8001),
+    ("SUMMARIZER_TIMEOUT", "summarizer_timeout", 180, 1, None, 181),
+    ("ARXIV_MAX_RESULTS", "arxiv_max_results", 60, 1, None, 61),
+    ("LOOKBACK_HOURS", "lookback_hours", 24, 1, None, 25),
+    ("MAX_TOPICS", "max_topics", 6, 1, 6, 5),
+    ("HTTP_TIMEOUT", "http_timeout", 60, 1, None, 61),
+    ("PORT", "port", 3000, 1, None, 3001),
 )
 
 
@@ -336,28 +346,27 @@ class NumericSettingTest(unittest.TestCase):
                 return config.load_config()
 
     def test_uses_the_default_when_unset(self):
-        for name, field, default, _minimum in NUMERIC_SETTINGS:
+        for name, field, default, _minimum, _maximum, _valid in NUMERIC_SETTINGS:
             with self.subTest(name=name):
                 self.assertEqual(default, getattr(self.load({}), field))
 
     def test_uses_the_default_when_blank(self):
-        for name, field, default, _minimum in NUMERIC_SETTINGS:
+        for name, field, default, _minimum, _maximum, _valid in NUMERIC_SETTINGS:
             with self.subTest(name=name):
                 loaded = self.load({name: "   "})
                 self.assertEqual(default, getattr(loaded, field))
 
     def test_rejects_a_non_integer_value(self):
-        for name, _field, _default, _minimum in NUMERIC_SETTINGS:
+        for name, _field, _default, _minimum, _maximum, _valid in NUMERIC_SETTINGS:
             with self.subTest(name=name):
                 with self.assertRaisesRegex(RuntimeError, name):
                     self.load({name: "not-a-number"})
 
     def test_keeps_a_valid_explicit_value(self):
-        for name, field, default, _minimum in NUMERIC_SETTINGS:
+        for name, field, _default, _minimum, _maximum, valid in NUMERIC_SETTINGS:
             with self.subTest(name=name):
-                value = default + 1
-                loaded = self.load({name: str(value)})
-                self.assertEqual(value, getattr(loaded, field))
+                loaded = self.load({name: str(valid)})
+                self.assertEqual(valid, getattr(loaded, field))
 
     def test_retries_accepts_zero(self):
         loaded = self.load({"SUMMARIZER_MAX_RETRIES": "0"})
@@ -369,7 +378,7 @@ class NumericSettingTest(unittest.TestCase):
             self.load({"SUMMARIZER_MAX_RETRIES": "-1"})
 
     def test_the_other_settings_reject_zero(self):
-        for name, _field, _default, minimum in NUMERIC_SETTINGS:
+        for name, _field, _default, minimum, _maximum, _valid in NUMERIC_SETTINGS:
             if minimum == 0:
                 continue
             with self.subTest(name=name):
@@ -377,12 +386,45 @@ class NumericSettingTest(unittest.TestCase):
                     self.load({name: "0"})
 
     def test_the_other_settings_reject_a_negative_value(self):
-        for name, _field, _default, minimum in NUMERIC_SETTINGS:
+        for name, _field, _default, minimum, _maximum, _valid in NUMERIC_SETTINGS:
             if minimum == 0:
                 continue
             with self.subTest(name=name):
                 with self.assertRaisesRegex(RuntimeError, name):
                     self.load({name: "-1"})
+
+    def test_settings_with_no_maximum_accept_a_large_value(self):
+        for name, field, _default, _minimum, maximum, _valid in NUMERIC_SETTINGS:
+            if maximum is not None:
+                continue
+            with self.subTest(name=name):
+                loaded = self.load({name: "1000000"})
+                self.assertEqual(1000000, getattr(loaded, field))
+
+    def test_settings_with_a_maximum_accept_it(self):
+        for name, field, _default, _minimum, maximum, _valid in NUMERIC_SETTINGS:
+            if maximum is None:
+                continue
+            with self.subTest(name=name):
+                loaded = self.load({name: str(maximum)})
+                self.assertEqual(maximum, getattr(loaded, field))
+
+    def test_settings_with_a_maximum_reject_one_above_it(self):
+        for name, _field, _default, _minimum, maximum, _valid in NUMERIC_SETTINGS:
+            if maximum is None:
+                continue
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(RuntimeError, name):
+                    self.load({name: str(maximum + 1)})
+
+    def test_max_topics_accepts_the_lower_bound(self):
+        loaded = self.load({"MAX_TOPICS": "1"})
+
+        self.assertEqual(1, loaded.max_topics)
+
+    def test_max_topics_rejects_seven(self):
+        with self.assertRaisesRegex(RuntimeError, "MAX_TOPICS"):
+            self.load({"MAX_TOPICS": "7"})
 
 
 class FontUsabilityTest(unittest.TestCase):
