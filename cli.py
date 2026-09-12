@@ -117,6 +117,8 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v2.0 2026-09-12
+#       Reject --max-topics values above the six-topic report limit.
 #  v1.9 2026-09-08
 #       Reject non-HTTPS news-feed overrides before collection.
 #  v1.8 2026-09-06
@@ -165,7 +167,8 @@ from ai_digest.storage import (ReportPublicationError, copy_existing_report,
                                is_valid_date, list_dates, load_report,
                                publication_workspace, report_dir,
                                write_report_json)
-from config import (SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
+from config import (MAX_REPORT_TOPICS, SUMMARIZER_BACKENDS,
+                    SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                     SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
                     Config, is_usable_font_path, load_demo_config,
                     load_list_config, load_render_config, load_run_config,
@@ -219,8 +222,15 @@ def non_negative_int(value: str) -> int:
     return bounded_int(value, 0)
 
 
-def bounded_int(value: str, minimum: int) -> int:
-    """ Parse an integer option, rejecting anything below minimum. """
+def bounded_int(value: str, minimum: int,
+                maximum: Optional[int] = None) -> int:
+    """
+    Parse an integer option, rejecting anything below minimum.
+
+    When maximum is given, anything above it is rejected the same way,
+    at the parser boundary, before the value ever reaches config load,
+    collection or an API call.
+    """
     try:
         number = int(value)
     except ValueError:
@@ -229,7 +239,21 @@ def bounded_int(value: str, minimum: int) -> int:
     if number < minimum:
         raise argparse.ArgumentTypeError(
             "{0} is below the minimum of {1}".format(number, minimum))
+    if maximum is not None and number > maximum:
+        raise argparse.ArgumentTypeError(
+            "{0} is above the maximum of {1}".format(number, maximum))
     return number
+
+
+def max_topics_int(value: str) -> int:
+    """
+    Parse --max-topics, bounded to what the summary image grid can draw.
+
+    run and demo share this bound, so a report's HTML, report.json and
+    fixed 3x2 summary.png always describe the same topic set; no
+    workaround truncates a larger value back down at render time.
+    """
+    return bounded_int(value, 1, MAX_REPORT_TOPICS)
 
 
 def report_date(value: str) -> str:
@@ -634,8 +658,9 @@ def add_common_options(parser: argparse.ArgumentParser) -> None:
 
 def add_topics_option(parser: argparse.ArgumentParser) -> None:
     """ Add the option capping how many topics a report holds. """
-    parser.add_argument("--max-topics", type=positive_int,
-                        help="topics rendered in one report (MAX_TOPICS)")
+    parser.add_argument("--max-topics", type=max_topics_int,
+                        help="topics rendered in one report, 1-{0} "
+                             "(MAX_TOPICS)".format(MAX_REPORT_TOPICS))
 
 
 def add_font_option(parser: argparse.ArgumentParser) -> None:

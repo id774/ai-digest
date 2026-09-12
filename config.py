@@ -108,7 +108,10 @@
 #  - LOOKBACK_HOURS
 #      Age limit, in hours, of collected entries.
 #  - MAX_TOPICS
-#      Maximum number of topics rendered in one daily report.
+#      Maximum number of topics rendered in one daily report. Limited to
+#      1 through MAX_REPORT_TOPICS (6), the number of cards the fixed
+#      3x2 summary image grid can draw; report.json, the HTML and
+#      summary.png must all describe the same topic set.
 #  - MAX_OUTPUT_TOKENS
 #      Tokens the model may produce in one answer, on either API
 #      backend. Defaults to 8000, which fits the report with room to
@@ -136,6 +139,8 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v1.9 2026-09-12
+#       Limit MAX_TOPICS to the six topics the report image can display.
 #  v1.8 2026-09-08
 #       Validate configured news feeds as HTTPS retrieval targets.
 #  v1.7 2026-09-06
@@ -234,6 +239,12 @@ LEGACY_BACKENDS = {
     "openai": "openai-compatible",
 }
 
+# Upper bound of MAX_TOPICS. The summary image draws a fixed 3x2 grid of
+# topic cards, so a topic count above this could never be rendered into
+# it; report.json, the HTML and summary.png must all describe the same
+# topic set, which is only possible up to the six the grid holds.
+MAX_REPORT_TOPICS = 6
+
 # Default arXiv categories: artificial intelligence, machine learning
 # and computation and language.
 DEFAULT_ARXIV_CATEGORIES = "cs.AI,cs.LG,cs.CL"
@@ -323,7 +334,7 @@ def _setting(env: Dict[str, str], name: str,
 
 
 def _env_int(env: Dict[str, str], name: str, default: int,
-            minimum: int) -> int:
+            minimum: int, maximum: Optional[int] = None) -> int:
     """
     Read an integer setting, strictly.
 
@@ -331,6 +342,9 @@ def _env_int(env: Dict[str, str], name: str, default: int,
     Every other value must parse as a whole number no smaller than
     minimum; a value that does not is a configuration error rather than
     a silent fallback, so a typo is caught here instead of acted on.
+    When maximum is given, a value above it is refused the same way:
+    MAX_TOPICS is the one setting bounded above, because it names how
+    many cards the fixed summary image grid must draw.
     """
     raw = _setting(env, name)
     if raw is None or not raw.strip():
@@ -344,6 +358,9 @@ def _env_int(env: Dict[str, str], name: str, default: int,
     if value < minimum:
         raise RuntimeError(
             "{0} is {1}; expected {2} or more.".format(name, value, minimum))
+    if maximum is not None and value > maximum:
+        raise RuntimeError(
+            "{0} is {1}; expected {2} or less.".format(name, value, maximum))
     return value
 
 
@@ -698,7 +715,7 @@ def _resolve_batch_settings(env: Dict[str, str]) -> Dict[str, Any]:
             _setting(env, "NEWS_FEED_URLS", DEFAULT_NEWS_FEED_URLS)
         ),
         lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
-        max_topics=_env_int(env, "MAX_TOPICS", 6, 1),
+        max_topics=_env_int(env, "MAX_TOPICS", 6, 1, MAX_REPORT_TOPICS),
         font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
         data_dir=_resolve_data_dir(env),
         http_timeout=_env_int(env, "HTTP_TIMEOUT", 60, 1),
@@ -765,7 +782,7 @@ def load_demo_config() -> Config:
     return Config(
         data_dir=_resolve_data_dir(env),
         font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
-        max_topics=_env_int(env, "MAX_TOPICS", 6, 1),
+        max_topics=_env_int(env, "MAX_TOPICS", 6, 1, MAX_REPORT_TOPICS),
         lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
     )
 
