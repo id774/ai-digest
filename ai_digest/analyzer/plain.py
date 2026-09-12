@@ -26,6 +26,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-12
+#       Split Japanese sentences even when no whitespace follows the
+#       terminator.
 #  v1.0 2026-07-26
 #       Initial release.
 #
@@ -43,8 +46,11 @@ MAX_BULLETS = 4
 BULLET_CHARS = 160
 
 # Splits an abstract into sentences on the terminators common to both
-# English and Japanese text.
-SENTENCE_PATTERN = re.compile(r"(?<=[.!?。！？])\s+")
+# English and Japanese text. An ASCII terminator only splits where
+# whitespace follows, so "3.14" and similar are left alone; a Japanese
+# terminator splits whether or not whitespace follows, since Japanese
+# sentences are commonly written with no space between them.
+SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+|(?<=[。！？])\s*")
 
 
 def _split_sentences(summary: str) -> List[str]:
