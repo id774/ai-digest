@@ -36,6 +36,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.5 2026-09-12
+#       Reject stored topic field types that downstream renderers cannot consume.
 #  v1.4 2026-09-06
 #       Publish reports atomically and reject impossible calendar dates.
 #  v1.3 2026-08-19
@@ -306,6 +308,55 @@ def copy_existing_report(data_dir: str, date: str, staging_dir: str) -> None:
             shutil.copy2(source_path, dest_path)
 
 
+def _is_valid_topic_payload(data: Dict[str, Any]) -> bool:
+    """
+    Return True when a stored topic dict has types Topic.from_dict() and
+    the renderers built on it can consume.
+
+    Every field here is optional: a payload missing one is accepted so
+    that Topic.from_dict()'s own defaults still apply. A field that is
+    present, including one explicitly set to null, is checked against
+    the type the renderer requires - 'image' is the only field allowed
+    to be null, since Topic.image itself is Optional[str]. What is not
+    checked is any semantic property such as length, emptiness or
+    content: that validation belongs to the analyzer, not to this
+    defensive reader.
+    """
+    if "category" in data and not isinstance(data["category"], str):
+        return False
+
+    if "title" in data and not isinstance(data["title"], str):
+        return False
+
+    if "bullets" in data:
+        bullets = data["bullets"]
+        if not isinstance(bullets, list):
+            return False
+        if not all(isinstance(bullet, str) for bullet in bullets):
+            return False
+
+    if "sources" in data:
+        sources = data["sources"]
+        if not isinstance(sources, list):
+            return False
+        for source in sources:
+            if not isinstance(source, dict):
+                return False
+            if "title" in source and not isinstance(source["title"], str):
+                return False
+            if "url" in source and not isinstance(source["url"], str):
+                return False
+
+    if "image" in data and data["image"] is not None \
+            and not isinstance(data["image"], str):
+        return False
+
+    if "image_credit" in data and not isinstance(data["image_credit"], str):
+        return False
+
+    return True
+
+
 def load_report(data_dir: str, date: str) -> Optional[Dict[str, Any]]:
     """
     Read one report.
@@ -335,6 +386,8 @@ def load_report(data_dir: str, date: str) -> Optional[Dict[str, Any]]:
             or not isinstance(stats, dict)
             or not isinstance(stored_date, str)
             or stored_date != date):
+        return None
+    if not all(_is_valid_topic_payload(item) for item in topics):
         return None
     try:
         loaded_topics = [Topic.from_dict(item) for item in topics]

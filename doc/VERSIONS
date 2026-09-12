@@ -3,6 +3,8 @@ ai-digest Repository Version History
 
 v1.2.3 (Release Date: TBD)
 --------------------------
+- Reject malformed stored topic field types as corrupt report data so the viewer
+  returns 404 instead of failing while rendering.
 - Require the sole build_report tool on the OpenAI-compatible backend without
   using a named function choice, allowing thinking models such as Kimi K3.
 - Require an explicit SUMMARIZER_BASE_URL for the openai-compatible backend,
