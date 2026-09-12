@@ -36,6 +36,8 @@
 #  - anthropic
 #
 #  Version History:
+#  v1.5 2026-09-12
+#       Accept text JSON fallback only when the whole text block is the report.
 #  v1.4 2026-08-05
 #       Name SUMMARIZER_THINKING_MODE and SUMMARIZER_TEXT_JSON_FALLBACK in the messages that
 #       ask for them, following the settings out of the vendor prefix they used to carry.
@@ -196,29 +198,34 @@ def _text_json_report(message: Any) -> Optional[Dict[str, Any]]:
     """
     Read a report written as JSON text instead of as a tool call.
 
-    Returns None unless a text block parses into an object holding a
-    'topics' list. That condition is the whole safety of this path: an
-    endpoint explaining itself in prose, or answering with some other
-    JSON, must not be mistaken for a report. A fenced block is unwrapped
-    first, since models routinely wrap JSON in Markdown.
+    Returns None unless the whole text block, once stripped, is the
+    report: either bare JSON, or a single Markdown code fence around it
+    with nothing outside the fence. Surrounding prose, on either side of
+    the JSON or after the closing fence, is never unwrapped, so an
+    endpoint that explains itself around the object is not mistaken for
+    a report. Only a whole opening line of ``` or ```json and a closing
+    ``` on the text's last non-blank line qualify as that fence.
     """
     for block in getattr(message, "content", []):
         if getattr(block, "type", "") != "text":
             continue
         text = (getattr(block, "text", "") or "").strip()
-        if text.startswith("```"):
-            fenced = text.split("```")
-            if len(fenced) < 3:
-                continue
-            text = fenced[1]
-            if text.lower().startswith("json"):
-                text = text[4:]
-            text = text.strip()
-        start, end = text.find("{"), text.rfind("}")
-        if start == -1 or end <= start:
+        if not text:
             continue
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines[0].strip() not in ("```", "```json"):
+                continue
+            closing = None
+            for index in range(len(lines) - 1, 0, -1):
+                if lines[index].strip():
+                    closing = index
+                    break
+            if closing is None or lines[closing].strip() != "```":
+                continue
+            text = "\n".join(lines[1:closing]).strip()
         try:
-            payload = json.loads(text[start:end + 1])
+            payload = json.loads(text)
         except ValueError:
             continue
         if isinstance(payload, dict) and isinstance(payload.get("topics"),
