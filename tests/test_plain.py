@@ -31,6 +31,9 @@
 #    - Return the topics newest first.
 #    - Honour the topic limit.
 #    - Split a summary into one bullet per sentence.
+#    - Split Japanese sentences with no whitespace after the terminator.
+#    - Split Japanese sentences that do have whitespace after the terminator.
+#    - Leave an ASCII period with no following whitespace unsplit.
 #    - Keep at most MAX_BULLETS bullets.
 #    - Truncate a long bullet at BULLET_CHARS with an ellipsis.
 #    - Fall back on the title for an entry without a summary.
@@ -44,6 +47,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-12
+#       Cover Japanese sentence splitting with and without following
+#       whitespace.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -85,6 +91,31 @@ class PlainSummarizeTest(unittest.TestCase):
 
         self.assertEqual(["First one.", "Second one.", "Third one."],
                          topics[0].bullets)
+
+    def test_splits_japanese_sentences_without_whitespace(self):
+        topics = plain.summarize([
+            _entry("a", "2026-08-02T00:00:00+00:00",
+                   summary="第一文です。第二文です。第三文です。"),
+        ], 6)
+
+        self.assertEqual(["第一文です。", "第二文です。", "第三文です。"],
+                         topics[0].bullets)
+
+    def test_splits_japanese_sentences_with_whitespace(self):
+        topics = plain.summarize([
+            _entry("a", "2026-08-02T00:00:00+00:00",
+                   summary="第一文です。 第二文です。"),
+        ], 6)
+
+        self.assertEqual(["第一文です。", "第二文です。"], topics[0].bullets)
+
+    def test_leaves_a_spaceless_ascii_period_unsplit(self):
+        topics = plain.summarize([
+            _entry("a", "2026-08-02T00:00:00+00:00",
+                   summary="3.14 is pi. Next."),
+        ], 6)
+
+        self.assertEqual(["3.14 is pi.", "Next."], topics[0].bullets)
 
     def test_keeps_at_most_four_bullets(self):
         summary = " ".join("S{0}.".format(index) for index in range(10))
