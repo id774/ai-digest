@@ -18,6 +18,8 @@ v1.2.3 (Release Date: TBD)
 - Reject unusable explicit font paths instead of silently selecting another font.
 - Require HTTPS for source collection and image scraping, refusing downgrade
   redirects before any plaintext request is sent.
+- Refuse text JSON fallback responses that embed a report inside surrounding
+  prose instead of returning the report as the whole text block.
 
 v1.2.2 (2026-08-26)
 -------------------
