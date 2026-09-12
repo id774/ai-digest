@@ -3,6 +3,8 @@ ai-digest Repository Version History
 
 v1.2.3 (Release Date: TBD)
 --------------------------
+- Preserve Unicode letters and digits during title deduplication so distinct
+  non-ASCII titles are not collapsed by normalization.
 - Require the sole build_report tool on the OpenAI-compatible backend without
   using a named function choice, allowing thinking models such as Kimi K3.
 - Require an explicit SUMMARIZER_BASE_URL for the openai-compatible backend,

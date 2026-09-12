@@ -26,13 +26,15 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-12
+#       Preserve Unicode letters and digits when normalizing titles for
+#       comparison.
 #  v1.0 2026-07-25
 #       Initial release.
 #
 ########################################################################
 
 import logging
-import re
 import unicodedata
 from difflib import SequenceMatcher
 from typing import List
@@ -42,10 +44,6 @@ from ai_digest import Entry
 # Titles above this similarity ratio are considered the same story.
 DEFAULT_THRESHOLD = 0.85
 
-# Everything that is neither a letter nor a digit is dropped before the
-# comparison, so that punctuation and quoting styles do not matter.
-NON_WORD_PATTERN = re.compile(r"[^0-9a-z\u3040-\u30ff\u4e00-\u9fff]+")
-
 logger = logging.getLogger(__name__)
 
 
@@ -53,12 +51,14 @@ def normalize_title(title: str) -> str:
     """
     Return a comparison key for a title.
 
-    The title is case folded, converted to its NFKC form so that full
-    width characters match their half width counterparts, and stripped
-    of punctuation and whitespace.
+    The title is converted to its NFKC form so that full width characters
+    match their half width counterparts, case folded, and stripped down to
+    Unicode letters and digits, dropping punctuation and whitespace while
+    keeping every letter or digit the Unicode standard recognizes as such,
+    not just ASCII or a fixed set of scripts.
     """
-    folded = unicodedata.normalize("NFKC", title).lower()
-    return NON_WORD_PATTERN.sub("", folded)
+    folded = unicodedata.normalize("NFKC", title).casefold()
+    return "".join(char for char in folded if char.isalnum())
 
 
 def is_similar(left: str, right: str, threshold: float) -> bool:
