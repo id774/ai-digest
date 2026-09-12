@@ -427,7 +427,7 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
               timeout: int = DEFAULT_TIMEOUT,
               lookback_hours: int = DEFAULT_LOOKBACK_HOURS) -> List[Topic]:
     """
-    Cluster and summarize collected entries with the Claude API.
+    Cluster and summarize collected entries over an Anthropic-compatible Messages API.
 
     Args:
         entries: Deduplicated entries, newest and most relevant first.
