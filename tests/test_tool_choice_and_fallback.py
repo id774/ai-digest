@@ -47,6 +47,8 @@
 #    - Unwrap a fenced block under the fallback.
 #    - Ignore prose, and JSON that carries no topics list.
 #    - Ignore a topics key that is not a list.
+#    - Reject a report JSON embedded in surrounding prose, on either
+#      side or both, and a fence followed by trailing prose.
 #    - Let a real tool call win over a text block.
 #    - Report a truncated answer as truncated under the fallback.
 #    - Pass a retry budget of zero through to the SDK.
@@ -64,6 +66,8 @@
 #  - Standard library only (the anthropic package is stubbed, never imported)
 #
 #  Version History:
+#  v1.1 2026-09-12
+#       Cover refusal of report JSON embedded in surrounding prose.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -147,6 +151,33 @@ class TextJsonFallbackTest(unittest.TestCase):
         # list is not a report, however JSON-ish it looks.
         with self.assertRaisesRegex(RuntimeError, "no build_report"):
             self.extract([_text("すみません、ツールを使えませんでした。")], True)
+
+    def test_rejects_json_with_prose_before_it(self):
+        # Only the whole text block may be the report; a preamble
+        # around a real report object must not be unwrapped.
+        with self.assertRaisesRegex(RuntimeError, "no build_report"):
+            self.extract(
+                [_text('Here is the report: {"topics": [{"title": "a"}]}')],
+                True)
+
+    def test_rejects_json_with_prose_after_it(self):
+        with self.assertRaisesRegex(RuntimeError, "no build_report"):
+            self.extract(
+                [_text('{"topics": [{"title": "a"}]} Thanks.')], True)
+
+    def test_rejects_json_with_prose_on_both_sides(self):
+        with self.assertRaisesRegex(RuntimeError, "no build_report"):
+            self.extract(
+                [_text('Sure: {"topics": [{"title": "a"}]} Thanks.')], True)
+
+    def test_rejects_prose_after_the_closing_fence(self):
+        # The closing ``` must be the last non-blank line; trailing
+        # prose after it disqualifies the fence.
+        with self.assertRaisesRegex(RuntimeError, "no build_report"):
+            self.extract(
+                [_text('```json\n{"topics": [{"title": "a"}]}\n```\n'
+                       'Thanks.')],
+                True)
 
     def test_ignores_json_without_a_topics_list(self):
         with self.assertRaisesRegex(RuntimeError, "no build_report"):

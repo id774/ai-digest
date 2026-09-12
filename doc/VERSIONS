@@ -3,6 +3,10 @@ ai-digest Repository Version History
 
 v1.2.3 (Release Date: TBD)
 --------------------------
+- Split plain-mode Japanese summaries after Japanese sentence terminators even
+  when no whitespace follows.
+- Reject malformed stored topic field types as corrupt report data so the viewer
+  returns 404 instead of failing while rendering.
 - Require the sole build_report tool on the OpenAI-compatible backend without
   using a named function choice, allowing thinking models such as Kimi K3.
 - Require an explicit SUMMARIZER_BASE_URL for the openai-compatible backend,
@@ -20,6 +24,8 @@ v1.2.3 (Release Date: TBD)
   redirects before any plaintext request is sent.
 - Limit MAX_TOPICS to 1 through 6 so report.json, HTML and summary.png keep
   the same topic set.
+- Refuse text JSON fallback responses that embed a report inside surrounding
+  prose instead of returning the report as the whole text block.
 
 v1.2.2 (2026-08-26)
 -------------------

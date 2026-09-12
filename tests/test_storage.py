@@ -49,6 +49,13 @@
 #      April 31, month 13, month 0, day 0 - from is_valid_date(),
 #      report_dir(), a lookup and list_dates() alike.
 #    - Return None for syntactically valid JSON with an invalid structure.
+#    - Return None when a stored topic's field types are ones the renderer
+#      cannot consume - a non-string category, title, image or
+#      image_credit; non-list bullets or a non-string bullet; non-list
+#      sources, a non-dict source, or a source with a non-string title
+#      or url; and an image that is neither a string nor null.
+#    - Rebuild a topic from a minimal stored dict missing every optional
+#      field, relying on Topic.from_dict()'s own defaults.
 #    - Return None when the stored date does not match its directory.
 #    - Save a report and load it back, listing its date in the archive.
 #    - Ignore a directory that is not named after a date.
@@ -70,6 +77,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.2 2026-09-12
+#       Cover corrupt topic field types in stored report.json.
 #  v1.1 2026-09-06
 #       Cover publication_workspace(), copy_existing_report(), the failure-atomic publish/replace/rollback
 #       semantics they add, and is_valid_date() rejecting an impossible calendar date.
@@ -176,6 +185,48 @@ class RoundTripTest(unittest.TestCase):
                     with open(path, "w", encoding="utf-8") as handle:
                         json.dump(payload, handle)
                     self.assertIsNone(load_report(data_dir, "2026-08-02"))
+
+    def test_returns_none_for_stored_topic_field_types_the_renderer_rejects(self):
+        invalid_topics = (
+            {"category": None},
+            {"title": 1},
+            {"bullets": "not a list"},
+            {"bullets": [1]},
+            {"sources": "not a list"},
+            {"sources": [1]},
+            {"sources": [{"url": 1}]},
+            {"image": 1},
+            {"image_credit": 1},
+        )
+        with tempfile.TemporaryDirectory() as data_dir:
+            directory = os.path.join(data_dir, "2026-08-02")
+            os.makedirs(directory)
+            path = os.path.join(directory, "report.json")
+
+            for topic in invalid_topics:
+                with self.subTest(topic=topic):
+                    payload = {"date": "2026-08-02", "topics": [topic]}
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump(payload, handle)
+                    self.assertIsNone(load_report(data_dir, "2026-08-02"))
+
+    def test_rebuilds_a_topic_missing_every_optional_field(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            directory = os.path.join(data_dir, "2026-08-02")
+            os.makedirs(directory)
+            path = os.path.join(directory, "report.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"date": "2026-08-02", "topics": [{}]}, handle)
+
+            loaded = load_report(data_dir, "2026-08-02")
+            self.assertIsNotNone(loaded)
+            topic = loaded["topics"][0]
+            self.assertEqual("", topic.category)
+            self.assertEqual("", topic.title)
+            self.assertEqual([], topic.bullets)
+            self.assertEqual([], topic.sources)
+            self.assertIsNone(topic.image)
+            self.assertEqual("", topic.image_credit)
 
     def test_returns_none_when_stored_date_does_not_match_directory(self):
         with tempfile.TemporaryDirectory() as data_dir:
