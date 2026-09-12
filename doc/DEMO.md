@@ -37,7 +37,7 @@ stages that need outbound access are replaced:
 | Stage | `cli.py run` | `cli.py demo` |
 |---|---|---|
 | Collection | arXiv API and the news feeds | the `entries` array of the sample |
-| Summarization | a `build_report` tool call to the Claude API | the `build_report` object of the sample |
+| Summarization | a `build_report` tool call through the configured API-backed backend | the `build_report` object of the sample |
 
 The stored payload goes through `summarizer.to_topics()`, the same
 validation a live tool call passes, and the topics are then illustrated,

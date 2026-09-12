@@ -496,7 +496,7 @@ are:
 | `/` | List of the stored report dates |
 | `/reports/<date>` | Report of one day |
 | `/reports/<date>/image` | Composite summary PNG of that day |
-| `/reports/<date>/assets/<file>` | Topic illustration of that day |
+| `/reports/<date>/assets/<file>` | One file from that report directory; report pages use it for topic illustrations |
 | `/healthz` | Plain text liveness response |
 
 ### Output of one run
@@ -613,9 +613,13 @@ python -m unittest discover -s tests -p "test_c*.py"             # modules match
 | Module | Subject |
 |---|---|
 | `test_config.py` | environment driven settings and backend validation |
+| `test_config_scope.py` | scoped configuration loading per execution path |
 | `test_cli_options.py` | the command line overrides: one setting replaced at a time, list splitting, the absolute data directory, that every overridable name is a real field, that no credential has an option, and the values the parser refuses |
+| `test_cli_run.py` | run preflight refusing invalid effective settings before collection |
 | `test_collectors.py` | arXiv and RSS collection, look back window, partial source failures |
+| `test_transport.py` | the shared HTTPS-only request target and its redirect boundary |
 | `test_storage.py` | report persistence, corrupt report handling, date validation, path traversal refusal |
+| `test_report_publication.py` | staged publication and failure-atomic report replacement across run, demo and render |
 | `test_urls.py` | accepted URL schemes and neutralization of unsafe stored links |
 | `test_plain.py` | API free mechanical summarizer |
 | `test_anthropic_compat.py` | Claude tool use call and its response parsing |
@@ -692,7 +696,7 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
 │   │   ├── arxiv.py                arXiv Atom API collector
 │   │   └── news_rss.py             RSS and Atom collector
 │   ├── analyzer/
-│   │   ├── summarizer.py           Claude tool use call
+│   │   ├── summarizer.py           shared API-backed prompt, tool schema and validation
 │   │   ├── openai_compat.py        OpenAI compatible tool call
 │   │   └── plain.py                API free mechanical summarizer
 │   ├── demo/

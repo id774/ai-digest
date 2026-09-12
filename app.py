@@ -17,7 +17,7 @@
 #      /                          list of the stored report dates
 #      /reports/<date>            report of one day, rendered from JSON
 #      /reports/<date>/image      composite summary PNG of that day
-#      /reports/<date>/assets/<f> topic illustration of that day
+#      /reports/<date>/assets/<f> file from that report directory; templates use it for topic illustrations
 #      /healthz                   liveness probe for process managers
 #
 #  Author: id774 (More info: https://id774.net)
@@ -102,7 +102,8 @@ def report_image(date: str):
 @app.route("/reports/<date>/assets/<path:filename>")
 def report_asset(date: str, filename: str):
     """
-    Serve a topic illustration.
+    Serve a file from that report directory; templates use it for topic
+    illustrations.
 
     send_from_directory rejects paths escaping the report directory, and
     the date itself is validated before it is turned into a path.

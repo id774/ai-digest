@@ -605,7 +605,7 @@ Five routes, no credential, no outbound access, nothing that writes:
 | `/` | the stored dates, newest first |
 | `/reports/<date>` | one report, rendered from its JSON |
 | `/reports/<date>/image` | the summary image of that day |
-| `/reports/<date>/assets/<file>` | one illustration of that day |
+| `/reports/<date>/assets/<file>` | one file from that report directory; report pages use it for topic illustrations |
 | `/healthz` | a plain text liveness response |
 
 It imports nothing from the collectors or the analyzers. **That absence is the

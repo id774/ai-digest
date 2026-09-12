@@ -100,7 +100,7 @@
 #  - ARXIV_CATEGORIES
 #      Comma separated arXiv categories to collect (e.g. cs.AI,cs.LG).
 #  - ARXIV_MAX_RESULTS
-#      Upper bound of arXiv entries fetched per run.
+#      Upper bound of arXiv entries fetched per category.
 #  - NEWS_FEED_URLS
 #      Comma separated RSS/Atom feed URLs to collect. Every non-empty
 #      item must be an absolute HTTPS URL; blank disables news-feed
