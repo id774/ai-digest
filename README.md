@@ -16,7 +16,8 @@
 12. [The Japanese that stays](#the-japanese-that-stays)
 13. [Demo and sample output](#demo-and-sample-output)
 14. [Contribution](#contribution)
-15. [License](#license)
+15. [Primary Branch](#primary-branch)
+16. [License](#license)
 
 ## Overview
 
@@ -42,10 +43,6 @@ see [Standalone use, no API key](#standalone-use-no-api-key).
 - Demo mode and the screenshots: [doc/DEMO.md](doc/DEMO.md)
 - Implementation policy: [doc/POLICY.md](doc/POLICY.md)
 - Repository version history: [doc/VERSIONS](doc/VERSIONS)
-
-This repository uses `master` as its primary branch name.
-
-The name is used solely as a technical identifier, following the long-standing convention historically used by Git. It does not express or imply any association with racism, slavery, discrimination, or any political or social ideology.
 
 ## Features
 
@@ -840,6 +837,12 @@ Contributions are welcome. You can help by:
 - Reporting bugs or feature requests
 
 Please follow the style used in this repository: module level header comments describing purpose, requirements and version history, English comments, and documentation updated together with the code.
+
+## Primary Branch
+
+This repository uses `master` as its primary branch name.
+
+The name is used solely as a technical identifier, following the long-standing convention historically used by Git. It does not express or imply any association with racism, slavery, discrimination, or any political or social ideology.
 
 ## License
 
