@@ -16,7 +16,8 @@
 12. [The Japanese that stays](#the-japanese-that-stays)
 13. [Demo and sample output](#demo-and-sample-output)
 14. [Contribution](#contribution)
-15. [License](#license)
+15. [Branch Naming](#branch-naming)
+16. [License](#license)
 
 ## Overview
 
@@ -837,11 +838,13 @@ Contributions are welcome. You can help by:
 
 Please follow the style used in this repository: module level header comments describing purpose, requirements and version history, English comments, and documentation updated together with the code.
 
-## License
-
-This repository is dual licensed under the [GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the [LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
-For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also [doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the complete license texts.
+## Branch Naming
 
 This repository uses `master` as its primary branch name.
 
 The name is used solely as a technical identifier, following the long-standing convention historically used by Git. It does not express or imply any association with racism, slavery, discrimination, or any political or social ideology.
+
+## License
+
+This repository is dual licensed under the [GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the [LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
+For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also [doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the complete license texts.
