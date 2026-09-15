@@ -179,9 +179,12 @@ guard: a published entry link may still be an ordinary absolute `http` or
 `https` URL, and rendering it is that guard's responsibility, not
 `ai_digest/transport.py`'s.
 
-**arXiv** is queried once per category, sorted newest first, so the age filter
-can stop as soon as older entries appear rather than reading a whole page of
-results. Requests are spaced to stay inside the rate the API asks for.
+**arXiv** is collected independently per category, sorted newest first, so the
+age filter can stop as soon as older entries appear rather than reading a whole
+page of results. Requests are spaced to stay inside the rate the API asks for.
+When arXiv returns HTTP 429, the same category is retried up to twice after 30
+and 60 seconds. If all three attempts return 429, that category becomes an
+ordinary source failure and collection continues with the remaining sources.
 
 **Feeds** are fetched with the HTTP client rather than handed to the parser by
 URL, so that the timeout and the User-Agent apply to every source. Markup is

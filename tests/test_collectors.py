@@ -56,12 +56,21 @@
 #    - Request the HTTPS arXiv endpoint.
 #    - Map a transport refusal to an ordinary source failure, continuing
 #      with the remaining sources.
+#    - Retry an arXiv category once after a single HTTP 429 response.
+#    - Retry an arXiv category twice after two HTTP 429 responses.
+#    - Fail an arXiv category after a third HTTP 429 response, without
+#      an extra wait.
+#    - Continue with the next arXiv category after one exhausts its
+#      HTTP 429 retries.
+#    - Never retry an arXiv category for a non-429 HTTP error.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.2 2026-09-15
+#       Cover bounded retry handling for arXiv HTTP 429 responses.
 #  v1.1 2026-09-08
 #       Cover HTTPS-only source collection and transport failures.
 #  v1.0 2026-08-05
@@ -141,8 +150,9 @@ class LookBackWindowTest(unittest.TestCase):
 class _FakeHttpsResponse:
     """ Minimal stand in for the response https_get() yields. """
 
-    def __init__(self, content):
+    def __init__(self, content, status_code=200):
         self.content = content
+        self.status_code = status_code
 
     def __enter__(self):
         return self
@@ -151,6 +161,9 @@ class _FakeHttpsResponse:
         return False
 
     def raise_for_status(self):
+        if self.status_code >= 400:
+            raise transport.requests.HTTPError(
+                "{0} error".format(self.status_code), response=self)
         return None
 
 
@@ -248,6 +261,103 @@ class ArxivEndpointTest(unittest.TestCase):
         url = getter.call_args.args[0]
         self.assertTrue(url.startswith(
             "https://export.arxiv.org/api/query?"))
+
+
+class ArxivRateLimitRetryTest(unittest.TestCase):
+    """
+    HTTP 429 pauses and retries a single arXiv category up to twice
+    before it becomes an ordinary category failure. Any other failure,
+    including a 429 on the third attempt, is not retried.
+    """
+
+    def test_retries_once_after_a_single_429(self):
+        responses = [_FakeHttpsResponse(b"", status_code=429),
+                     _FakeHttpsResponse(b"<feed></feed>")]
+        parsed = SimpleNamespace(
+            entries=[_feed_entry("https://arxiv.org/abs/1")], bozo=0)
+        with mock.patch.object(arxiv, "https_get",
+                               side_effect=responses) as getter:
+            with mock.patch.object(arxiv.feedparser, "parse",
+                                   return_value=parsed):
+                with mock.patch.object(time, "sleep") as sleeper:
+                    with self.assertLogs(arxiv.logger, "WARNING") as logged:
+                        entries, failure = arxiv._fetch_category(
+                            "cs.AI", 10, 15, "ai-digest")
+
+        self.assertEqual(2, getter.call_count)
+        sleeper.assert_called_once_with(30.0)
+        self.assertEqual("", failure)
+        self.assertEqual(1, len(entries))
+        self.assertIn("30 seconds (1/2)", logged.output[0])
+
+    def test_retries_twice_after_two_429s(self):
+        responses = [_FakeHttpsResponse(b"", status_code=429),
+                     _FakeHttpsResponse(b"", status_code=429),
+                     _FakeHttpsResponse(b"<feed></feed>")]
+        parsed = SimpleNamespace(
+            entries=[_feed_entry("https://arxiv.org/abs/1")], bozo=0)
+        with mock.patch.object(arxiv, "https_get",
+                               side_effect=responses) as getter:
+            with mock.patch.object(arxiv.feedparser, "parse",
+                                   return_value=parsed):
+                with mock.patch.object(time, "sleep") as sleeper:
+                    with self.assertLogs(arxiv.logger, "WARNING") as logged:
+                        entries, failure = arxiv._fetch_category(
+                            "cs.AI", 10, 15, "ai-digest")
+
+        self.assertEqual(3, getter.call_count)
+        self.assertEqual([mock.call(30.0), mock.call(60.0)],
+                         sleeper.call_args_list)
+        self.assertEqual("", failure)
+        self.assertEqual(1, len(entries))
+        self.assertIn("30 seconds (1/2)", logged.output[0])
+        self.assertIn("60 seconds (2/2)", logged.output[1])
+
+    def test_fails_the_category_after_three_429s(self):
+        responses = [_FakeHttpsResponse(b"", status_code=429),
+                     _FakeHttpsResponse(b"", status_code=429),
+                     _FakeHttpsResponse(b"", status_code=429)]
+        with mock.patch.object(arxiv, "https_get",
+                               side_effect=responses) as getter:
+            with mock.patch.object(time, "sleep") as sleeper:
+                with self.assertLogs(arxiv.logger, "WARNING"):
+                    entries, failure = arxiv._fetch_category(
+                        "cs.AI", 10, 15, "ai-digest")
+
+        self.assertEqual(3, getter.call_count)
+        self.assertEqual([mock.call(30.0), mock.call(60.0)],
+                         sleeper.call_args_list)
+        self.assertEqual([], entries)
+        self.assertTrue(failure)
+
+    def test_continues_with_the_next_category_after_exhausted_429s(self):
+        with mock.patch.object(arxiv, "_fetch_category", side_effect=[
+            ([], "429 error"),
+            ([_feed_entry("https://arxiv.org/abs/2")], ""),
+        ]):
+            with mock.patch.object(time, "sleep"):
+                result = arxiv.collect(["cs.AI", "cs.LG"], 10, 24)
+
+        self.assertEqual(2, result.sources_total)
+        self.assertEqual(1, result.sources_failed)
+        self.assertEqual(1, result.sources_read)
+        self.assertTrue(any("cs.AI" in failure
+                            for failure in result.failures))
+        self.assertEqual(1, len(result.entries))
+
+    def test_does_not_retry_a_non_429_error(self):
+        responses = [_FakeHttpsResponse(b"", status_code=500)]
+        with mock.patch.object(arxiv, "https_get",
+                               side_effect=responses) as getter:
+            with mock.patch.object(time, "sleep") as sleeper:
+                with self.assertLogs(arxiv.logger, "WARNING"):
+                    entries, failure = arxiv._fetch_category(
+                        "cs.AI", 10, 15, "ai-digest")
+
+        self.assertEqual(1, getter.call_count)
+        sleeper.assert_not_called()
+        self.assertEqual([], entries)
+        self.assertTrue(failure)
 
 
 class TransportFailureMappingTest(unittest.TestCase):
