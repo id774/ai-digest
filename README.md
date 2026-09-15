@@ -517,10 +517,11 @@ data/reports/2026-07-25/
 
 ## When something fails
 
-The batch reports a failure and exits with a status; nothing is retried behind
-your back and no half written report is left in the archive. The viewer keeps
-serving what is already stored, because it never depends on a run having
-succeeded.
+The batch reports a failure and exits with a status. An arXiv category that
+returns HTTP 429 is retried up to twice, after 30 and 60 seconds; other
+collector failures are not retried. No half written report is left in the
+archive. The viewer keeps serving what is already stored, because it never
+depends on a run having succeeded.
 
 ### Exit codes of `cli.py`
 

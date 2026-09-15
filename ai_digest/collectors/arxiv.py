@@ -30,6 +30,8 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.4 2026-09-15
+#       Retry HTTP 429 responses twice before failing an arXiv category.
 #  v1.3 2026-09-08
 #       Fetch arXiv only over HTTPS, including redirects.
 #  v1.2 2026-08-03
@@ -60,6 +62,10 @@ API_ENDPOINT = "https://export.arxiv.org/api/query"
 # Delay between two consecutive API requests, in seconds, to respect the
 # rate limit recommended by arXiv.
 REQUEST_INTERVAL = 3.0
+
+# Delays, in seconds, before the two retries of a single category request
+# that arXiv answered with HTTP 429. Not a configuration setting.
+RATE_LIMIT_RETRY_DELAYS = (30.0, 60.0)
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +99,12 @@ def _fetch_category(category: str, max_results: int, timeout: int,
     """
     Fetch the newest entries of a single arXiv category.
 
+    A response of HTTP 429 is treated as a temporary rate limit rather
+    than an immediate category failure: the same category is retried
+    after the delays in RATE_LIMIT_RETRY_DELAYS, for up to three
+    requests in total. Any other failure, including a 429 on the last
+    attempt, ends the category the same way it always has.
+
     Returns:
         The raw feed entries and an empty string, or an empty list and
         the reason the category could not be read, so that the caller
@@ -107,13 +119,30 @@ def _fetch_category(category: str, max_results: int, timeout: int,
         "sortOrder": "descending",
     })
     url = "{0}?{1}".format(API_ENDPOINT, query)
-    try:
-        with https_get(url, timeout, user_agent) as response:
-            response.raise_for_status()
-            content = response.content
-    except requests.RequestException as error:
-        logger.warning("arXiv request failed for %s: %s", category, error)
-        return [], "{0}".format(error)
+    max_attempts = len(RATE_LIMIT_RETRY_DELAYS) + 1
+
+    for attempt in range(1, max_attempts + 1):
+        is_last_attempt = attempt == max_attempts
+        retry = False
+        try:
+            with https_get(url, timeout, user_agent) as response:
+                if response.status_code == 429 and not is_last_attempt:
+                    delay = RATE_LIMIT_RETRY_DELAYS[attempt - 1]
+                    logger.warning(
+                        "arXiv request returned 429 for %s; retrying in "
+                        "%d seconds (%d/%d)", category, int(delay), attempt,
+                        len(RATE_LIMIT_RETRY_DELAYS))
+                    retry = True
+                else:
+                    response.raise_for_status()
+                    content = response.content
+        except requests.RequestException as error:
+            logger.warning("arXiv request failed for %s: %s", category, error)
+            return [], "{0}".format(error)
+        if retry:
+            time.sleep(delay)
+            continue
+        break
     parsed = feedparser.parse(content)
     if not parsed.entries and getattr(parsed, "bozo", 0):
         error = getattr(parsed, "bozo_exception", "unknown parse error")

@@ -28,6 +28,8 @@ v1.2.3 (Release Date: TBD)
   the same topic set.
 - Refuse text JSON fallback responses that embed a report inside surrounding
   prose instead of returning the report as the whole text block.
+- Retry arXiv category requests twice after HTTP 429 responses before treating
+  the category as a source failure.
 
 v1.2.2 (2026-08-26)
 -------------------
