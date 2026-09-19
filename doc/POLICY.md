@@ -109,6 +109,12 @@ These lines are not crossed by a setting, by an option or by an extension.
   but recoverable condition (for example a dropped malformed topic or a failed
   scrape that falls back to a generated card), and `ERROR` for a failure that
   ends the current command.
+- A normal no-op, guard, or intentionally inapplicable item is not a warning
+  merely because no work was performed. It may be silent. Warning level is for
+  a degraded but recoverable condition that the operator should know about,
+  such as the source and scrape failures already defined by this policy.
+- Do not add a message merely to record ordinary control flow. Keep unattended
+  output quiet enough that actionable warnings and errors remain visible.
 - Configure logging once, at the entry point, with `logging.basicConfig` writing
   to standard error. The batch uses a fully structured, timestamped format
   (`%(asctime)s %(levelname)s %(name)s: %(message)s`), chosen because every
@@ -168,8 +174,15 @@ These lines are not crossed by a setting, by an option or by an extension.
   changes what an existing subcommand means.
 
 ### 1.6 Error Handling and Exit Codes
+- Treat the operation result, whether later independent work continues, and
+  whether anything needs to be reported as separate decisions. A required
+  prerequisite whose absence makes correct completion impossible stops the
+  affected command; an independent source failure continues only under the
+  explicit degraded-source rules already defined by this policy.
 - Detect command failures and unmet prerequisites early.
-- Always log the reason and the affected target when an error occurs.
+- Make an error observable at the layer responsible for reporting it, naming
+  the reason and affected target when that context is useful. Do not require a
+  lower layer to duplicate a message already emitted by the responsible caller.
 - Exit code semantics follow widely accepted UNIX/Linux conventions and remain
   consistent across the repository.
 
@@ -202,10 +215,10 @@ These lines are not crossed by a setting, by an option or by an extension.
   backend it needs is absent, and a command can exist while the option this
   code passes it is not supported.
 - Decide in advance what an absent optional capability leads to: use the
-  alternative, skip the step and say so once, or refuse the run. Which one is
-  right depends on where the code runs. An unattended run in an environment
-  that will never supply what it needs says so once and ends with a documented
-  status, rather than reporting the same absence on every scheduled run.
+  alternative, skip the step, or refuse the run. Reporting is a separate
+  decision. An expected or normal skip may be silent; report the absence when
+  it is degraded, actionable, or otherwise operationally relevant. Do not emit
+  the same non-actionable absence on every scheduled run.
 
 ### 1.8 Documentation and Versioning
 - Every module must contain a structured header, in this order:
