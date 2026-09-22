@@ -149,9 +149,10 @@ local time. The cron entry deliberately:
 
 - It `cd`s into the installation directory first, because `.env` is found
   relative to the repository root and cron loads no profile.
-- It sets `MAILTO`, so a run that exits non-zero is mailed. The batch exits `1`
-  when nothing usable could be produced, which is what makes a broken feed or an
-  expired key visible without anyone watching the site.
+- It redirects both stdout and stderr into `/var/log/ai-digest/run.log`, so
+  cron has no output left to mail regardless of `MAILTO`; watch that log file
+  (or the batch's exit status) to notice a broken feed or an expired key
+  without anyone watching the site.
 
 Run it once by hand before trusting the schedule. An API-backed backend starts
 one summarization request before any configured SDK retry; `plain` starts none:

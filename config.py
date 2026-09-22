@@ -139,6 +139,9 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v2.0 2026-09-22
+#       Treat a whitespace-only SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN or
+#       SUMMARIZER_BASE_URL as unset instead of a truthy configured value.
 #  v1.9 2026-09-12
 #       Limit MAX_TOPICS to the six topics the report image can display.
 #  v1.8 2026-09-08
@@ -331,6 +334,20 @@ def _setting(env: Dict[str, str], name: str,
     if name in env:
         return env[name]
     return default
+
+
+def _blank_to_none(value: Optional[str]) -> Optional[str]:
+    """
+    Treat a value that is None, empty or whitespace-only as unset.
+
+    A credential or base URL made of only whitespace passes Python's
+    own truthiness check, which is how a stray space in .env used to
+    read as configured. This is not a general trim: a nonblank value is
+    returned exactly as given, surrounding space included.
+    """
+    if value is None:
+        return None
+    return value if value.strip() else None
 
 
 def _env_int(env: Dict[str, str], name: str, default: int,
@@ -688,9 +705,11 @@ def _resolve_batch_settings(env: Dict[str, str]) -> Dict[str, Any]:
     whether PORT, which only the viewer reads, is part of the result.
     """
     return dict(
-        summarizer_api_key=_setting(env, "SUMMARIZER_API_KEY") or None,
-        summarizer_auth_token=_setting(env, "SUMMARIZER_AUTH_TOKEN") or None,
-        summarizer_base_url=_setting(env, "SUMMARIZER_BASE_URL") or None,
+        summarizer_api_key=_blank_to_none(_setting(env, "SUMMARIZER_API_KEY")),
+        summarizer_auth_token=_blank_to_none(
+            _setting(env, "SUMMARIZER_AUTH_TOKEN")
+        ),
+        summarizer_base_url=_blank_to_none(_setting(env, "SUMMARIZER_BASE_URL")),
         summarizer_model=(_setting(env, "SUMMARIZER_MODEL") or "").strip(),
         summarizer_thinking_mode=_env_token(
             env, "SUMMARIZER_THINKING_MODE", "default"

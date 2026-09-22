@@ -78,6 +78,8 @@
 #    - Accept an explicit base URL on the OpenAI protocol.
 #    - Keep accepting a missing base URL on the Anthropic protocol and
 #      on plain.
+#    - Read a whitespace-only SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN or
+#      SUMMARIZER_BASE_URL as unset, without disturbing a nonblank value.
 #    - Use the default for every numeric setting when it is unset or blank.
 #    - Reject an explicit numeric setting that is not a whole number.
 #    - Keep a valid explicit numeric setting.
@@ -97,6 +99,9 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.4 2026-09-22
+#       Cover whitespace-only SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN and
+#       SUMMARIZER_BASE_URL resolving to unset.
 #  v1.3 2026-09-12
 #       Cover the MAX_TOPICS upper bound as well as numeric minima.
 #  v1.2 2026-09-08
@@ -313,6 +318,60 @@ class SummarizerBaseUrlTest(unittest.TestCase):
         loaded = self.load({"SUMMARIZER_BACKEND": "plain"})
 
         loaded.validate_summarizer_base_url()
+
+
+class BlankSummarizerSettingTest(unittest.TestCase):
+    """
+    SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN and SUMMARIZER_BASE_URL
+    must read a whitespace-only value as unset, the same as an empty
+    one: the space passes Python's own truthiness check, which used to
+    read a stray space in .env as a configured credential or endpoint.
+    """
+
+    def load(self, environment):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with mock.patch.object(config, "load_dotenv", None):
+                return config.load_config()
+
+    def test_whitespace_only_api_key_is_unset(self):
+        loaded = self.load({"SUMMARIZER_API_KEY": "   ",
+                            "SUMMARIZER_AUTH_TOKEN": "token"})
+
+        self.assertIsNone(loaded.summarizer_api_key)
+
+    def test_whitespace_only_auth_token_is_unset(self):
+        loaded = self.load({"SUMMARIZER_AUTH_TOKEN": "   ",
+                            "SUMMARIZER_API_KEY": "key"})
+
+        self.assertIsNone(loaded.summarizer_auth_token)
+
+    def test_whitespace_only_base_url_is_unset(self):
+        loaded = self.load({"SUMMARIZER_BASE_URL": "   "})
+
+        self.assertIsNone(loaded.summarizer_base_url)
+
+    def test_whitespace_only_base_url_still_rejected_on_the_openai_protocol(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible",
+                            "SUMMARIZER_BASE_URL": "   "})
+
+        self.assertIsNone(loaded.summarizer_base_url)
+        with self.assertRaisesRegex(
+                RuntimeError,
+                "SUMMARIZER_BASE_URL.*SUMMARIZER_BACKEND=openai-compatible"):
+            loaded.validate_summarizer_base_url()
+
+    def test_whitespace_only_credential_does_not_satisfy_summarizer_auth(self):
+        loaded = self.load({"SUMMARIZER_API_KEY": "   "})
+
+        with self.assertRaisesRegex(
+                RuntimeError,
+                "SUMMARIZER_API_KEY or SUMMARIZER_AUTH_TOKEN is required"):
+            loaded.validate_summarizer_auth()
+
+    def test_nonblank_credential_content_is_kept(self):
+        loaded = self.load({"SUMMARIZER_API_KEY": " key-with-space "})
+
+        self.assertEqual(" key-with-space ", loaded.summarizer_api_key)
 
 
 # (env var name, Config field, default, minimum, maximum, a valid sample

@@ -121,7 +121,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   message already carries its level and its logger name, which makes a
   separate severity prefix redundant.
 - Log messages must be human-readable and suitable for cron execution. Keep them
-  low-noise: a single unattended run must not flood the cron mail with per-item
+  low-noise: a single unattended run must not flood the log file with per-item
   output at the default level.
 - Quiet third-party loggers that add nothing (for example lowering `urllib3` to
   `WARNING`) rather than raising the global level.
@@ -597,9 +597,14 @@ finally intended, and merges as if it had been written that way.
 The settings decide which API a run is sent to and what it is billed for, so
 they are read strictly.
 
-- Do not choose an endpoint implicitly. The backend, the credential, the base
-  URL and the model are required, and a missing one stops the run instead of
-  being filled in with a default.
+- Do not choose an endpoint implicitly. What is required follows from
+  `SUMMARIZER_BACKEND`: `plain` needs none of the credential, the base URL or
+  the model; `anthropic-compatible` needs the credential, and falls back to
+  the Anthropic default endpoint and model when the base URL or the model is
+  left unset; `openai-compatible` needs the credential, the base URL and the
+  model, none of which it defaults. A setting required by the selected
+  backend and left unset stops the run instead of being filled in with a
+  default.
 - Do not accept an unknown backend. A value the code has no analyzer for is
   refused before a request, never read as one of the backends that does exist.
 - Do not infer what an endpoint supports from its model name or its URL.

@@ -53,12 +53,27 @@
 #      without ever creating a Session.
 #    - Refuse an HTTPS to http downgrade redirect target.
 #    - Derive the HTTPS ar5iv URL from an http arXiv citation.
+#    - Judge a public, loopback, private, link-local, unspecified and
+#      multicast address correctly, multicast in particular, since it
+#      reports is_global True and is excluded only by is_multicast.
+#    - Refuse a loopback or private IP literal, a hostless URL, and a DNS
+#      name that resolves to a non-global address, one among several
+#      included.
+#    - Treat DNS resolution failure as the same refusal family as any
+#      other non-public target, so the caller's existing fallback holds.
+#    - Prove, through the real transport with Session mocked, that a
+#      direct loopback or private target, a DNS name resolving to one, and
+#      a redirect from a public target to a private one are all refused
+#      before a Session is ever created or a next request is sent.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow, requests, beautifulsoup4
 #
 #  Version History:
+#  v1.2 2026-09-22
+#       Cover the public-network-only SSRF boundary: address judgment,
+#       validate_public_target(), and refusal before any request is sent.
 #  v1.1 2026-09-08
 #       Cover HTTPS-only page and image retrieval.
 #  v1.0 2026-08-05
@@ -67,6 +82,7 @@
 ########################################################################
 
 import io
+import ipaddress
 import unittest
 from unittest import mock
 
@@ -75,6 +91,28 @@ from PIL import Image
 from ai_digest import transport
 from ai_digest.images import resolver
 from ai_digest.transport import HTTPSOnlyError
+
+
+class _FakeRedirectResponse:
+    """
+    Stand in for the non-streamed response transport.https_get() itself
+    sees at the Session.get() boundary: it needs status_code and
+    headers, which resolver.py's own FakeResponse (a streamed body
+    reader) has no reason to carry.
+    """
+
+    def __init__(self, status_code, headers=None,
+                url="https://example.test/a"):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.url = url
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+    def raise_for_status(self):
+        return None
 
 
 class FakeResponse:
@@ -222,6 +260,165 @@ class DownloadImageTest(unittest.TestCase):
             self.assertIsNone(
                 resolver._download_image("https://example.test/i.png",
                                          5, "ai-digest"))
+
+
+class PublicAddressJudgmentTest(unittest.TestCase):
+    """ _is_public_address() judges is_global and multicast together. """
+
+    def test_accepts_a_public_ipv4_address(self):
+        self.assertTrue(
+            resolver._is_public_address(ipaddress.ip_address("8.8.8.8")))
+
+    def test_accepts_a_public_ipv6_address(self):
+        self.assertTrue(resolver._is_public_address(
+            ipaddress.ip_address("2001:4860:4860::8888")))
+
+    def test_rejects_loopback(self):
+        self.assertFalse(
+            resolver._is_public_address(ipaddress.ip_address("127.0.0.1")))
+
+    def test_rejects_private(self):
+        self.assertFalse(
+            resolver._is_public_address(ipaddress.ip_address("10.0.0.5")))
+
+    def test_rejects_link_local(self):
+        self.assertFalse(resolver._is_public_address(
+            ipaddress.ip_address("169.254.1.1")))
+
+    def test_rejects_unspecified(self):
+        self.assertFalse(
+            resolver._is_public_address(ipaddress.ip_address("0.0.0.0")))
+
+    def test_rejects_multicast_even_though_it_is_global(self):
+        # 224.0.0.0/4 reports is_global True; is_multicast is what
+        # actually excludes it, so this pins that is_global alone is
+        # not what _is_public_address relies on.
+        address = ipaddress.ip_address("224.0.0.1")
+        self.assertTrue(address.is_global)
+        self.assertFalse(resolver._is_public_address(address))
+
+    def test_rejects_ipv6_loopback_and_link_local(self):
+        self.assertFalse(
+            resolver._is_public_address(ipaddress.ip_address("::1")))
+        self.assertFalse(
+            resolver._is_public_address(ipaddress.ip_address("fe80::1")))
+
+
+class ValidatePublicTargetTest(unittest.TestCase):
+    """
+    validate_public_target() is the target_validator the resolver hands
+    to https_get(), so it must refuse before any request rather than
+    after: these cases call it directly, on both a literal IP host and
+    a DNS name resolved through a mocked getaddrinfo().
+    """
+
+    def test_accepts_a_public_ip_literal(self):
+        resolver.validate_public_target("https://8.8.8.8/x")
+
+    def test_refuses_a_loopback_ip_literal(self):
+        with self.assertRaises(resolver.PublicNetworkOnlyError):
+            resolver.validate_public_target("https://127.0.0.1/x")
+
+    def test_refuses_a_private_ip_literal(self):
+        with self.assertRaises(resolver.PublicNetworkOnlyError):
+            resolver.validate_public_target("https://192.168.1.1/x")
+
+    def test_refuses_a_url_with_no_host(self):
+        with self.assertRaises(resolver.PublicNetworkOnlyError):
+            resolver.validate_public_target("https:///x")
+
+    def test_accepts_a_dns_name_resolving_to_a_public_address(self):
+        addrinfo = [(None, None, None, None, ("93.184.216.34", 443))]
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               return_value=addrinfo):
+            resolver.validate_public_target("https://example.test/x")
+
+    def test_refuses_a_dns_name_resolving_to_a_private_address(self):
+        addrinfo = [(None, None, None, None, ("10.0.0.9", 443))]
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               return_value=addrinfo):
+            with self.assertRaises(resolver.PublicNetworkOnlyError):
+                resolver.validate_public_target("https://internal.example/x")
+
+    def test_refuses_when_any_resolved_address_is_non_global(self):
+        addrinfo = [
+            (None, None, None, None, ("93.184.216.34", 443)),
+            (None, None, None, None, ("127.0.0.1", 443)),
+        ]
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               return_value=addrinfo):
+            with self.assertRaises(resolver.PublicNetworkOnlyError):
+                resolver.validate_public_target("https://mixed.example/x")
+
+    def test_dns_resolution_failure_raises_the_same_error_family(self):
+        with mock.patch.object(
+                resolver.socket, "getaddrinfo",
+                side_effect=resolver.socket.gaierror("name not known")):
+            with self.assertRaises(resolver.PublicNetworkOnlyError):
+                resolver.validate_public_target("https://nowhere.example/x")
+
+
+class SSRFRefusalIntegrationTest(unittest.TestCase):
+    """
+    These cases go through the real transport.https_get(), with
+    requests.Session mocked, so that a loopback or private target -
+    direct or reached through a redirect from a public one - is proven
+    to never create a Session, the same guarantee DirectHttpSourceTest
+    pins for a plaintext target.
+    """
+
+    def test_a_direct_loopback_ip_target_is_never_requested(self):
+        with mock.patch.object(transport.requests, "Session") as session_cls:
+            result = resolver._fetch("https://127.0.0.1/page", 5,
+                                     "ai-digest", 1024)
+
+        self.assertIsNone(result)
+        session_cls.assert_not_called()
+
+    def test_a_direct_private_ip_target_is_never_requested(self):
+        with mock.patch.object(transport.requests, "Session") as session_cls:
+            result = resolver._fetch("https://10.0.0.5/page", 5,
+                                     "ai-digest", 1024)
+
+        self.assertIsNone(result)
+        session_cls.assert_not_called()
+
+    def test_a_dns_name_resolving_to_a_private_address_is_never_requested(
+            self):
+        addrinfo = [(None, None, None, None, ("192.168.1.1", 443))]
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               return_value=addrinfo):
+            with mock.patch.object(transport.requests,
+                                   "Session") as session_cls:
+                result = resolver._fetch("https://internal.example/page", 5,
+                                         "ai-digest", 1024)
+
+        self.assertIsNone(result)
+        session_cls.assert_not_called()
+
+    def test_a_redirect_from_public_to_private_is_refused_before_the_next_request(
+            self):
+        first = _FakeRedirectResponse(
+            302, headers={"Location": "https://127.0.0.1/internal"},
+            url="https://example.test/a")
+        session = mock.MagicMock()
+        session.__enter__.return_value = session
+        session.__exit__.return_value = False
+        session.get.side_effect = [first]
+        # example.test itself must resolve publicly, so the redirect to
+        # the loopback literal is what gets refused, not the first hop.
+        addrinfo = [(None, None, None, None, ("93.184.216.34", 443))]
+
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               return_value=addrinfo):
+            with mock.patch.object(transport.requests, "Session",
+                                   return_value=session):
+                result = resolver._fetch("https://example.test/a", 5,
+                                         "ai-digest", 1024)
+
+        self.assertIsNone(result)
+        self.assertEqual(1, session.get.call_count)
+        self.assertTrue(first.closed)
 
 
 class ArxivFigureUrlTest(unittest.TestCase):
