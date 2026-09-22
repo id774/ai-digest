@@ -70,13 +70,18 @@
 #      backup rather than discarding it.
 #    - Remove the staging directory, on a best effort basis, after a
 #      generation failure.
-#    - Copy an existing report's files into a staging directory.
+#    - Copy report.json and a referenced topic image into a staging
+#      directory, skip an unreferenced stale artifact, and skip a topic
+#      image name that is not a bare file name.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Standard library only
 #
 #  Version History:
+#  v1.3 2026-09-22
+#       Cover copying only report.json and its referenced topic images,
+#       not a stored report directory's every file.
 #  v1.2 2026-09-12
 #       Cover corrupt topic field types in stored report.json.
 #  v1.1 2026-09-06
@@ -91,6 +96,7 @@ import json
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 from ai_digest import Topic
@@ -431,10 +437,16 @@ class PublicationWorkspaceTest(unittest.TestCase):
 
 
 class CopyExistingReportTest(unittest.TestCase):
+    """
+    Only report.json and the files its topics reference are copied, so a
+    stale artifact left over from before a fix does not survive into a
+    rebuilt report.
+    """
 
-    def test_copies_every_file_of_a_stored_report(self):
+    def test_copies_report_json_and_a_referenced_topic_image(self):
         with tempfile.TemporaryDirectory() as data_dir:
-            save_report(data_dir, DATE, [make_topic()], {"run": 1})
+            topic = replace(make_topic(), image="topic-1.png")
+            save_report(data_dir, DATE, [topic], {"run": 1})
             source_dir = report_dir(data_dir, DATE)
             with open(os.path.join(source_dir, "topic-1.png"), "wb") as handle:
                 handle.write(b"illustration bytes")
@@ -449,6 +461,33 @@ class CopyExistingReportTest(unittest.TestCase):
                 # The source tree is untouched by the copy.
                 self.assertTrue(os.path.isfile(
                     os.path.join(source_dir, "topic-1.png")))
+
+    def test_does_not_copy_an_unreferenced_stale_artifact(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            save_report(data_dir, DATE, [make_topic()], {"run": 1})
+            source_dir = report_dir(data_dir, DATE)
+            for name in ("summary.png", "index.html", "style.css",
+                        "leftover.png"):
+                with open(os.path.join(source_dir, name), "wb") as handle:
+                    handle.write(b"stale")
+
+            with tempfile.TemporaryDirectory() as staging_dir:
+                copy_existing_report(data_dir, DATE, staging_dir)
+
+                for name in ("summary.png", "index.html", "style.css",
+                            "leftover.png"):
+                    self.assertFalse(os.path.exists(
+                        os.path.join(staging_dir, name)))
+
+    def test_skips_an_image_name_that_is_not_a_bare_file_name(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            topic = replace(make_topic(), image="../../etc/passwd")
+            save_report(data_dir, DATE, [topic], {"run": 1})
+
+            with tempfile.TemporaryDirectory() as staging_dir:
+                copy_existing_report(data_dir, DATE, staging_dir)
+
+                self.assertEqual(["report.json"], os.listdir(staging_dir))
 
 
 if __name__ == "__main__":

@@ -35,6 +35,9 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.4 2026-09-22
+#       Refuse a decompression-bomb stored illustration, show a demo period
+#       as a sample, and derive the data-source label from what topics cite.
 #  v1.3 2026-08-24
 #       Make fixed summary-image attribution backend-neutral so plain
 #       reports are not described as AI-generated.
@@ -52,7 +55,9 @@
 import logging
 import os
 import re
+import warnings
 from typing import List, Optional, Tuple
+from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw
 
@@ -78,10 +83,12 @@ SUBTEXT_COLOR = "#4a5560"
 
 LABEL_TEXT = "AI DIGEST"
 HEADER_SUBTITLE = "過去 {0} 時間の AI 関連論文・ニュースを収集・整理"
+HEADER_SUBTITLE_DEMO = "デモサンプルの AI 関連論文・ニュースを収集・整理"
 PERIOD_TEXT = "過去 {0} 時間"
-FOOTER_ITEMS = (
-    ("データソース", "arXiv・公開ニュース"),
-    ("対象期間", PERIOD_TEXT),
+PERIOD_TEXT_DEMO = "デモサンプル"
+# Footer entries that carry no per-report value, unlike the データソース
+# and 対象期間 entries _draw_footer() computes fresh every time.
+FOOTER_STATIC_ITEMS = (
     ("整理方法", "公開情報の収集・整理"),
     ("目的", "研究・技術動向の把握"),
 )
@@ -91,8 +98,18 @@ DISCLAIMER = (
 )
 
 # Look back window announced when the caller does not say which one the
-# collectors used. It matches LOOKBACK_HOURS in config.py.
+# collectors used. It matches LOOKBACK_HOURS in config.py. lookback_hours
+# is None, rather than this default, for a demo report, which has no
+# collection window of its own to announce.
 DEFAULT_LOOKBACK_HOURS = 24
+
+# Data source label shown when no topic carries a usable source, which
+# is not a state a live or demo report should ever actually reach, but
+# is still a value _data_source_label() can return.
+DATA_SOURCE_NONE = "公開情報"
+DATA_SOURCE_ARXIV = "arXiv"
+DATA_SOURCE_NEWS = "公開ニュース"
+DATA_SOURCE_BOTH = "arXiv・公開ニュース"
 
 # Height of the strip at the bottom of a card that carries the source
 # URL, so that a reader can reach the original material from the image
@@ -119,6 +136,35 @@ def _display_url(url: str) -> str:
     return shortened.rstrip("/")
 
 
+def _data_source_label(topics: List[Topic]) -> str:
+    """
+    Name what kind of source the report's topics actually cite.
+
+    Derived from citation hostnames rather than fixed, so an arXiv-only
+    or news-only report is not described as drawing from both: a
+    hostname of arxiv.org, or a subdomain of it, counts as arXiv, and
+    every other absolute http or https citation counts as public news.
+    """
+    has_arxiv = False
+    has_news = False
+    for topic in topics:
+        for source in topic.sources:
+            hostname = (urlparse(source.get("url", "")).hostname or "").lower()
+            if not hostname:
+                continue
+            if hostname == "arxiv.org" or hostname.endswith(".arxiv.org"):
+                has_arxiv = True
+            else:
+                has_news = True
+    if has_arxiv and has_news:
+        return DATA_SOURCE_BOTH
+    if has_arxiv:
+        return DATA_SOURCE_ARXIV
+    if has_news:
+        return DATA_SOURCE_NEWS
+    return DATA_SOURCE_NONE
+
+
 def _legend_entries(draw: ImageDraw.ImageDraw, categories: List[str],
                     font, right: int,
                     left_limit: int) -> List[Tuple[str, int]]:
@@ -142,8 +188,14 @@ def _legend_entries(draw: ImageDraw.ImageDraw, categories: List[str],
 
 def _draw_header(draw: ImageDraw.ImageDraw, date: str,
                  topics: List[Topic], font_path: Optional[str],
-                 lookback_hours: int) -> None:
-    """ Draw the title, the subtitle and the category legend. """
+                 lookback_hours: Optional[int]) -> None:
+    """
+    Draw the title, the subtitle and the category legend.
+
+    lookback_hours is None for a demo report, which collected nothing
+    and so has no real window to announce; the subtitle names the
+    sample instead of asserting a number of hours.
+    """
     title_font = load_font(font_path, 40)
     subtitle_font = load_font(font_path, 18)
     legend_font = load_font(font_path, 17)
@@ -152,7 +204,8 @@ def _draw_header(draw: ImageDraw.ImageDraw, date: str,
     year, month, day = date.split("-")
     title = "{0}年{1}月{2}日 AI ダイジェスト".format(year, month, day)
     draw.text((MARGIN, MARGIN - 4), title, font=title_font, fill=TEXT_COLOR)
-    subtitle = HEADER_SUBTITLE.format(lookback_hours)
+    subtitle = (HEADER_SUBTITLE.format(lookback_hours)
+               if lookback_hours is not None else HEADER_SUBTITLE_DEMO)
     draw.text((MARGIN, MARGIN + 48), subtitle, font=subtitle_font,
               fill=SUBTEXT_COLOR)
     subtitle_end = MARGIN + text_size(draw, subtitle, subtitle_font)[0]
@@ -188,24 +241,36 @@ def _draw_header(draw: ImageDraw.ImageDraw, date: str,
 
 
 def _draw_footer(draw: ImageDraw.ImageDraw, font_path: Optional[str],
-                 lookback_hours: int) -> None:
-    """ Draw the metadata strip and the disclaimer. """
+                 lookback_hours: Optional[int], source_label: str) -> None:
+    """
+    Draw the metadata strip and the disclaimer.
+
+    lookback_hours is None for a demo report; the period column names
+    the sample instead of asserting a number of hours. source_label is
+    derived from what the report's topics actually cite, so an
+    arXiv-only or news-only report is not described as drawing from
+    both.
+    """
     label_font = load_font(font_path, 16)
     value_font = load_font(font_path, 18)
     note_font = load_font(font_path, 14)
+
+    period = (PERIOD_TEXT.format(lookback_hours)
+             if lookback_hours is not None else PERIOD_TEXT_DEMO)
+    items = (
+        ("データソース", source_label),
+        ("対象期間", period),
+    ) + FOOTER_STATIC_ITEMS
 
     top = CANVAS_HEIGHT - FOOTER_HEIGHT
     draw.rectangle([(MARGIN, top), (CANVAS_WIDTH - MARGIN, top + 58)],
                    fill=CARD_COLOR, outline=BORDER_COLOR)
 
-    column_width = (CANVAS_WIDTH - 2 * MARGIN) // len(FOOTER_ITEMS)
-    for index, (label, value) in enumerate(FOOTER_ITEMS):
+    column_width = (CANVAS_WIDTH - 2 * MARGIN) // len(items)
+    for index, (label, value) in enumerate(items):
         left = MARGIN + index * column_width + 20
         draw.text((left, top + 8), label, font=label_font, fill=SUBTEXT_COLOR)
-        # Only the period carries a placeholder; the others format to
-        # themselves.
-        draw.text((left, top + 30), value.format(lookback_hours),
-                  font=value_font, fill=TEXT_COLOR)
+        draw.text((left, top + 30), value, font=value_font, fill=TEXT_COLOR)
         if index > 0:
             divider = MARGIN + index * column_width
             draw.line([(divider, top + 8), (divider, top + 50)],
@@ -220,14 +285,23 @@ def _paste_illustration(canvas: Image.Image, path: str, box) -> None:
     Paste a topic illustration, cropped to fill the given box.
 
     The aspect ratio is preserved and the overflowing part is cut, which
-    keeps the grid regular whatever the shape of the scraped image.
+    keeps the grid regular whatever the shape of the scraped image. A
+    stored file gets the same decompression bomb guard the resolver
+    applies when it first scrapes an image: Pillow only warns, rather
+    than raising, below twice MAX_IMAGE_PIXELS, and simplefilter() here
+    is undone by catch_warnings() on exit, so a rebuild's own decode
+    never touches the process-wide warning filter other code relies on.
+    A refusal here skips this one card's illustration and keeps the
+    rest of the image, rather than failing the whole render.
     """
     left, top, right, bottom = box
     target_width = right - left
     target_height = bottom - top
     try:
-        with Image.open(path) as source:
-            image = source.convert("RGB")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(path) as source:
+                image = source.convert("RGB")
             scale = max(target_width / image.width,
                         target_height / image.height)
             resized = image.resize(
@@ -241,7 +315,8 @@ def _paste_illustration(canvas: Image.Image, path: str, box) -> None:
                                     offset_x + target_width,
                                     offset_y + target_height))
             canvas.paste(cropped, (left, top))
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, Image.DecompressionBombError,
+            Image.DecompressionBombWarning) as error:
         logger.warning("cannot paste illustration %s: %s", path, error)
 
 
@@ -322,7 +397,7 @@ def _draw_card(canvas: Image.Image, draw: ImageDraw.ImageDraw, topic: Topic,
 
 def compose(date: str, topics: List[Topic], report_dir: str,
             font_path: Optional[str] = None,
-            lookback_hours: int = DEFAULT_LOOKBACK_HOURS) -> str:
+            lookback_hours: Optional[int] = DEFAULT_LOOKBACK_HOURS) -> str:
     """
     Render the composite summary image of one report.
 
@@ -333,13 +408,16 @@ def compose(date: str, topics: List[Topic], report_dir: str,
             image is written there as summary.png.
         font_path: Path of a CJK capable font, or None.
         lookback_hours: Age limit the collectors applied, announced in
-            the header and the footer.
+            the header and the footer. None for a demo report, which
+            collected nothing and so has no real window to announce;
+            the header and the footer name the sample instead.
 
     Returns:
         The path of the written PNG file.
     """
     canvas = Image.new("RGB", (CANVAS_WIDTH, CANVAS_HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(canvas)
+    source_label = _data_source_label(topics)
 
     _draw_header(draw, date, topics, font_path, lookback_hours)
 
@@ -359,7 +437,7 @@ def compose(date: str, topics: List[Topic], report_dir: str,
                    (left, top, left + card_width, top + card_height),
                    report_dir, font_path)
 
-    _draw_footer(draw, font_path, lookback_hours)
+    _draw_footer(draw, font_path, lookback_hours, source_label)
 
     output_path = os.path.join(report_dir, "summary.png")
     canvas.save(output_path, format="PNG")

@@ -52,6 +52,10 @@
 #    - Clear --data-dir, --summarizer-base-url, --summarizer-model and
 #      --user-agent to their unset/default state when given blank, and
 #      keep a nonblank override winning as before.
+#    - Trim --data-dir, --summarizer-model and --user-agent like their
+#      environment equivalents, leaving --summarizer-base-url untrimmed.
+#    - Accept a token option normalized the same way _env_token() would
+#      normalize it, whatever whitespace or case it arrives with.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -59,8 +63,8 @@
 #
 #  Version History:
 #  v1.4 2026-09-22
-#       Cover a blank scalar override clearing to the same state a blank
-#       environment value means, instead of the literal blank string.
+#       Cover blank overrides clearing to the environment's unset state,
+#       trimmed scalars, and token options normalized like _env_token().
 #  v1.3 2026-09-12
 #       Cover the six-topic upper bound of --max-topics.
 #  v1.2 2026-09-08
@@ -177,6 +181,32 @@ class OverrideTest(unittest.TestCase):
             configured, cli.parse_args(["run", "--user-agent", "cli-ua"]))
 
         self.assertEqual("cli-ua", applied.user_agent)
+
+    def test_data_dir_is_trimmed_like_the_environment_value(self):
+        applied = self.override(["list", "--data-dir", "  reports  "])
+
+        self.assertEqual(os.path.abspath("reports"), applied.data_dir)
+
+    def test_summarizer_model_is_trimmed_like_the_environment_value(self):
+        applied = self.override(
+            ["run", "--summarizer-model", "  claude-x  "])
+
+        self.assertEqual("claude-x", applied.summarizer_model)
+
+    def test_user_agent_is_trimmed_like_the_environment_value(self):
+        applied = self.override(["run", "--user-agent", "  my-agent  "])
+
+        self.assertEqual("my-agent", applied.user_agent)
+
+    def test_summarizer_base_url_is_not_trimmed(self):
+        # config.py does not repair SUMMARIZER_BASE_URL either; an
+        # untrimmed value is rejected as not exactly HTTPS, not silently
+        # fixed up.
+        applied = self.override(
+            ["run", "--summarizer-base-url", "  https://api.example/v1  "])
+
+        self.assertEqual(
+            "  https://api.example/v1  ", applied.summarizer_base_url)
 
 
 class NumericOptionTest(unittest.TestCase):
@@ -387,6 +417,27 @@ class ModeOptionTest(unittest.TestCase):
 
     def test_rejects_an_unknown_backend(self):
         self.assertEqual(2, refused(["run", "--summarizer-backend", "claud"]))
+
+    def test_accepts_a_backend_with_surrounding_whitespace_and_case(self):
+        # _env_token() normalizes SUMMARIZER_BACKEND the same way, so a
+        # value that would be accepted from the environment must not be
+        # refused here just because it arrived as a CLI option instead.
+        applied = cli.apply_overrides(
+            Config(),
+            cli.parse_args(["run", "--summarizer-backend", " PLAIN "]))
+
+        self.assertEqual("plain", applied.summarizer_backend)
+
+    def test_thinking_mode_and_tool_choice_mode_are_normalized_too(self):
+        args = cli.parse_args([
+            "run", "--summarizer-thinking-mode", " DISABLED ",
+            "--summarizer-tool-choice-mode", " AUTO ",
+            "--summarizer-text-json-fallback", " ENABLED ",
+        ])
+
+        self.assertEqual("disabled", args.summarizer_thinking_mode)
+        self.assertEqual("auto", args.summarizer_tool_choice_mode)
+        self.assertEqual("enabled", args.summarizer_text_json_fallback)
 
 
 class NewsFeedUrlsOptionTest(unittest.TestCase):

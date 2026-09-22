@@ -37,8 +37,8 @@
 #
 #  Version History:
 #  v1.6 2026-09-22
-#       Validate to_topics() input by type instead of coercing it with
-#       str(), and require 2 to 4 usable bullets per API-backed topic.
+#       Validate to_topics() input by type instead of str() coercion,
+#       require 2-4 usable bullets, and select sources by validity first.
 #  v1.5 2026-09-12
 #       Accept text JSON fallback only when the whole text block is the report.
 #  v1.4 2026-08-05
@@ -361,11 +361,13 @@ def to_topics(payload: Any, entries: List[Entry],
                            "source_indexes", title)
             continue
         sources = []
-        for index in raw_indexes[:3]:
+        for index in raw_indexes:
             if (isinstance(index, int) and not isinstance(index, bool)
                     and 0 <= index < len(entries)):
                 entry = entries[index]
                 sources.append({"title": entry.title, "url": entry.url})
+                if len(sources) == 3:
+                    break
         if not sources:
             logger.warning("dropping malformed topic %r: no usable source",
                            title)

@@ -118,8 +118,8 @@
 #
 #  Version History:
 #  v2.1 2026-09-22
-#       Clear a scalar override given blank to its unset/default state
-#       instead of holding the literal blank string.
+#       Normalize scalar overrides the same way the environment does: trim,
+#       clear blanks, lower-case tokens; stop recording demo lookback_hours.
 #  v2.0 2026-09-12
 #       Reject --max-topics values above the six-topic report limit.
 #  v1.9 2026-09-08
@@ -303,6 +303,16 @@ def news_feed_urls_option(value: str) -> List[str]:
         raise argparse.ArgumentTypeError(str(error))
 
 
+def token_option(value: str) -> str:
+    """
+    Normalize a choice option the same way _env_token() normalizes the
+    same setting from the environment, before argparse's own choices
+    check runs, so surrounding whitespace or case does not make an
+    option rejected that the equivalent environment value accepts.
+    """
+    return value.strip().lower()
+
+
 # Scalar string options where an explicit blank is not "leave this
 # alone" but a request to clear a configured value back to what the
 # same setting means when it is blank in the environment or in .env:
@@ -316,6 +326,15 @@ _BLANK_OVERRIDE_DEFAULTS: Dict[str, Callable[[], Any]] = {
     "summarizer_model": lambda: "",
     "user_agent": lambda: DEFAULT_USER_AGENT,
 }
+
+# Scalar string options config.py also trims when it reads them from
+# the environment or .env; trimmed here first so a value differing
+# from its environment equivalent only by surrounding whitespace is
+# not treated as a different, nonblank override. summarizer_base_url
+# is deliberately excluded: config.py does not repair it either, since
+# validate_summarizer_base_url() rejects a URL, trimmed or not, that
+# is not exactly a usable absolute HTTPS URL.
+_TRIMMED_STRING_FIELDS = ("data_dir", "summarizer_model", "user_agent")
 
 
 def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
@@ -339,6 +358,8 @@ def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
         value = given.get(name)
         if value is None:
             continue
+        if isinstance(value, str) and name in _TRIMMED_STRING_FIELDS:
+            value = value.strip()
         if (name in _BLANK_OVERRIDE_DEFAULTS and isinstance(value, str)
                 and not value.strip()):
             value = _BLANK_OVERRIDE_DEFAULTS[name]()
@@ -458,6 +479,23 @@ def _model_label(config: Config, use_api: bool) -> str:
     return config.resolved_model if use_api else "plain"
 
 
+def _summary_period(stats: Dict[str, Any], default_hours: int
+                    ) -> Optional[int]:
+    """
+    Return the lookback window compose_image.compose() should announce.
+
+    None for a demo report, named by its statistics' 'model' field
+    rather than by whether a numeric lookback_hours happens to be
+    present: a demo report stored before this rule existed still
+    carries one, stale, and must read as a sample all the same. A live
+    report stored before LOOKBACK_HOURS was itself recorded falls back
+    on default_hours.
+    """
+    if stats.get("model") == "demo":
+        return None
+    return stats.get("lookback_hours", default_hours)
+
+
 def build_and_publish_report(config: Config, date: str, topics: List[Topic],
                              stats: Dict[str, Any], scrape: bool) -> bool:
     """
@@ -477,8 +515,9 @@ def build_and_publish_report(config: Config, date: str, topics: List[Topic],
         with publication_workspace(config.data_dir, date) as staging_dir:
             attach_images(topics, staging_dir, config, scrape=scrape)
             write_report_json(staging_dir, date, topics, stats)
-            compose_image.compose(date, topics, staging_dir, config.font_path,
-                                  stats["lookback_hours"])
+            compose_image.compose(
+                date, topics, staging_dir, config.font_path,
+                _summary_period(stats, config.lookback_hours))
             build.write_report_html(staging_dir, date, topics, stats)
     except ReportPublicationError as error:
         logger.error("publishing the report for %s failed: %s", date, error)
@@ -618,7 +657,6 @@ def command_demo(args: argparse.Namespace, config: Config) -> int:
         "deduplicated": collected,
         "topics": len(topics),
         "model": "demo",
-        "lookback_hours": config.lookback_hours,
         "generated_at": "{0}T00:00:00+00:00".format(date),
     }
     # Scraping stays off, so that a demo run touches nothing but disk.
@@ -637,7 +675,11 @@ def command_render(args: argparse.Namespace, config: Config) -> int:
     statistics of the report carry. Reading it from the configuration
     instead would make a report rebuilt after LOOKBACK_HOURS changed
     describe a period it was never built from. Reports stored before
-    the window was recorded fall back on the configured one.
+    the window was recorded fall back on the configured one. A demo
+    report is identified by its 'model' field, not by whether it
+    happens to carry a numeric lookback_hours: one stored before that
+    distinction existed still does, stale, and must still read as a
+    sample rather than a fabricated window.
 
     The authoritative report.json and the topic illustrations are
     copied into a staging directory and only the derived artifacts are
@@ -652,10 +694,9 @@ def command_render(args: argparse.Namespace, config: Config) -> int:
     try:
         with publication_workspace(config.data_dir, args.date) as staging_dir:
             copy_existing_report(config.data_dir, args.date, staging_dir)
-            compose_image.compose(args.date, report["topics"], staging_dir,
-                                  config.font_path,
-                                  stats.get("lookback_hours",
-                                           config.lookback_hours))
+            compose_image.compose(
+                args.date, report["topics"], staging_dir, config.font_path,
+                _summary_period(stats, config.lookback_hours))
             build.write_report_html(staging_dir, args.date, report["topics"],
                                     stats)
     except ReportPublicationError as error:
@@ -722,7 +763,8 @@ def add_collection_options(parser: argparse.ArgumentParser) -> None:
 
 def add_summarizer_options(parser: argparse.ArgumentParser) -> None:
     """ Add the options shaping how 'run' summarizes. """
-    parser.add_argument("--summarizer-backend", choices=SUMMARIZER_BACKENDS,
+    parser.add_argument("--summarizer-backend", type=token_option,
+                        choices=SUMMARIZER_BACKENDS,
                         help="summarizer to use (SUMMARIZER_BACKEND)")
     parser.add_argument("--summarizer-model",
                         help="model asked for on the endpoint "
@@ -735,16 +777,16 @@ def add_summarizer_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--summarizer-max-retries", type=non_negative_int,
                         help="retries the SDK may spend on one request "
                              "(SUMMARIZER_MAX_RETRIES)")
-    parser.add_argument("--summarizer-thinking-mode",
+    parser.add_argument("--summarizer-thinking-mode", type=token_option,
                         choices=SUMMARIZER_THINKING_MODES,
                         help="thinking parameter sent with an "
                              "anthropic-compatible request "
                              "(SUMMARIZER_THINKING_MODE)")
-    parser.add_argument("--summarizer-tool-choice-mode",
+    parser.add_argument("--summarizer-tool-choice-mode", type=token_option,
                         choices=SUMMARIZER_TOOL_CHOICE_MODES,
                         help="how the tool is demanded "
                              "(SUMMARIZER_TOOL_CHOICE_MODE)")
-    parser.add_argument("--summarizer-text-json-fallback",
+    parser.add_argument("--summarizer-text-json-fallback", type=token_option,
                         choices=SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                         help="accept a report written as JSON text "
                              "(SUMMARIZER_TEXT_JSON_FALLBACK)")

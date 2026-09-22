@@ -832,7 +832,7 @@ python cli.py demo          # build the bundled sample report
 python app.py               # browse it at http://127.0.0.1:3000/
 ```
 
-See [Demo mode](#demo-mode) above and [`doc/DEMO.md`](doc/DEMO.md), which states exactly which two stages the demo replaces and how it differs from a collected report.
+See [Demo mode](#demo-mode) above and [`doc/DEMO.md`](doc/DEMO.md), which states exactly which stages the demo replaces and how it differs from a collected report.
 
 ## Contribution
 

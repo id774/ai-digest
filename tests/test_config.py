@@ -100,8 +100,8 @@
 #
 #  Version History:
 #  v1.4 2026-09-22
-#       Cover whitespace-only SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN and
-#       SUMMARIZER_BASE_URL resolving to unset.
+#       Cover whitespace-only summarizer settings resolving to unset, and
+#       strict HTTPS validation of an explicit SUMMARIZER_BASE_URL.
 #  v1.3 2026-09-12
 #       Cover the MAX_TOPICS upper bound as well as numeric minima.
 #  v1.2 2026-09-08
@@ -316,6 +316,42 @@ class SummarizerBaseUrlTest(unittest.TestCase):
 
     def test_a_missing_base_url_still_passes_on_plain(self):
         loaded = self.load({"SUMMARIZER_BACKEND": "plain"})
+
+        loaded.validate_summarizer_base_url()
+
+    def test_rejects_an_http_base_url_on_the_openai_protocol(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible",
+                            "SUMMARIZER_BASE_URL": "http://api.example.test/v1"})
+
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+            loaded.validate_summarizer_base_url()
+
+    def test_rejects_a_hostless_base_url_on_the_openai_protocol(self):
+        loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible",
+                            "SUMMARIZER_BASE_URL": "https:///v1"})
+
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+            loaded.validate_summarizer_base_url()
+
+    def test_rejects_an_invalid_port_on_the_openai_protocol(self):
+        loaded = self.load({
+            "SUMMARIZER_BACKEND": "openai-compatible",
+            "SUMMARIZER_BASE_URL": "https://api.example.test:99999/v1"})
+
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+            loaded.validate_summarizer_base_url()
+
+    def test_rejects_an_http_base_url_on_the_anthropic_protocol(self):
+        loaded = self.load({
+            "SUMMARIZER_BASE_URL": "http://api.example.test"})
+
+        with self.assertRaisesRegex(RuntimeError, "SUMMARIZER_BASE_URL"):
+            loaded.validate_summarizer_base_url()
+
+    def test_accepts_an_explicit_https_base_url_on_the_anthropic_protocol(
+            self):
+        loaded = self.load({
+            "SUMMARIZER_BASE_URL": "https://api.example.test"})
 
         loaded.validate_summarizer_base_url()
 

@@ -33,12 +33,20 @@
 #    - Yield no entry when there is no category.
 #    - Cap the listed categories at LEGEND_MAX_ENTRIES.
 #    - Use backend-neutral fixed wording in the daily image.
+#    - Label データソース from what topics actually cite: arXiv only, news
+#      only, both, or neither.
+#    - Refuse a decompression-bomb stored illustration without raising,
+#      leaving the canvas untouched, and still paste an ordinary one.
+#    - Accept lookback_hours=None, for a demo report, without raising.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow
 #
 #  Version History:
+#  v1.2 2026-09-22
+#       Cover the dynamic データソース label, the stored-illustration
+#       decompression bomb guard, and a None (demo) lookback_hours.
 #  v1.1 2026-08-24
 #       Pin the backend-neutral fixed text of the daily summary image.
 #  v1.0 2026-08-05
@@ -46,10 +54,13 @@
 #
 ########################################################################
 
+import os
+import tempfile
 import unittest
 
 from PIL import Image, ImageDraw, ImageFont
 
+from ai_digest import Topic
 from ai_digest.render import compose_image
 
 
@@ -109,13 +120,107 @@ class SummaryTextTest(unittest.TestCase):
         )
         self.assertIn(
             ("整理方法", "公開情報の収集・整理"),
-            compose_image.FOOTER_ITEMS,
+            compose_image.FOOTER_STATIC_ITEMS,
         )
         self.assertEqual(
             "留意事項: 本資料は公開情報を収集・整理した参考情報です。"
             "重要な判断に際しては、原典となる一次情報を確認してください。",
             compose_image.DISCLAIMER,
         )
+
+
+class DataSourceLabelTest(unittest.TestCase):
+    """
+    データソース names what the report's topics actually cite, not a
+    fixed string, so an arXiv-only or news-only report is not described
+    as drawing from both.
+    """
+
+    def topic(self, urls):
+        return Topic(category="c", title="t", bullets=["b"],
+                    sources=[{"title": "s", "url": url} for url in urls])
+
+    def test_arxiv_only(self):
+        topics = [self.topic(["https://arxiv.org/abs/1"])]
+
+        self.assertEqual(compose_image.DATA_SOURCE_ARXIV,
+                         compose_image._data_source_label(topics))
+
+    def test_an_arxiv_subdomain_still_counts_as_arxiv(self):
+        topics = [self.topic(["https://export.arxiv.org/abs/1"])]
+
+        self.assertEqual(compose_image.DATA_SOURCE_ARXIV,
+                         compose_image._data_source_label(topics))
+
+    def test_news_only(self):
+        topics = [self.topic(["https://example.test/article"])]
+
+        self.assertEqual(compose_image.DATA_SOURCE_NEWS,
+                         compose_image._data_source_label(topics))
+
+    def test_mixed_sources(self):
+        topics = [self.topic(["https://arxiv.org/abs/1",
+                              "https://example.test/article"])]
+
+        self.assertEqual(compose_image.DATA_SOURCE_BOTH,
+                         compose_image._data_source_label(topics))
+
+    def test_no_usable_source(self):
+        topics = [self.topic([])]
+
+        self.assertEqual(compose_image.DATA_SOURCE_NONE,
+                         compose_image._data_source_label(topics))
+
+
+class PasteIllustrationTest(unittest.TestCase):
+    """
+    A stored topic illustration gets the same decompression bomb guard
+    the resolver applies when it first scrapes an image, so a rebuild
+    cannot be made to decode a hostile file just because it already
+    passed the resolver's own byte cap once.
+    """
+
+    def test_refuses_a_decompression_bomb_without_raising(self):
+        side = int((1.5 * Image.MAX_IMAGE_PIXELS) ** 0.5) + 10
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "big.png")
+            Image.new("L", (side, side)).save(path, format="PNG")
+
+            canvas = Image.new("RGB", (100, 100), "white")
+            with self.assertLogs(compose_image.logger, "WARNING"):
+                compose_image._paste_illustration(canvas, path,
+                                                  (0, 0, 100, 100))
+
+            # Refused, not pasted: the canvas is untouched.
+            self.assertEqual((255, 255, 255), canvas.getpixel((50, 50)))
+
+    def test_pastes_an_ordinary_image(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "ok.png")
+            Image.new("RGB", (40, 40), (10, 20, 30)).save(path, format="PNG")
+
+            canvas = Image.new("RGB", (100, 100), "white")
+            compose_image._paste_illustration(canvas, path, (0, 0, 100, 100))
+
+            self.assertEqual((10, 20, 30), canvas.getpixel((50, 50)))
+
+
+class DemoPeriodRenderTest(unittest.TestCase):
+    """
+    compose() accepts lookback_hours=None for a demo report, showing a
+    sample period rather than formatting None into the hour count.
+    """
+
+    def topic(self):
+        return Topic(category="c", title="t", bullets=["b1", "b2"],
+                    sources=[{"title": "s", "url": "https://arxiv.org/abs/1"}])
+
+    def test_a_none_lookback_does_not_raise(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = compose_image.compose(
+                "2026-08-04", [self.topic()], directory, lookback_hours=None)
+
+            self.assertTrue(os.path.isfile(output_path))
 
 
 if __name__ == "__main__":

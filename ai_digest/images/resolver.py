@@ -29,8 +29,8 @@
 #
 #  Version History:
 #  v1.4 2026-09-22
-#       Pin scraping connections to the public address validated against DNS
-#       rebinding, and refuse decompression-bomb-warning-range images too.
+#       Pin, bypass proxy for, and time-bound scraping connections; refuse
+#       decompression-bomb-warning-range images too.
 #  v1.3 2026-09-08
 #       Fetch source pages and images only over HTTPS.
 #  v1.2 2026-08-04
@@ -50,6 +50,7 @@ import io
 import logging
 import re
 import socket
+import time
 import warnings
 from typing import Iterator, List, Optional, Tuple, Union
 from urllib.parse import urljoin, urlparse, urlsplit
@@ -58,7 +59,8 @@ import requests
 from bs4 import BeautifulSoup
 from PIL import Image, UnidentifiedImageError
 
-from ai_digest.transport import HTTPSOnlyError, https_get
+from ai_digest.transport import (FetchTimeoutError, HTTPSOnlyError,
+                                 fetch_deadline, https_get)
 
 # arXiv abstract, PDF and versioned URLs all embed the same identifier.
 ARXIV_ID_PATTERN = re.compile(r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})")
@@ -226,15 +228,28 @@ def validate_and_pin_public_target(url: str) -> Iterator[None]:
 
 def _read_capped(response: requests.Response, limit: int) -> Optional[bytes]:
     """
-    Read a response body, giving up once it exceeds limit bytes.
+    Read a response body, giving up once it exceeds limit bytes or the
+    fetch's own deadline passes.
 
     Returning None rather than the truncated bytes is deliberate: a
     partial image is not worth publishing, and stopping the read is
-    what keeps an oversized or endless body out of memory.
+    what keeps an oversized or endless body out of memory. A byte
+    trickle slow enough that no single socket read times out could
+    otherwise stretch one fetch past its configured budget, which is
+    why elapsed time is checked between chunks too, not just size.
+
+    Raises:
+        FetchTimeoutError: The fetch's deadline passed while reading.
     """
+    deadline = fetch_deadline(response)
     chunks = []
     total = 0
     for chunk in response.iter_content(chunk_size=CHUNK_BYTES):
+        if deadline is not None and time.monotonic() > deadline:
+            raise FetchTimeoutError(
+                "response body still incomplete after the fetch's "
+                "deadline elapsed"
+            )
         total += len(chunk)
         if total > limit:
             return None
@@ -252,11 +267,14 @@ def _fetch(url: str, timeout: int, user_agent: str,
     failure. Only HTTPS is requested, and a redirect to a downgraded
     target is refused before it is followed: the candidate URLs come
     from third party pages, and no other scheme or protocol has a
-    meaning here.
+    meaning here. trust_env is off, so an environment proxy never picks
+    the connection's real destination out from under target_pin: without
+    it, a proxy could resolve and route to a target_pin never sees.
     """
     try:
         with https_get(url, timeout, user_agent, stream=True,
-                       target_pin=validate_and_pin_public_target) as response:
+                       target_pin=validate_and_pin_public_target,
+                       trust_env=False) as response:
             response.raise_for_status()
             body = _read_capped(response, limit)
             if body is None:

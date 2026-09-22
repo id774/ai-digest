@@ -73,8 +73,8 @@
 #
 #  Version History:
 #  v1.3 2026-09-22
-#       Cover the collector response body cap: streaming, normal parsing
-#       in-cap, and an oversized source failing without ending the run.
+#       Cover the collector response body cap and that trust_env (proxy
+#       use) stays the untouched default.
 #  v1.2 2026-09-15
 #       Cover bounded retry handling for arXiv HTTP 429 responses.
 #  v1.1 2026-09-08
@@ -345,6 +345,31 @@ class ResponseBodyCapTest(unittest.TestCase):
         self.assertEqual([], result.entries)
         self.assertEqual(1, result.sources_failed)
         self.assertTrue(result.failures)
+
+    def test_arxiv_does_not_override_trust_env(self):
+        # Unlike the image resolver, collectors keep using whatever
+        # proxy the environment configures.
+        response = _FakeHttpsResponse(b"<feed></feed>")
+        parsed = SimpleNamespace(entries=[], bozo=0)
+        with mock.patch.object(arxiv, "https_get",
+                               return_value=response) as getter:
+            with mock.patch.object(arxiv.feedparser, "parse",
+                                   return_value=parsed):
+                arxiv._fetch_category("cs.AI", 10, 15, "ai-digest")
+
+        self.assertNotIn("trust_env", getter.call_args.kwargs)
+
+    def test_news_does_not_override_trust_env(self):
+        parsed = SimpleNamespace(feed=SimpleNamespace(title="Feed"),
+                                 entries=[])
+        response = _FakeHttpsResponse(b"<rss/>")
+        with mock.patch.object(news_rss, "https_get",
+                               return_value=response) as getter:
+            with mock.patch.object(news_rss.feedparser, "parse",
+                                   return_value=parsed):
+                news_rss.collect(["https://feed.test/rss"], 24)
+
+        self.assertNotIn("trust_env", getter.call_args.kwargs)
 
     def test_continues_with_the_next_feed_after_an_oversized_one(self):
         oversized = b"x" * (transport.MAX_COLLECTOR_RESPONSE_BYTES + 1)

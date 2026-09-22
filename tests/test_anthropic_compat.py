@@ -77,8 +77,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-22
-#       Cover to_topics() typed validation: non-object payload/topic, a field
-#       of the wrong type, and the 2-4 usable bullet requirement.
+#       Cover to_topics() typed validation, the 2-4 bullet requirement, and
+#       usable-source selection order/cap independent of raw list position.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -365,10 +365,9 @@ class ToTopicsTest(unittest.TestCase):
 
     def entries(self):
         return [
-            Entry(source_type="news", title="Title 0",
-                 url="https://example.test/0"),
-            Entry(source_type="news", title="Title 1",
-                 url="https://example.test/1"),
+            Entry(source_type="news", title="Title {0}".format(i),
+                 url="https://example.test/{0}".format(i))
+            for i in range(5)
         ]
 
     def topic(self, **overrides):
@@ -475,6 +474,29 @@ class ToTopicsTest(unittest.TestCase):
 
         self.assertEqual(1, len(topics))
         self.assertEqual(1, len(topics[0].sources))
+
+    def test_a_valid_index_after_an_invalid_prefix_is_still_used(self):
+        # A naive [:3]-then-filter implementation would drop this topic:
+        # the first three raw indexes are all out of range, and the one
+        # valid index, 0, comes fourth.
+        payload = {"topics": [self.topic(source_indexes=[99, 98, 97, 0])]}
+
+        topics = summarizer.to_topics(payload, self.entries(), 6)
+
+        self.assertEqual(1, len(topics))
+        self.assertEqual(["https://example.test/0"],
+                         [source["url"] for source in topics[0].sources])
+
+    def test_caps_usable_sources_at_three_keeping_raw_order(self):
+        payload = {"topics": [self.topic(
+            source_indexes=[99, 0, 98, 1, 2, 3])]}
+
+        topics = summarizer.to_topics(payload, self.entries(), 6)
+
+        self.assertEqual(
+            ["https://example.test/0", "https://example.test/1",
+             "https://example.test/2"],
+            [source["url"] for source in topics[0].sources])
 
     def test_drops_a_topic_left_with_no_usable_source(self):
         payload = {"topics": [self.topic(source_indexes=[99])]}
