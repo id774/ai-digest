@@ -66,6 +66,9 @@
 #  - playwright, and a Chromium downloaded by it
 #
 #  Version History:
+#  v1.2 2026-09-23
+#       Resolve only DATA_DIR through load_list_config(), instead of the
+#       full batch scope, so an unrelated malformed setting cannot stop it.
 #  v1.1 2026-08-03
 #       Copy the composite image of the captured report as well.
 #  v1.0 2026-07-28
@@ -90,7 +93,7 @@ if BASE_DIR not in sys.path:
 
 from ai_digest.storage import (SUMMARY_FILENAME, list_dates,  # noqa: E402
                                summary_image_path)
-from config import load_config            # noqa: E402
+from config import load_list_config       # noqa: E402
 
 DEFAULT_OUTPUT = os.path.join(BASE_DIR, "doc", "screenshots")
 DEFAULT_PORT = 5099
@@ -191,7 +194,11 @@ def main(argv=None):
         stream=sys.stderr,
     )
     args = parse_args(argv)
-    config = load_config()
+    # This tool only ever reads DATA_DIR, the same single setting
+    # 'cli.py list' resolves; a malformed batch-only or endpoint
+    # setting sitting in the operator's .env must not stop a purely
+    # read-only documentation tool from running.
+    config = load_list_config()
     data_dir = os.path.abspath(args.data_dir or config.data_dir)
 
     dates = list_dates(data_dir)

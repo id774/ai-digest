@@ -40,7 +40,12 @@ that need outbound access are replaced:
 | Summarization | a `build_report` tool call through the configured API-backed backend | the `build_report` object of the sample |
 | Illustration | scraping the paper's figure or the article's Open Graph image | a locally drawn fallback card for every topic |
 
-The stored payload goes through `summarizer.to_topics()`, the same
+The sample's own shape is checked before anything is built from it - the
+top level an object, `date` a real calendar date, `entries` a non-empty
+list of objects each with a nonblank title and a safe absolute URL -
+failing the command cleanly on the first violation instead of letting a
+malformed custom `--input` file crash with a raw exception. The stored
+`build_report` payload then goes through `summarizer.to_topics()`, the same
 validation a live tool call passes, and the topics are then illustrated,
 stored and rendered by the same code as any other report. `report.json`
 records `"model": "demo"`, which distinguishes a demo from a collected

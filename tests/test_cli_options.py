@@ -52,8 +52,8 @@
 #    - Clear --data-dir, --summarizer-base-url, --summarizer-model and
 #      --user-agent to their unset/default state when given blank, and
 #      keep a nonblank override winning as before.
-#    - Trim --data-dir, --summarizer-model and --user-agent like their
-#      environment equivalents, leaving --summarizer-base-url untrimmed.
+#    - Trim --data-dir, --summarizer-base-url, --summarizer-model and
+#      --user-agent like their environment equivalents.
 #    - Accept a token option normalized the same way _env_token() would
 #      normalize it, whatever whitespace or case it arrives with.
 #
@@ -62,9 +62,9 @@
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
-#  v1.4 2026-09-22
+#  v1.4 2026-09-23
 #       Cover blank overrides clearing to the environment's unset state,
-#       trimmed scalars, and token options normalized like _env_token().
+#       every scalar trimmed the same way, and tokens normalized like it.
 #  v1.3 2026-09-12
 #       Cover the six-topic upper bound of --max-topics.
 #  v1.2 2026-09-08
@@ -198,15 +198,11 @@ class OverrideTest(unittest.TestCase):
 
         self.assertEqual("my-agent", applied.user_agent)
 
-    def test_summarizer_base_url_is_not_trimmed(self):
-        # config.py does not repair SUMMARIZER_BASE_URL either; an
-        # untrimmed value is rejected as not exactly HTTPS, not silently
-        # fixed up.
+    def test_summarizer_base_url_is_trimmed_like_the_environment_value(self):
         applied = self.override(
             ["run", "--summarizer-base-url", "  https://api.example/v1  "])
 
-        self.assertEqual(
-            "  https://api.example/v1  ", applied.summarizer_base_url)
+        self.assertEqual("https://api.example/v1", applied.summarizer_base_url)
 
 
 class NumericOptionTest(unittest.TestCase):

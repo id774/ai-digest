@@ -138,7 +138,7 @@ The first command prints the version, the second prints nothing on a fresh insta
 All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Settings used by the batch also have command-line overrides on `cli.py` except `SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN`; `PORT` belongs to
 the viewer. See [Overriding a setting for one run](#overriding-a-setting-for-one-run).
 
-Each execution path resolves only the settings it actually uses: `cli.py run` reads the full table below except `PORT`; `cli.py list` reads only `DATA_DIR`; `cli.py render` and `cli.py demo` add `AI_DIGEST_FONT_PATH`, `LOOKBACK_HOURS` and, for `demo`, `MAX_TOPICS`; the viewer reads only `DATA_DIR` and `PORT`. A setting outside that path's own scope being malformed, missing, or carrying a superseded name never stops it.
+Each execution path resolves only the settings it actually uses: `cli.py run` reads the full table below except `PORT`; `cli.py list` reads only `DATA_DIR`; `cli.py render` adds `AI_DIGEST_FONT_PATH` and `LOOKBACK_HOURS`, the latter only as the fallback for a stored report predating that statistic; `cli.py demo` adds `AI_DIGEST_FONT_PATH` and `MAX_TOPICS`, but not `LOOKBACK_HOURS`, since demo collects nothing and records no window; the viewer reads only `DATA_DIR` and `PORT`. A setting outside that path's own scope being malformed, missing, or carrying a superseded name never stops it.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -348,6 +348,10 @@ Two limits bound the outgoing requests, and they measure different things:
 | `HTTP_TIMEOUT` | 60s | One collector or scraper request: an arXiv page, a feed, an article, an image |
 | `SUMMARIZER_TIMEOUT` | 180s | One summarization request, on either API backend |
 
+`HTTP_TIMEOUT` is a hard wall-clock deadline for the whole fetch, DNS
+resolution included, not a per-socket-operation allowance that a slow trickle
+of bytes could otherwise stretch past its budget.
+
 The summarization request is the longer of the two because it is not streamed:
 the client waits until the last token of the answer exists, so what is being
 waited for is the writing rather than the network. A day's worth of entries
@@ -418,7 +422,7 @@ This trades the quality of the Japanese summary and the topic grouping for zero 
 python cli.py run
 ```
 
-The command collects the last 24 hours, summarizes them, writes `data/reports/<today>/` and exits with status 1 when nothing usable could be produced, which makes failures visible in the batch's log output.
+The command collects the last 24 hours, summarizes them, writes `data/reports/<today>/` — today in the host's local time zone, the day cron actually ran it on, not UTC's — and exits with status 1 when nothing usable could be produced, which makes failures visible in the batch's log output.
 
 #### "no entry collected"
 
@@ -776,7 +780,7 @@ topic has to look like is not a property of where its material came from.
 
 The repository is written in English — the code, the comments, the log messages
 and the documents. The report is Japanese, because that is what it is for, and
-four places carry Japanese as data rather than as text that happens to be
+five places carry Japanese as data rather than as text that happens to be
 translated:
 
 | Where | Why |

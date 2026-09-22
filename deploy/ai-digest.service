@@ -28,8 +28,10 @@ RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
-# ProtectSystem=full leaves /opt writable, which DATA_DIR needs when
-# the archive lives under the installation directory.
+# ProtectSystem=full is a defense-in-depth default, not a write
+# requirement: the viewer only ever reads DATA_DIR, and never writes
+# anywhere, whether the archive lives under the installation directory
+# or elsewhere.
 ProtectSystem=full
 
 [Install]

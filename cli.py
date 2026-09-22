@@ -59,8 +59,9 @@
 #  - list
 #      Print the dates of the stored reports.
 #  - --date YYYY-MM-DD
-#      Date the report is filed under. Defaults to today, UTC, and to
-#      the date recorded in the sample for 'demo'.
+#      Date the report is filed under. Defaults to today in the host's
+#      local time zone for 'run', and to the date recorded in the
+#      sample for 'demo'.
 #  - --input FILE
 #      Sample used by 'demo' instead of the bundled one.
 #  - --no-images
@@ -117,6 +118,9 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v2.2 2026-09-23
+#       Default an implicit report date to local time, preflight the
+#       openai package before collecting, and trim SUMMARIZER_BASE_URL.
 #  v2.1 2026-09-22
 #       Normalize scalar overrides the same way the environment does: trim,
 #       clear blanks, lower-case tokens; stop recording demo lookback_hours.
@@ -330,11 +334,13 @@ _BLANK_OVERRIDE_DEFAULTS: Dict[str, Callable[[], Any]] = {
 # Scalar string options config.py also trims when it reads them from
 # the environment or .env; trimmed here first so a value differing
 # from its environment equivalent only by surrounding whitespace is
-# not treated as a different, nonblank override. summarizer_base_url
-# is deliberately excluded: config.py does not repair it either, since
-# validate_summarizer_base_url() rejects a URL, trimmed or not, that
-# is not exactly a usable absolute HTTPS URL.
-_TRIMMED_STRING_FIELDS = ("data_dir", "summarizer_model", "user_agent")
+# not treated as a different, nonblank override, and so the same
+# trimmed value is what gets validated and, for summarizer_base_url,
+# handed to the SDK. Credentials are excluded on purpose: an override
+# has none, and config.py does not trim SUMMARIZER_API_KEY or
+# SUMMARIZER_AUTH_TOKEN either.
+_TRIMMED_STRING_FIELDS = ("data_dir", "summarizer_base_url",
+                         "summarizer_model", "user_agent")
 
 
 def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
@@ -529,8 +535,17 @@ def build_and_publish_report(config: Config, date: str, topics: List[Topic],
 
 
 def command_run(args: argparse.Namespace, config: Config) -> int:
-    """ Execute the whole pipeline for one date. """
-    date = args.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    """
+    Execute the whole pipeline for one date.
+
+    An implicit date, --date left out, files the report under the host's
+    local calendar date - the day cron actually ran it on - rather than
+    UTC's, which can name the day before or after it around the date
+    boundary depending on how far the host's zone sits from UTC. The
+    window collected and generated_at stay UTC-based; only which date
+    directory an unattended run's report lands in follows local time.
+    """
+    date = args.date or datetime.now().strftime("%Y-%m-%d")
     try:
         config.validate_summarizer_backend()
     except RuntimeError as error:
@@ -540,6 +555,14 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
     use_anthropic = config.summarizer_backend == "anthropic-compatible"
     use_openai = config.summarizer_backend == "openai-compatible"
     use_api = use_anthropic or use_openai
+    if use_openai and not openai_compat.package_available():
+        logger.error(
+            "SUMMARIZER_BACKEND=openai-compatible needs the openai "
+            "package, which is not part of requirements.txt. Install it "
+            "with 'pip install openai'."
+        )
+        return 1
+
     try:
         if use_api:
             config.validate_summarizer_auth()

@@ -34,19 +34,22 @@
 #    - Cap the listed categories at LEGEND_MAX_ENTRIES.
 #    - Use backend-neutral fixed wording in the daily image.
 #    - Label データソース from what topics actually cite: arXiv only, news
-#      only, both, or neither.
+#      only, both, or neither, and skip a malformed stored URL rather
+#      than raising out of the label or hiding a usable source beside it.
 #    - Refuse a decompression-bomb stored illustration without raising,
 #      leaving the canvas untouched, and still paste an ordinary one.
 #    - Accept lookback_hours=None, for a demo report, without raising.
+#    - Fall back to the plain color panel, instead of opening the path,
+#      for a stored image naming a traversal escape or an absolute path.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow
 #
 #  Version History:
-#  v1.2 2026-09-22
-#       Cover the dynamic データソース label, the stored-illustration
-#       decompression bomb guard, and a None (demo) lookback_hours.
+#  v1.2 2026-09-23
+#       Cover a dynamic, malformed-URL-safe データソース label, a None
+#       lookback, and refusing a decompression bomb or unsafe image path.
 #  v1.1 2026-08-24
 #       Pin the backend-neutral fixed text of the daily summary image.
 #  v1.0 2026-08-05
@@ -171,6 +174,21 @@ class DataSourceLabelTest(unittest.TestCase):
         self.assertEqual(compose_image.DATA_SOURCE_NONE,
                          compose_image._data_source_label(topics))
 
+    def test_a_malformed_stored_url_is_skipped_without_raising(self):
+        # A stored source URL is only ever checked as a string; one
+        # urlparse() itself refuses, a malformed IPv6 literal here,
+        # must not raise out of a rebuild.
+        topics = [self.topic(["https://[::1/x"])]
+
+        self.assertEqual(compose_image.DATA_SOURCE_NONE,
+                         compose_image._data_source_label(topics))
+
+    def test_a_malformed_url_does_not_hide_a_usable_one(self):
+        topics = [self.topic(["https://[::1/x", "https://arxiv.org/abs/1"])]
+
+        self.assertEqual(compose_image.DATA_SOURCE_ARXIV,
+                         compose_image._data_source_label(topics))
+
 
 class PasteIllustrationTest(unittest.TestCase):
     """
@@ -203,6 +221,40 @@ class PasteIllustrationTest(unittest.TestCase):
             compose_image._paste_illustration(canvas, path, (0, 0, 100, 100))
 
             self.assertEqual((10, 20, 30), canvas.getpixel((50, 50)))
+
+
+class UnsafeStoredImageTest(unittest.TestCase):
+    """
+    A topic 'image' naming anything other than a file directly inside
+    the report directory - loaded from a stored report.json, so
+    untrusted by the time compose() sees it - degrades to the ordinary
+    no-image fallback panel instead of being opened.
+    """
+
+    def draw_card(self, image):
+        canvas = Image.new("RGB", (300, 220), "white")
+        draw = ImageDraw.Draw(canvas)
+        topic = Topic(category="c", title="t", bullets=["b"],
+                     sources=[{"title": "s", "url": "https://example.test/"}],
+                     image=image)
+        with tempfile.TemporaryDirectory() as report_dir:
+            compose_image._draw_card(canvas, draw, topic, 1,
+                                     (0, 0, 300, 220), report_dir, None)
+        return canvas
+
+    def test_a_traversal_escape_falls_back_to_the_color_panel(self):
+        with_escape = self.draw_card("../../etc/passwd")
+        without_image = self.draw_card(None)
+
+        self.assertEqual(list(without_image.getdata()),
+                         list(with_escape.getdata()))
+
+    def test_an_absolute_path_falls_back_to_the_color_panel(self):
+        with_absolute = self.draw_card("/etc/passwd")
+        without_image = self.draw_card(None)
+
+        self.assertEqual(list(without_image.getdata()),
+                         list(with_absolute.getdata()))
 
 
 class DemoPeriodRenderTest(unittest.TestCase):

@@ -28,6 +28,11 @@
 #  No network is used and no source is read: collect_entries() is
 #  replaced by a stub for every case.
 #
+#  The openai package cases cover the same shape of check for the
+#  optional openai-compatible dependency: missing before collecting
+#  fails the run immediately, and the check itself never runs for the
+#  anthropic-compatible or plain backends, which do not need it.
+#
 #  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
@@ -56,12 +61,18 @@
 #      before collecting.
 #    - Reach collect_entries() when a valid --news-feed-urls override
 #      replaces an invalid lower-priority raw value.
+#    - Fail with exit status 1 when the optional openai package is
+#      unavailable for the openai-compatible backend, before collecting,
+#      proven against both a mocked and the real, genuinely absent
+#      package; leave the other backends unaffected by the check.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Standard library only (collect_entries() is stubbed, never called)
 #
 #  Version History:
+#  v1.2 2026-09-23
+#       Cover the openai package preflight check before collection.
 #  v1.1 2026-09-08
 #       Cover HTTPS feed preflight and effective CLI override validation.
 #  v1.0 2026-09-05
@@ -84,9 +95,16 @@ class OpenAiCompatibleBaseUrlPreflightTest(unittest.TestCase):
                         summarizer_api_key="key", summarizer_model="m",
                         summarizer_base_url=base_url)
         args = cli.parse_args(["run"])
-        with mock.patch.object(cli, "collect_entries",
-                              return_value=CollectionResult()) as collect:
-            status = cli.command_run(args, config)
+        # This class is about the base URL check specifically, so the
+        # openai package preflight is held fixed here regardless of
+        # whether the package happens to be installed in this
+        # environment; OpenAiPackagePreflightTest covers that check.
+        with mock.patch.object(cli.openai_compat, "package_available",
+                              return_value=True):
+            with mock.patch.object(
+                    cli, "collect_entries",
+                    return_value=CollectionResult()) as collect:
+                status = cli.command_run(args, config)
         return status, collect
 
     def test_missing_base_url_fails_before_collecting(self):
@@ -119,11 +137,79 @@ class OpenAiCompatibleBaseUrlPreflightTest(unittest.TestCase):
         args = cli.parse_args(["run", "--summarizer-base-url",
                               "https://api.example.test/v1"])
         applied = cli.apply_overrides(config, args)
-        with mock.patch.object(cli, "collect_entries",
-                              return_value=CollectionResult()) as collect:
-            cli.command_run(args, applied)
+        with mock.patch.object(cli.openai_compat, "package_available",
+                              return_value=True):
+            with mock.patch.object(
+                    cli, "collect_entries",
+                    return_value=CollectionResult()) as collect:
+                cli.command_run(args, applied)
 
         collect.assert_called_once()
+
+
+class OpenAiPackagePreflightTest(unittest.TestCase):
+    """
+    The optional openai package must be checked before collecting
+    anything, not only when summarize() is finally reached: a run that
+    cannot build the client was always going to fail, and collecting
+    first only spends a source pass on a report never produced.
+    """
+
+    def run_with(self, package_available):
+        config = Config(summarizer_backend="openai-compatible",
+                        summarizer_api_key="key", summarizer_model="m",
+                        summarizer_base_url="https://api.example.test/v1")
+        args = cli.parse_args(["run"])
+        with mock.patch.object(cli.openai_compat, "package_available",
+                              return_value=package_available):
+            with mock.patch.object(
+                    cli, "collect_entries",
+                    return_value=CollectionResult()) as collect:
+                status = cli.command_run(args, config)
+        return status, collect
+
+    def test_missing_package_fails_before_collecting(self):
+        status, collect = self.run_with(False)
+
+        self.assertEqual(1, status)
+        collect.assert_not_called()
+
+    def test_available_package_reaches_collection(self):
+        _status, collect = self.run_with(True)
+
+        collect.assert_called_once()
+
+    def test_the_package_is_genuinely_absent_in_this_environment(self):
+        # Proves the check against the real package_available(), not
+        # just the mocked cases above: this test environment never
+        # installs the optional openai package.
+        config = Config(summarizer_backend="openai-compatible",
+                        summarizer_api_key="key", summarizer_model="m",
+                        summarizer_base_url="https://api.example.test/v1")
+        args = cli.parse_args(["run"])
+        with mock.patch.object(cli, "collect_entries",
+                              return_value=CollectionResult()) as collect:
+            status = cli.command_run(args, config)
+
+        self.assertEqual(1, status)
+        collect.assert_not_called()
+
+    def test_other_backends_never_reach_this_check(self):
+        for backend in ("anthropic-compatible", "plain"):
+            with self.subTest(backend=backend):
+                config = Config(summarizer_backend=backend,
+                                summarizer_api_key="key")
+                args = cli.parse_args(["run"])
+                with mock.patch.object(cli.openai_compat,
+                                      "package_available",
+                                      return_value=False) as check:
+                    with mock.patch.object(
+                            cli, "collect_entries",
+                            return_value=CollectionResult()) as collect:
+                        cli.command_run(args, config)
+
+                check.assert_not_called()
+                collect.assert_called_once()
 
 
 class ExplicitDateEarlyRejectionTest(unittest.TestCase):

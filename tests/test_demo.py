@@ -34,13 +34,20 @@
 #    - Honour the topic limit.
 #    - Read a sample given by path.
 #    - Drop a topic citing no usable entry, and log the drop.
-#    - Reject a sample that carries no entries.
+#    - Reject a non-object top-level payload, a missing, non-string or
+#      impossible date, entries that is not a non-empty list, a
+#      non-object entry, a blank title, a non-http(s) url, an unknown
+#      source_type, and a non-string optional field.
+#    - Accept an entry missing every optional field, relying on
+#      Entry.from_dict()'s own defaults.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-23
+#       Cover structural and type validation of a custom sample.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -144,8 +151,94 @@ class CustomSampleTest(unittest.TestCase):
         self.assertEqual([], topics)
 
     def test_rejects_a_sample_without_entries(self):
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ValueError):
             self.build({"date": "2026-01-02", "build_report": {"topics": []}})
+
+    def test_rejects_a_non_object_top_level_payload(self):
+        with self.assertRaises(ValueError):
+            self.build(["not", "an", "object"])
+
+    def test_rejects_a_missing_date(self):
+        with self.assertRaises(ValueError):
+            self.build({"entries": [self.paper_entry()],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_a_non_string_date(self):
+        with self.assertRaises(ValueError):
+            self.build({"date": 20260102, "entries": [self.paper_entry()],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_an_impossible_date(self):
+        with self.assertRaises(ValueError):
+            self.build({"date": "2026-02-31",
+                       "entries": [self.paper_entry()],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_entries_that_is_not_a_list(self):
+        with self.assertRaises(ValueError):
+            self.build({"date": "2026-01-02", "entries": {},
+                       "build_report": {"topics": []}})
+
+    def test_rejects_an_empty_entries_list(self):
+        with self.assertRaises(ValueError):
+            self.build({"date": "2026-01-02", "entries": [],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_a_non_object_entry(self):
+        with self.assertRaises(ValueError):
+            self.build({"date": "2026-01-02", "entries": ["not an object"],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_an_entry_with_a_blank_title(self):
+        entry = self.paper_entry()
+        entry["title"] = "   "
+        with self.assertRaises(ValueError):
+            self.build({"date": "2026-01-02", "entries": [entry],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_an_entry_with_a_non_http_url(self):
+        entry = self.paper_entry()
+        entry["url"] = "javascript:alert(1)"
+        with self.assertRaises(ValueError):
+            self.build({"date": "2026-01-02", "entries": [entry],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_an_entry_with_an_unknown_source_type(self):
+        entry = self.paper_entry()
+        entry["source_type"] = "blog"
+        with self.assertRaises(ValueError):
+            self.build({"date": "2026-01-02", "entries": [entry],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_an_entry_with_a_non_string_optional_field(self):
+        entry = self.paper_entry()
+        entry["summary"] = 123
+        with self.assertRaises(ValueError):
+            self.build({"date": "2026-01-02", "entries": [entry],
+                       "build_report": {"topics": []}})
+
+    def test_accepts_an_entry_missing_every_optional_field(self):
+        # Only title and url are required; from_dict()'s own defaults
+        # apply to the rest, exactly as for the bundled sample.
+        date, topics, collected = self.build({
+            "date": "2026-01-02",
+            "entries": [{"title": "A paper",
+                        "url": "https://example.test/paper"}],
+            "build_report": {"topics": [{
+                "category": "分類",
+                "title": "見出し",
+                "bullets": ["箇条書き其の一。", "箇条書き其の二。"],
+                "source_indexes": [0],
+            }]},
+        })
+
+        self.assertEqual("2026-01-02", date)
+        self.assertEqual(1, collected)
+        self.assertEqual("見出し", topics[0].title)
+
+    def paper_entry(self):
+        return {"source_type": "paper", "title": "A paper",
+               "url": "https://example.test/paper"}
 
 
 if __name__ == "__main__":

@@ -28,9 +28,9 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
-#  v1.4 2026-09-22
-#       Pin, bypass proxy for, and time-bound scraping connections; refuse
-#       decompression-bomb-warning-range images too.
+#  v1.4 2026-09-23
+#       Pin under the canonical hostname, bypass proxy for, and time-bound
+#       scraping; refuse decompression bombs; classify arXiv by host/path.
 #  v1.3 2026-09-08
 #       Fetch source pages and images only over HTTPS.
 #  v1.2 2026-08-04
@@ -53,17 +53,20 @@ import socket
 import time
 import warnings
 from typing import Iterator, List, Optional, Tuple, Union
-from urllib.parse import urljoin, urlparse, urlsplit
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 from PIL import Image, UnidentifiedImageError
 
 from ai_digest.transport import (FetchTimeoutError, HTTPSOnlyError,
-                                 fetch_deadline, https_get)
+                                 canonical_connect_hostname, fetch_deadline,
+                                 hard_deadline, https_get)
 
-# arXiv abstract, PDF and versioned URLs all embed the same identifier.
-ARXIV_ID_PATTERN = re.compile(r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})")
+# arXiv abstract, PDF and versioned URLs all embed the same identifier,
+# at the start of the path; a version suffix or a .pdf extension after
+# it is not part of the match and does not need to be.
+ARXIV_PATH_PATTERN = re.compile(r"^/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})")
 
 # HTML rendering of a paper, used to locate its figures.
 AR5IV_URL = "https://ar5iv.labs.arxiv.org/html/{0}"
@@ -194,20 +197,30 @@ def validate_and_pin_public_target(url: str) -> Iterator[None]:
     fixed, and it is never a non-public one, whatever a name server
     answers meanwhile.
 
+    url's host is canonicalized through canonical_connect_hostname()
+    before it is resolved, validated or pinned, so a Unicode hostname is
+    checked and pinned under the same lower-cased ASCII identity the
+    connection itself looks up; validating the raw string instead would
+    let a non-ASCII hostname's real connection miss the pin entirely and
+    resolve through the unpinned system resolver.
+
     Called on the initial target and on every redirect hop of a request
     the image resolver sends. Collectors do not use this: the arXiv API
     and the configured feeds are not subject to it, only pages and
     images the resolver scrapes from source URLs it does not control.
 
     Raises:
-        PublicNetworkOnlyError: The host is missing, resolves to a
-            loopback, private, link-local, unspecified, multicast or
-            otherwise non-global address, or fails to resolve at all.
+        PublicNetworkOnlyError: The host is missing or unencodable, it
+            resolves to a loopback, private, link-local, unspecified,
+            multicast or otherwise non-global address, or it fails to
+            resolve at all.
     """
-    hostname = urlsplit(url).hostname
-    if not hostname:
+    try:
+        hostname = canonical_connect_hostname(url)
+    except ValueError as error:
         raise PublicNetworkOnlyError(
-            "refusing request with no host: {0}".format(url)
+            "refusing request with no usable host: {0}: {1}".format(
+                url, error)
         )
     addresses = _resolve_addresses(hostname)
     for address in addresses:
@@ -233,27 +246,26 @@ def _read_capped(response: requests.Response, limit: int) -> Optional[bytes]:
 
     Returning None rather than the truncated bytes is deliberate: a
     partial image is not worth publishing, and stopping the read is
-    what keeps an oversized or endless body out of memory. A byte
-    trickle slow enough that no single socket read times out could
-    otherwise stretch one fetch past its configured budget, which is
-    why elapsed time is checked between chunks too, not just size.
+    what keeps an oversized or endless body out of memory. The whole
+    read is wrapped in transport.hard_deadline(), the fetch's own hard
+    wall-clock bound, so a byte trickle slow enough that no single
+    socket read times out cannot stretch one fetch past its configured
+    budget either.
 
     Raises:
         FetchTimeoutError: The fetch's deadline passed while reading.
     """
     deadline = fetch_deadline(response)
+    remaining = (deadline - time.monotonic()) if deadline is not None else None
+    bound = hard_deadline(remaining) if remaining is not None else contextlib.nullcontext()
     chunks = []
     total = 0
-    for chunk in response.iter_content(chunk_size=CHUNK_BYTES):
-        if deadline is not None and time.monotonic() > deadline:
-            raise FetchTimeoutError(
-                "response body still incomplete after the fetch's "
-                "deadline elapsed"
-            )
-        total += len(chunk)
-        if total > limit:
-            return None
-        chunks.append(chunk)
+    with bound:
+        for chunk in response.iter_content(chunk_size=CHUNK_BYTES):
+            total += len(chunk)
+            if total > limit:
+                return None
+            chunks.append(chunk)
     return b"".join(chunks)
 
 
@@ -331,6 +343,27 @@ def _download_image(url: str, timeout: int,
     return content, extension
 
 
+def _arxiv_paper_id(url: str) -> Optional[str]:
+    """
+    Return the arXiv identifier url names, or None when it does not.
+
+    Judged by the parsed hostname and the start of the path, not by
+    searching the whole URL for the substring 'arxiv.org/abs/...': an
+    unrelated host that merely carries one in its own path or query - a
+    redirector, a tracking link - must not be misread as an arXiv
+    citation just because that text appears in it somewhere.
+    """
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    hostname = (parsed.hostname or "").lower()
+    if hostname != "arxiv.org" and not hostname.endswith(".arxiv.org"):
+        return None
+    match = ARXIV_PATH_PATTERN.match(parsed.path)
+    return match.group(1) if match else None
+
+
 def arxiv_figure_url(url: str, timeout: int, user_agent: str) -> Optional[str]:
     """
     Return the URL of the first figure of an arXiv paper.
@@ -339,10 +372,10 @@ def arxiv_figure_url(url: str, timeout: int, user_agent: str) -> Optional[str]:
     no HTML rendering of the paper, or when the rendering contains no
     figure.
     """
-    match = ARXIV_ID_PATTERN.search(url)
-    if match is None:
+    paper_id = _arxiv_paper_id(url)
+    if paper_id is None:
         return None
-    page_url = AR5IV_URL.format(match.group(1))
+    page_url = AR5IV_URL.format(paper_id)
     fetched = _fetch(page_url, timeout, user_agent, MAX_PAGE_BYTES)
     if fetched is None:
         return None

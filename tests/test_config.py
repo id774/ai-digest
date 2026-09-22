@@ -99,6 +99,9 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.5 2026-09-23
+#       Cover trimming SUMMARIZER_BASE_URL's surrounding whitespace before
+#       storing it, unlike a credential, which keeps it as given.
 #  v1.4 2026-09-22
 #       Cover whitespace-only summarizer settings resolving to unset, and
 #       strict HTTPS validation of an explicit SUMMARIZER_BASE_URL.
@@ -355,6 +358,17 @@ class SummarizerBaseUrlTest(unittest.TestCase):
 
         loaded.validate_summarizer_base_url()
 
+    def test_surrounding_whitespace_is_trimmed_before_it_is_stored(self):
+        # The trimmed value is what validate_summarizer_base_url()
+        # checks and what _build_client() later hands the SDK, so both
+        # see the same canonical value, not just the check.
+        loaded = self.load({
+            "SUMMARIZER_BASE_URL": "  https://api.example.test/v1  "})
+
+        self.assertEqual(
+            "https://api.example.test/v1", loaded.summarizer_base_url)
+        loaded.validate_summarizer_base_url()
+
 
 class BlankSummarizerSettingTest(unittest.TestCase):
     """
@@ -408,6 +422,16 @@ class BlankSummarizerSettingTest(unittest.TestCase):
         loaded = self.load({"SUMMARIZER_API_KEY": " key-with-space "})
 
         self.assertEqual(" key-with-space ", loaded.summarizer_api_key)
+
+    def test_base_url_surrounding_whitespace_is_trimmed_unlike_a_credential(
+            self):
+        loaded = self.load({
+            "SUMMARIZER_API_KEY": " key-with-space ",
+            "SUMMARIZER_BASE_URL": "  https://api.example.test/v1  "})
+
+        self.assertEqual(" key-with-space ", loaded.summarizer_api_key)
+        self.assertEqual(
+            "https://api.example.test/v1", loaded.summarizer_base_url)
 
 
 # (env var name, Config field, default, minimum, maximum, a valid sample

@@ -79,9 +79,9 @@
 #  - Standard library only
 #
 #  Version History:
-#  v1.3 2026-09-22
-#       Cover copying only report.json and its referenced topic images,
-#       not a stored report directory's every file.
+#  v1.3 2026-09-23
+#       Cover the whitelist re-render copy and report_local_asset_path()
+#       refusing a traversal, an absolute path, or an outside symlink.
 #  v1.2 2026-09-12
 #       Cover corrupt topic field types in stored report.json.
 #  v1.1 2026-09-06
@@ -103,7 +103,8 @@ from ai_digest import Topic
 from ai_digest import storage
 from ai_digest.storage import (ReportPublicationError, copy_existing_report,
                                is_valid_date, list_dates, load_report,
-                               publication_workspace, report_dir, save_report,
+                               publication_workspace, report_dir,
+                               report_local_asset_path, save_report,
                                summary_image_path, write_report_json)
 
 TRAVERSAL_DATES = (
@@ -488,6 +489,98 @@ class CopyExistingReportTest(unittest.TestCase):
                 copy_existing_report(data_dir, DATE, staging_dir)
 
                 self.assertEqual(["report.json"], os.listdir(staging_dir))
+
+
+class ReportLocalAssetPathTest(unittest.TestCase):
+    """
+    report_local_asset_path() is the one place every consumer of a
+    stored topic image - the summary renderer, the re-render staging
+    copy, and the viewer asset route - resolves it through, so a name
+    escaping the report directory, by any of those routes, is refused
+    the same way here.
+    """
+
+    def test_accepts_a_bare_file_directly_inside_the_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "topic-1.png")
+            with open(path, "wb") as handle:
+                handle.write(b"x")
+
+            self.assertEqual(
+                path, report_local_asset_path(directory, "topic-1.png"))
+
+    def test_rejects_a_missing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(
+                report_local_asset_path(directory, "missing.png"))
+
+    def test_rejects_a_blank_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(report_local_asset_path(directory, ""))
+
+    def test_rejects_a_path_traversal_escape(self):
+        with tempfile.TemporaryDirectory() as parent:
+            directory = os.path.join(parent, "2026-08-04")
+            os.makedirs(directory)
+            outside = os.path.join(parent, "secret.png")
+            with open(outside, "wb") as handle:
+                handle.write(b"x")
+
+            self.assertIsNone(report_local_asset_path(
+                directory, "../secret.png"))
+
+    def test_rejects_an_absolute_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outside = os.path.join(directory, "..", "secret.png")
+            with open(outside, "wb") as handle:
+                handle.write(b"x")
+
+            self.assertIsNone(report_local_asset_path(
+                directory, os.path.abspath(outside)))
+
+    def test_rejects_a_name_with_an_embedded_separator(self):
+        with tempfile.TemporaryDirectory() as directory:
+            subdirectory = os.path.join(directory, "sub")
+            os.makedirs(subdirectory)
+            with open(os.path.join(subdirectory, "x.png"), "wb") as handle:
+                handle.write(b"x")
+
+            self.assertIsNone(report_local_asset_path(
+                directory, "sub/x.png"))
+
+    def test_rejects_a_symlink_resolving_outside_the_directory(self):
+        if not hasattr(os, "symlink"):
+            self.skipTest("platform has no symlink support")
+        with tempfile.TemporaryDirectory() as parent:
+            directory = os.path.join(parent, "2026-08-04")
+            os.makedirs(directory)
+            outside = os.path.join(parent, "secret.png")
+            with open(outside, "wb") as handle:
+                handle.write(b"x")
+            link = os.path.join(directory, "topic-1.png")
+            try:
+                os.symlink(outside, link)
+            except OSError:
+                self.skipTest("cannot create symlinks in this environment")
+
+            self.assertIsNone(
+                report_local_asset_path(directory, "topic-1.png"))
+
+    def test_accepts_a_symlink_resolving_inside_the_directory(self):
+        if not hasattr(os, "symlink"):
+            self.skipTest("platform has no symlink support")
+        with tempfile.TemporaryDirectory() as directory:
+            target = os.path.join(directory, "real.png")
+            with open(target, "wb") as handle:
+                handle.write(b"x")
+            link = os.path.join(directory, "topic-1.png")
+            try:
+                os.symlink(target, link)
+            except OSError:
+                self.skipTest("cannot create symlinks in this environment")
+
+            self.assertEqual(
+                link, report_local_asset_path(directory, "topic-1.png"))
 
 
 if __name__ == "__main__":
