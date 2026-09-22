@@ -104,6 +104,16 @@ before a plaintext request is sent. This retrieval rule is separate from
 citation compatibility: an ordinary absolute HTTP source link may remain in a
 report even though the batch will not fetch it.
 
+The image resolver's page and image scraping targets a page or a candidate
+image named by material collected from outside, so its HTTPS requests must
+also resolve to a public network address: a target whose host is a loopback,
+private, link-local, unspecified, multicast or otherwise non-global address is
+refused before the request is sent, on the initial target and on every
+redirect hop alike, closing the path a scraped page could otherwise use to
+reach the host's own internal network. The arXiv API and the configured RSS
+and Atom feeds are not subject to this narrower rule; they keep the
+HTTPS-only requirement above.
+
 **An explicit font setting must name a font file that can actually be loaded**,
 or the command that read it fails rather than silently repairing the value by
 trying another font. Best-effort detection, and the image fallback that draws
@@ -265,9 +275,9 @@ available: the arXiv category for a paper, the feed's origin for an article.
 Every topic carries an image, and there is no state in which one does not.
 
 An image is taken from the paper or the article when a usable one can be
-obtained. When it cannot — unreachable, malformed, too large, too small, not
-decodable — **a card is drawn locally from the headline and the category
-instead.**
+obtained. When it cannot — unreachable, resolving to a non-public address,
+malformed, too large, too small, not decodable — **a card is drawn locally
+from the headline and the category instead.**
 
 **The condition of an external site or image is never a condition of the run
 succeeding.** A publisher changing its markup degrades the look of a report,

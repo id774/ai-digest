@@ -33,19 +33,31 @@
 #    - Replace an unsafe URL with "#" and leave a safe one alone.
 #    - Keep a normal link in the rendered report.
 #    - Neutralize a script link stored in a report.
+#    - Keep the standalone report from linking to an archive index its own
+#      generation never writes, and from claiming an AI summarized what a
+#      plain-backend run only collected and organized.
+#    - Keep the Flask viewer's header linking back to the archive index.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Jinja2 (through the report renderer)
+#  - Flask (through app.py, exercised by ViewerHeaderTest)
 #
 #  Version History:
+#  v1.1 2026-09-22
+#       Cover the standalone header/footer fix and the viewer's archive link.
 #  v1.0 2026-08-05
 #       Initial release.
 #
 ########################################################################
 
+import importlib
+import os
+import sys
 import unittest
+from unittest import mock
 
+import config
 from ai_digest import Topic, is_safe_url, safe_url
 from ai_digest.render import build
 
@@ -107,6 +119,72 @@ class RenderedLinkTest(unittest.TestCase):
 
         self.assertNotIn("javascript:", html)
         self.assertIn('href="#"', html)
+
+
+def _sample_topic():
+    return Topic(
+        category="テスト",
+        title="見出し",
+        bullets=["本文"],
+        sources=[{"title": "出典", "url": "https://example.test/a"}],
+        image="topic-1.png",
+    )
+
+
+class StandaloneHeaderTest(unittest.TestCase):
+    """
+    render_report() defaults to standalone=True, the mode written next
+    to a report's data so its directory can be copied to any static web
+    server. That directory's generation never produces an archive index
+    one level up, so the standalone page must not link to one, and its
+    footer must not claim an AI summarized what a plain-backend run only
+    collected and organized.
+    """
+
+    def render(self):
+        return build.render_report("2026-08-02", [_sample_topic()], {},
+                                   standalone=True)
+
+    def test_standalone_html_does_not_link_to_an_archive_index(self):
+        html = self.render()
+
+        self.assertNotIn("../../index.html", html)
+        self.assertNotIn('<a href="../../index.html">', html)
+
+    def test_standalone_header_is_not_a_link(self):
+        html = self.render()
+
+        self.assertIn("<h1>AI ダイジェスト</h1>", html)
+
+    def test_footer_does_not_claim_ai_summarization(self):
+        html = self.render()
+
+        self.assertNotIn("AI により要約・分類した参考情報です", html)
+        self.assertIn("本資料は公開情報を収集・整理した参考情報です", html)
+
+
+class ViewerHeaderTest(unittest.TestCase):
+    """
+    The Flask viewer renders the same templates with standalone=False,
+    where '/' is a real route, so the header link back to the archive
+    index must survive unchanged.
+    """
+
+    def viewer_app(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch.object(config, "load_dotenv", None):
+                if "app" in sys.modules:
+                    return importlib.reload(sys.modules["app"])
+                return importlib.import_module("app")
+
+    def test_viewer_header_keeps_the_archive_index_link(self):
+        viewer = self.viewer_app()
+        with viewer.app.test_request_context():
+            html = viewer.app.jinja_env.get_template("report.html").render(
+                date="2026-08-02", topics=[_sample_topic()], stats={})
+
+        self.assertIn('<h1><a href="/">AI ダイジェスト</a></h1>', html)
+        self.assertNotIn("../../index.html", html)
 
 
 if __name__ == "__main__":

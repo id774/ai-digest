@@ -28,6 +28,9 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
+#  v1.4 2026-09-22
+#       Refuse a page or image target that resolves to a non-public address,
+#       on the initial target and every redirect hop, closing an SSRF path.
 #  v1.3 2026-09-08
 #       Fetch source pages and images only over HTTPS.
 #  v1.2 2026-08-04
@@ -41,11 +44,13 @@
 #
 ########################################################################
 
+import ipaddress
 import io
 import logging
 import re
-from typing import Optional, Tuple
-from urllib.parse import urljoin, urlparse
+import socket
+from typing import List, Optional, Tuple, Union
+from urllib.parse import urljoin, urlparse, urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -79,6 +84,89 @@ MIN_IMAGE_SIDE = 200
 logger = logging.getLogger(__name__)
 
 
+class PublicNetworkOnlyError(HTTPSOnlyError):
+    """
+    Report a scraping target that is HTTPS but not a public network host.
+
+    A subclass of HTTPSOnlyError, not a sibling: every place that
+    already treats HTTPS-only refusal as an ordinary failed fetch treats
+    this the same way, without a second except clause of its own.
+    """
+
+
+IPAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
+
+
+def _is_public_address(address: IPAddress) -> bool:
+    """
+    Return True for an address reachable on the public Internet.
+
+    ipaddress' own is_global is not enough on its own: it excludes
+    loopback, private, link-local, unspecified and reserved ranges, but
+    not multicast, which is_global still reports as global for both
+    IPv4 and IPv6.
+    """
+    return address.is_global and not address.is_multicast
+
+
+def _resolve_addresses(hostname: str) -> List[IPAddress]:
+    """
+    Return every IP address a scraping target's host resolves to.
+
+    A literal IP address is used as is. A DNS name is resolved through
+    getaddrinfo(), the same resolver requests/urllib3 uses to actually
+    connect, so the addresses checked are the ones a request would
+    reach; every address a name resolves to is returned, since a host
+    that answers with a public address and a private one is only as
+    safe as its worst answer.
+
+    Raises:
+        PublicNetworkOnlyError: DNS resolution failed. This is treated
+            as an image resolution failure by the caller, the same as
+            an unreachable host, never as a batch failure.
+    """
+    try:
+        return [ipaddress.ip_address(hostname)]
+    except ValueError:
+        pass
+    try:
+        resolved = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as error:
+        raise PublicNetworkOnlyError(
+            "name resolution failed for {0}: {1}".format(hostname, error)
+        )
+    return [ipaddress.ip_address(info[4][0]) for info in resolved]
+
+
+def validate_public_target(url: str) -> None:
+    """
+    Refuse a scraping target whose host is not a public network address.
+
+    Called on the initial target and on every redirect hop of a request
+    the image resolver sends, before that request goes out, so a host
+    that only turns private after a redirect is refused before the next
+    request rather than after. Collectors do not use this: the arXiv
+    API and the configured feeds are not subject to it, only pages and
+    images the resolver scrapes from source URLs it does not control.
+
+    Raises:
+        PublicNetworkOnlyError: The host is missing, resolves to a
+            loopback, private, link-local, unspecified, multicast or
+            otherwise non-global address, or fails to resolve at all.
+    """
+    hostname = urlsplit(url).hostname
+    if not hostname:
+        raise PublicNetworkOnlyError(
+            "refusing request with no host: {0}".format(url)
+        )
+    for address in _resolve_addresses(hostname):
+        if not _is_public_address(address):
+            raise PublicNetworkOnlyError(
+                "refusing non-public request target {0}: {1} resolves to "
+                "{2}".format(url, hostname, address)
+            )
+
+
 def _read_capped(response: requests.Response, limit: int) -> Optional[bytes]:
     """
     Read a response body, giving up once it exceeds limit bytes.
@@ -110,7 +198,8 @@ def _fetch(url: str, timeout: int, user_agent: str,
     meaning here.
     """
     try:
-        with https_get(url, timeout, user_agent, stream=True) as response:
+        with https_get(url, timeout, user_agent, stream=True,
+                       target_validator=validate_public_target) as response:
             response.raise_for_status()
             body = _read_capped(response, limit)
             if body is None:

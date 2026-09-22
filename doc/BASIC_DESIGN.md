@@ -364,9 +364,30 @@ retained, and a decoder refusing an image is an ordinary "no image" rather than
 the end of a run.
 
 The resolver reaches a page or an image through the same shared HTTPS
-transport boundary as section 6's collectors. An HTTP article citation is
-never fetched for illustration, an HTTP image candidate is never downloaded,
-and either case degrades to the normal fallback card rather than the run.
+transport boundary as section 6's collectors, `https_get()`'s
+`target_validator` hook, with a stricter check of its own layered on top:
+the host of the initial target, and of every resolved redirect target, must
+resolve to a public network address. A loopback, private, link-local,
+unspecified, multicast or otherwise non-global address is refused before the
+request for it is sent, whether it is a literal IP in the URL or one among
+the addresses a DNS name resolves to; a name that fails to resolve is refused
+the same way. This closes the path a scraped page could otherwise use to
+redirect the resolver's own request into the host's internal network, a risk
+the collectors do not carry: they request the arXiv API and the operator's
+own configured feeds, never a target named by material collected from
+outside. An HTTP article citation is never fetched for illustration, an HTTP
+image candidate is never downloaded, and every one of these refusals degrades
+to the normal fallback card rather than the run.
+
+```text
+configured target
+    -> HTTPS validation
+    -> public-network-only validation
+    -> request without automatic redirects
+    -> HTTPS redirect validation
+    -> public-network-only redirect validation
+    -> response
+```
 
 The fallback draws a panel in the category colour with the label and the
 headline wrapped to the width, and it also owns the font loading, measuring and
@@ -769,8 +790,8 @@ mails on non-zero output turns these into the only monitoring the batch needs.
 ## 18. Logging
 
 Both entry points configure logging once, to standard error, in one format, so
-that a failure reproduced by hand reads exactly like the one that was mailed.
-Status never goes to standard output.
+that a failure reproduced by hand reads exactly like the one written to the
+log file. Status never goes to standard output.
 
 The line recording what an endpoint answered — its stop reason and content types
 — is at info level, because it is the line an operator reads when a run fails.

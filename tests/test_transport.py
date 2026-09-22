@@ -44,12 +44,18 @@
 #    - Refuse a malformed redirect target before the next request is sent.
 #    - Bound the redirect chain and raise TooManyRedirects.
 #    - Close the Session on both success and failure.
+#    - Run target_validator on the initial target before any request, and
+#      on every redirect hop before it is followed, stopping the chain
+#      when it refuses one.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - requests
 #
 #  Version History:
+#  v1.1 2026-09-22
+#       Cover the target_validator hook on the initial target and on every
+#       redirect hop.
 #  v1.0 2026-09-08
 #       Initial release.
 #
@@ -251,6 +257,63 @@ class RedirectBoundTest(unittest.TestCase):
         self.assertTrue(r0.closed)
         self.assertTrue(r1.closed)
         self.assertTrue(r2.closed)
+
+
+class TargetValidatorTest(unittest.TestCase):
+    """
+    target_validator lets a caller add a stricter check of its own on
+    top of the HTTPS-only policy, run on the initial target and on
+    every redirect hop, before the request for it is sent.
+    """
+
+    def test_validator_runs_on_the_initial_target_before_any_request(self):
+        with mock.patch.object(transport.requests, "Session") as session_cls:
+            validator = mock.Mock(side_effect=RuntimeError("refused"))
+            with self.assertRaises(RuntimeError):
+                with transport.https_get("https://example.test/a", 5, "ua",
+                                         target_validator=validator):
+                    pass
+
+        validator.assert_called_once_with("https://example.test/a")
+        session_cls.assert_not_called()
+
+    def test_validator_runs_on_each_redirect_hop(self):
+        first = FakeResponse(
+            302, headers={"Location": "https://other.example/b"},
+            url="https://example.test/a")
+        second = FakeResponse(200, url="https://other.example/b")
+        session = _fake_session(first, second)
+        validator = mock.Mock()
+
+        with mock.patch.object(transport.requests, "Session",
+                               return_value=session):
+            with transport.https_get("https://example.test/a", 5, "ua",
+                                     target_validator=validator):
+                pass
+
+        self.assertEqual(
+            [mock.call("https://example.test/a"),
+             mock.call("https://other.example/b")],
+            validator.call_args_list)
+
+    def test_a_redirect_refused_by_the_validator_stops_before_it_is_followed(
+            self):
+        first = FakeResponse(
+            302, headers={"Location": "https://internal.example/b"},
+            url="https://example.test/a")
+        session = _fake_session(first)
+        validator = mock.Mock(
+            side_effect=[None, RuntimeError("refusing internal target")])
+
+        with mock.patch.object(transport.requests, "Session",
+                               return_value=session):
+            with self.assertRaises(RuntimeError):
+                with transport.https_get("https://example.test/a", 5, "ua",
+                                         target_validator=validator):
+                    pass
+
+        self.assertEqual(1, session.get.call_count)
+        self.assertTrue(first.closed)
 
 
 class SessionClosureTest(unittest.TestCase):

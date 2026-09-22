@@ -28,13 +28,16 @@
 #  - requests
 #
 #  Version History:
+#  v1.1 2026-09-22
+#       Add an optional target_validator hook so a caller can layer a
+#       stricter check onto the initial target and each redirect hop.
 #  v1.0 2026-09-08
 #       Initial release.
 #
 ########################################################################
 
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Callable, Iterator, Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -75,7 +78,9 @@ def is_https_url(url: str) -> bool:
 
 @contextmanager
 def https_get(url: str, timeout: int, user_agent: str,
-              stream: bool = False) -> Iterator[requests.Response]:
+              stream: bool = False,
+              target_validator: Optional[Callable[[str], None]] = None
+              ) -> Iterator[requests.Response]:
     """
     Request url over HTTPS, inspecting every redirect before following it.
 
@@ -91,6 +96,12 @@ def https_get(url: str, timeout: int, user_agent: str,
         timeout: Timeout in seconds, applied to every hop.
         user_agent: User-Agent header sent with every hop.
         stream: Whether the response body is streamed rather than read.
+        target_validator: Optional extra check run on the initial target
+            and on every redirect target, after the HTTPS check passes
+            and before the request for it is sent. It raises to refuse a
+            target this function's own HTTPS check would accept; the
+            image resolver uses it to keep a public-network-only policy
+            without imposing it on every other caller of this function.
 
     Yields:
         The final response, not yet read from when stream is True. It is
@@ -101,12 +112,15 @@ def https_get(url: str, timeout: int, user_agent: str,
             an absolute HTTPS URL.
         requests.TooManyRedirects: The redirect chain exceeds
             MAX_REDIRECTS.
-        requests.RequestException: Any other network failure.
+        requests.RequestException: Any other network failure, including
+            one raised by target_validator.
     """
     if not is_https_url(url):
         raise HTTPSOnlyError(
             "refusing non-HTTPS request target: {0}".format(url)
         )
+    if target_validator is not None:
+        target_validator(url)
 
     with requests.Session() as session:
         current_url = url
@@ -156,6 +170,12 @@ def https_get(url: str, timeout: int, user_agent: str,
                     "refusing non-HTTPS redirect target: {0}".format(
                         next_url)
                 )
+            if target_validator is not None:
+                try:
+                    target_validator(next_url)
+                except Exception:
+                    response.close()
+                    raise
 
             response.close()
             current_url = next_url

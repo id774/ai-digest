@@ -30,6 +30,12 @@ v1.2.3 (Release Date: TBD)
   prose instead of returning the report as the whole text block.
 - Retry arXiv category requests twice after HTTP 429 responses before treating
   the category as a source failure.
+- Stop the standalone HTML from linking to a nonexistent archive index, and
+  give its footer backend-neutral wording instead of an AI-specific claim.
+- Refuse an image-scraping target that resolves to a non-public address,
+  closing an SSRF path through scraped source pages.
+- Treat a whitespace-only SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN or
+  SUMMARIZER_BASE_URL as unset instead of a configured value.
 
 v1.2.2 (2026-08-26)
 -------------------

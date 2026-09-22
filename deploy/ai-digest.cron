@@ -7,8 +7,9 @@
 # finds it.
 
 SHELL=/bin/sh
-# Where a failed run is reported. Remove the line to rely on the log
-# file alone; cron then mails nothing and a failure passes unnoticed.
+# stdout and stderr are both redirected to the log file below, so cron
+# has nothing left to mail regardless of MAILTO or exit status; check
+# the log file to see whether a run failed.
 MAILTO=root
 
 # 06:30 local time. arXiv announces on weekdays only, so a run on a

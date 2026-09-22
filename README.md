@@ -418,7 +418,7 @@ This trades the quality of the Japanese summary and the topic grouping for zero 
 python cli.py run
 ```
 
-The command collects the last 24 hours, summarizes them, writes `data/reports/<today>/` and exits with status 1 when nothing usable could be produced, which makes failures visible in cron mail.
+The command collects the last 24 hours, summarizes them, writes `data/reports/<today>/` and exits with status 1 when nothing usable could be produced, which makes failures visible in the batch's log output.
 
 #### "no entry collected"
 
@@ -433,7 +433,7 @@ ERROR ai_digest.cli: no entry collected: 6 of 6 sources answered and offered 210
 Nothing reachable at all:
 
 ```
-WARNING ai_digest.collectors.arxiv: arXiv request failed for cs.AI: HTTPConnectionPool(host='export.arxiv.org', port=80): Max retries exceeded
+WARNING ai_digest.collectors.arxiv: arXiv request failed for cs.AI: HTTPSConnectionPool(host='export.arxiv.org', port=443): Max retries exceeded
 ERROR ai_digest.cli: no entry collected: all 6 sources failed, so nothing was read at all; check the network connection, the proxy settings and the configured URLs (arXiv cs.AI: ...)
 ```
 
@@ -489,9 +489,11 @@ Values are validated by the parser, which refuses a look back window of `0` or a
 python app.py
 ```
 
-Then open `http://127.0.0.1:3000/`. `app.py` binds `127.0.0.1` and reads `PORT`,
-so the development server and gunicorn answer on the same address. The routes
-are:
+Then open `http://127.0.0.1:3000/`. `app.py` binds `127.0.0.1` and reads
+`PORT`, so the development server answers only on that address; the Debian
+systemd example runs gunicorn on `127.0.0.1` too, behind nginx, while the
+Heroku `Procfile` runs gunicorn bound to `0.0.0.0:$PORT` so Heroku's router
+can reach it. The routes are:
 
 | Route | Content |
 |---|---|
@@ -531,8 +533,9 @@ depends on a run having succeeded.
 | `1` | The command failed: nothing was collected, no topic could be built, a credential is missing, or a setting holds a value no backend can serve |
 | `2` | The command line itself was rejected by the parser, for example a count that is not a positive whole number. Nothing was collected and no request was spent |
 
-A cron entry that mails on non-zero output turns these into the only monitoring
-the batch needs. `deploy/ai-digest.cron` sets `MAILTO` for that reason.
+`deploy/ai-digest.cron` redirects both stdout and stderr into
+`/var/log/ai-digest/run.log`, which turns these into the only monitoring the
+batch needs: check that file for the exit status and the log lines around it.
 
 ### What a failure says
 
@@ -571,7 +574,7 @@ format:
 %(asctime)s %(levelname)s %(name)s: %(message)s
 ```
 
-so a failure reproduced by hand reads exactly like the one cron mailed:
+so a failure reproduced by hand reads exactly like the one written to the log file:
 
 ```text
 2026-08-05 06:30:14,882 INFO ai_digest.collectors.arxiv: collected 24 arXiv papers from 3 of 3 categories (150 papers offered, look back 24 hours)
@@ -583,7 +586,7 @@ The `api response:` line is the one to read when a run fails: `stop_reason` and
 `content_types` say whether the model called the tool, wrote text instead, or
 spent the budget thinking. The response body itself is logged at `DEBUG` only,
 which `--verbose` turns on, because it runs into thousands of tokens and would
-swamp a cron mail.
+swamp the log file.
 
 No credential appears at any level. A missing key is reported as missing, never
 quoted, and neither the key nor the token is included in a message that names a
@@ -673,7 +676,7 @@ answer differently. Back up `DATA_DIR`.
 ```sh
 heroku create
 heroku config:set SUMMARIZER_API_KEY=sk-ant-...
-git push heroku main
+git push heroku master
 ```
 
 The dyno file system is ephemeral. Reports written by a one off dyno disappear on the next restart or deploy, and Heroku alone therefore cannot host the daily archive. Treat a Heroku deployment as a demonstration of the viewer and run the real pipeline on a VPS or locally, where `DATA_DIR` is persistent.
