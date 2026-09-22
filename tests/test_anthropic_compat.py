@@ -61,12 +61,24 @@
 #    - Announce the default window and the configured one in the prompt.
 #    - Pass the window through summarize().
 #    - Call nothing when there is no entry to summarize.
+#    - Reject a non-dict payload and a non-list topics field.
+#    - Drop a topic that is not an object, without dropping a valid sibling.
+#    - Drop a non-string or blank title, a non-string category, a non-list
+#      bullets or source_indexes field, and a bool source index.
+#    - Normalize a blank category to its default instead of dropping it.
+#    - Leave a non-string bullet out instead of stringifying it.
+#    - Require 2 to 4 usable bullets, capping 5 or more at 4.
+#    - Ignore an out-of-range source index and drop a topic left with none.
+#    - Yield an empty list when every topic is invalid.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Standard library only (the anthropic package is stubbed, never imported)
 #
 #  Version History:
+#  v1.1 2026-09-22
+#       Cover to_topics() typed validation: non-object payload/topic, a field
+#       of the wrong type, and the 2-4 usable bullet requirement.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -338,6 +350,150 @@ class EmptyInputTest(unittest.TestCase):
             self.assertEqual([], summarizer.summarize([], "key", "model", 6))
 
         build_client.assert_not_called()
+
+
+class ToTopicsTest(unittest.TestCase):
+    """
+    to_topics() treats the model's answer as untrusted input, typed
+    strictly rather than repaired: every case here gives it a field of
+    the wrong shape, and each is expected to drop only the topic that
+    field belongs to - or the whole answer, for payload itself - rather
+    than coerce it into the report. Anthropic-compatible, OpenAI-
+    compatible and the demo sample all call this one function, so a
+    case proven here holds for all three.
+    """
+
+    def entries(self):
+        return [
+            Entry(source_type="news", title="Title 0",
+                 url="https://example.test/0"),
+            Entry(source_type="news", title="Title 1",
+                 url="https://example.test/1"),
+        ]
+
+    def topic(self, **overrides):
+        base = {
+            "category": "c",
+            "title": "t",
+            "bullets": ["b1", "b2"],
+            "source_indexes": [0],
+        }
+        base.update(overrides)
+        return base
+
+    def test_rejects_a_non_dict_payload(self):
+        self.assertEqual(
+            [], summarizer.to_topics("not a dict", self.entries(), 6))
+
+    def test_rejects_a_payload_whose_topics_field_is_not_a_list(self):
+        self.assertEqual(
+            [], summarizer.to_topics({"topics": "nope"}, self.entries(), 6))
+
+    def test_drops_a_non_dict_raw_topic_but_keeps_a_valid_sibling(self):
+        payload = {"topics": ["not a dict", self.topic()]}
+
+        topics = summarizer.to_topics(payload, self.entries(), 6)
+
+        self.assertEqual(1, len(topics))
+
+    def test_drops_a_non_string_title(self):
+        payload = {"topics": [self.topic(title=123)]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
+
+    def test_drops_a_blank_title(self):
+        payload = {"topics": [self.topic(title="   ")]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
+
+    def test_drops_a_non_string_category(self):
+        payload = {"topics": [self.topic(category=7)]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
+
+    def test_normalizes_a_blank_category_to_sonota(self):
+        payload = {"topics": [self.topic(category="   ")]}
+
+        topics = summarizer.to_topics(payload, self.entries(), 6)
+
+        self.assertEqual(1, len(topics))
+        self.assertEqual("その他", topics[0].category)
+
+    def test_drops_a_non_list_bullets_field(self):
+        payload = {"topics": [self.topic(bullets="not a list")]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
+
+    def test_does_not_stringify_a_non_string_bullet(self):
+        payload = {"topics": [self.topic(
+            bullets=["b1", "b2", None, 3, {"x": 1}])]}
+
+        topics = summarizer.to_topics(payload, self.entries(), 6)
+
+        self.assertEqual(1, len(topics))
+        self.assertEqual(["b1", "b2"], topics[0].bullets)
+
+    def test_drops_a_topic_left_with_only_one_usable_bullet(self):
+        payload = {"topics": [self.topic(bullets=["only one"])]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
+
+    def test_accepts_two_to_four_bullets(self):
+        for count in (2, 3, 4):
+            with self.subTest(count=count):
+                payload = {"topics": [self.topic(
+                    bullets=["b{0}".format(i) for i in range(count)])]}
+
+                topics = summarizer.to_topics(payload, self.entries(), 6)
+
+                self.assertEqual(count, len(topics[0].bullets))
+
+    def test_caps_five_or_more_bullets_at_four(self):
+        payload = {"topics": [self.topic(
+            bullets=["b{0}".format(i) for i in range(6)])]}
+
+        topics = summarizer.to_topics(payload, self.entries(), 6)
+
+        self.assertEqual(4, len(topics[0].bullets))
+
+    def test_drops_a_non_list_source_indexes_field(self):
+        payload = {"topics": [self.topic(source_indexes="0")]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
+
+    def test_rejects_a_bool_source_index(self):
+        # True == 1, an in-range index into entries(), so this only
+        # proves the exclusion if bool is checked ahead of int.
+        payload = {"topics": [self.topic(source_indexes=[True])]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
+
+    def test_ignores_an_out_of_range_index(self):
+        payload = {"topics": [self.topic(source_indexes=[0, 99])]}
+
+        topics = summarizer.to_topics(payload, self.entries(), 6)
+
+        self.assertEqual(1, len(topics))
+        self.assertEqual(1, len(topics[0].sources))
+
+    def test_drops_a_topic_left_with_no_usable_source(self):
+        payload = {"topics": [self.topic(source_indexes=[99])]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
+
+    def test_a_malformed_topic_does_not_drop_a_valid_sibling(self):
+        payload = {"topics": [self.topic(title=None),
+                              self.topic(title="valid")]}
+
+        topics = summarizer.to_topics(payload, self.entries(), 6)
+
+        self.assertEqual(["valid"], [topic.title for topic in topics])
+
+    def test_all_topics_invalid_yields_an_empty_list(self):
+        payload = {"topics": [self.topic(title=None),
+                              self.topic(bullets=["only one"])]}
+
+        self.assertEqual([], summarizer.to_topics(payload, self.entries(), 6))
 
 
 if __name__ == "__main__":

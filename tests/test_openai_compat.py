@@ -193,7 +193,7 @@ class SummarizeTest(unittest.TestCase):
 
     def test_builds_topics_through_the_shared_validation(self):
         arguments = ('{"topics": [{"category": "c", "title": "t", '
-                     '"bullets": ["b"], "source_indexes": [0]}]}')
+                     '"bullets": ["b1", "b2"], "source_indexes": [0]}]}')
         topics, _create = self.build(_response(arguments))
 
         self.assertEqual(1, len(topics))

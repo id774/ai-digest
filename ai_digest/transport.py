@@ -29,15 +29,15 @@
 #
 #  Version History:
 #  v1.1 2026-09-22
-#       Add an optional target_validator hook so a caller can layer a
-#       stricter check onto the initial target and each redirect hop.
+#       Add target_pin, a per-hop request-wrapping context manager hook,
+#       and read_capped_content(), a bounded reader the collectors use.
 #  v1.0 2026-09-08
 #       Initial release.
 #
 ########################################################################
 
-from contextlib import contextmanager
-from typing import Callable, Iterator, Optional
+from contextlib import contextmanager, nullcontext
+from typing import Callable, ContextManager, Iterator, Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -52,9 +52,51 @@ REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 # A fixed internal constant, not a configuration setting.
 MAX_REDIRECTS = 30
 
+# Default limit of read_capped_content(), used by the arXiv and news
+# feed collectors. A fixed internal constant, not a configuration
+# setting: the image resolver reads under its own, tighter limits and
+# does not use this one.
+MAX_COLLECTOR_RESPONSE_BYTES = 8 * 1024 * 1024
+
+# Size of the chunks read.iter_content() draws content in.
+_READ_CHUNK_BYTES = 64 * 1024
+
 
 class HTTPSOnlyError(requests.RequestException):
     """ Report a source target that cannot be requested over HTTPS. """
+
+
+class ResponseTooLargeError(requests.RequestException):
+    """ Report a response body larger than read_capped_content()'s limit. """
+
+
+def read_capped_content(response: requests.Response,
+                        limit: int = MAX_COLLECTOR_RESPONSE_BYTES) -> bytes:
+    """
+    Read a streamed response body, refusing to buffer past limit bytes.
+
+    Reading in chunks and counting as they arrive is what keeps an
+    oversized or endless body from ever being fully buffered in the
+    first place; the response's own Content-Length, sent or not, is
+    never the only thing trusted. The caller must have requested the
+    response with stream=True, or the body is already read in full by
+    the time this function sees it.
+
+    Raises:
+        ResponseTooLargeError: More than limit bytes were read. A
+            source this large is treated as a source-local failure by
+            the caller, never as partial content to parse.
+    """
+    chunks = []
+    total = 0
+    for chunk in response.iter_content(chunk_size=_READ_CHUNK_BYTES):
+        total += len(chunk)
+        if total > limit:
+            raise ResponseTooLargeError(
+                "response exceeded {0} bytes".format(limit)
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def is_https_url(url: str) -> bool:
@@ -79,8 +121,8 @@ def is_https_url(url: str) -> bool:
 @contextmanager
 def https_get(url: str, timeout: int, user_agent: str,
               stream: bool = False,
-              target_validator: Optional[Callable[[str], None]] = None
-              ) -> Iterator[requests.Response]:
+              target_pin: Optional[Callable[[str], ContextManager[None]]]
+              = None) -> Iterator[requests.Response]:
     """
     Request url over HTTPS, inspecting every redirect before following it.
 
@@ -96,12 +138,16 @@ def https_get(url: str, timeout: int, user_agent: str,
         timeout: Timeout in seconds, applied to every hop.
         user_agent: User-Agent header sent with every hop.
         stream: Whether the response body is streamed rather than read.
-        target_validator: Optional extra check run on the initial target
-            and on every redirect target, after the HTTPS check passes
-            and before the request for it is sent. It raises to refuse a
-            target this function's own HTTPS check would accept; the
-            image resolver uses it to keep a public-network-only policy
-            without imposing it on every other caller of this function.
+        target_pin: Optional context manager factory wrapping the actual
+            request for the initial target and for every redirect
+            target, after the HTTPS check passes. Entering it may raise
+            to refuse a target this function's own HTTPS check would
+            accept, and may also pin how the wrapped request resolves
+            its host, so validating a URL string and connecting to the
+            address that validation checked stay one atomic step. The
+            image resolver uses it to keep a public-network-only policy,
+            pinned against DNS rebinding, without imposing either on
+            every other caller of this function.
 
     Yields:
         The final response, not yet read from when stream is True. It is
@@ -113,26 +159,27 @@ def https_get(url: str, timeout: int, user_agent: str,
         requests.TooManyRedirects: The redirect chain exceeds
             MAX_REDIRECTS.
         requests.RequestException: Any other network failure, including
-            one raised by target_validator.
+            one raised by target_pin.
     """
     if not is_https_url(url):
         raise HTTPSOnlyError(
             "refusing non-HTTPS request target: {0}".format(url)
         )
-    if target_validator is not None:
-        target_validator(url)
+
+    pin = target_pin if target_pin is not None else (lambda _url: nullcontext())
 
     with requests.Session() as session:
         current_url = url
         redirects = 0
         while True:
-            response = session.get(
-                current_url,
-                timeout=timeout,
-                stream=stream,
-                headers={"User-Agent": user_agent},
-                allow_redirects=False,
-            )
+            with pin(current_url):
+                response = session.get(
+                    current_url,
+                    timeout=timeout,
+                    stream=stream,
+                    headers={"User-Agent": user_agent},
+                    allow_redirects=False,
+                )
             if response.status_code not in REDIRECT_STATUSES:
                 try:
                     yield response
@@ -170,12 +217,6 @@ def https_get(url: str, timeout: int, user_agent: str,
                     "refusing non-HTTPS redirect target: {0}".format(
                         next_url)
                 )
-            if target_validator is not None:
-                try:
-                    target_validator(next_url)
-                except Exception:
-                    response.close()
-                    raise
 
             response.close()
             current_url = next_url

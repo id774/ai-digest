@@ -49,12 +49,18 @@
 #      a directory, or a file Pillow cannot load, on all three subcommands.
 #    - Accept --news-feed-urls made only of absolute HTTPS URLs, or blank,
 #      and reject an http, a relative, a hostless or a mixed list.
+#    - Clear --data-dir, --summarizer-base-url, --summarizer-model and
+#      --user-agent to their unset/default state when given blank, and
+#      keep a nonblank override winning as before.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.4 2026-09-22
+#       Cover a blank scalar override clearing to the same state a blank
+#       environment value means, instead of the literal blank string.
 #  v1.3 2026-09-12
 #       Cover the six-topic upper bound of --max-topics.
 #  v1.2 2026-09-08
@@ -75,7 +81,7 @@ from dataclasses import replace
 from unittest import mock
 
 import cli
-from config import Config
+from config import DEFAULT_USER_AGENT, Config
 
 
 def refused(argv):
@@ -127,6 +133,50 @@ class OverrideTest(unittest.TestCase):
     def test_credentials_have_no_option(self):
         for option in ("--summarizer-api-key", "--summarizer-auth-token"):
             self.assertEqual(2, refused(["run", option, "secret"]))
+
+    def test_blank_data_dir_clears_to_the_default_directory(self):
+        configured = replace(Config(), data_dir="/configured/reports")
+
+        applied = cli.apply_overrides(
+            configured, cli.parse_args(["list", "--data-dir", "   "]))
+
+        self.assertEqual(
+            os.path.abspath(os.path.join(cli.BASE_DIR, "data", "reports")),
+            applied.data_dir)
+
+    def test_blank_summarizer_base_url_clears_to_unset(self):
+        configured = replace(Config(),
+                             summarizer_base_url="https://old.example")
+
+        applied = cli.apply_overrides(
+            configured,
+            cli.parse_args(["run", "--summarizer-base-url", ""]))
+
+        self.assertIsNone(applied.summarizer_base_url)
+
+    def test_blank_summarizer_model_clears_to_unset(self):
+        configured = replace(Config(), summarizer_model="old-model")
+
+        applied = cli.apply_overrides(
+            configured, cli.parse_args(["run", "--summarizer-model", "  "]))
+
+        self.assertEqual("", applied.summarizer_model)
+
+    def test_blank_user_agent_clears_to_the_built_in_default(self):
+        configured = replace(Config(), user_agent="custom-ua")
+
+        applied = cli.apply_overrides(
+            configured, cli.parse_args(["run", "--user-agent", ""]))
+
+        self.assertEqual(DEFAULT_USER_AGENT, applied.user_agent)
+
+    def test_a_nonblank_override_still_wins_over_a_configured_value(self):
+        configured = replace(Config(), user_agent="custom-ua")
+
+        applied = cli.apply_overrides(
+            configured, cli.parse_args(["run", "--user-agent", "cli-ua"]))
+
+        self.assertEqual("cli-ua", applied.user_agent)
 
 
 class NumericOptionTest(unittest.TestCase):

@@ -30,6 +30,9 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.5 2026-09-22
+#       Cap the read body at MAX_COLLECTOR_RESPONSE_BYTES, failing an
+#       oversized category the same way an unreachable one fails.
 #  v1.4 2026-09-15
 #       Retry HTTP 429 responses twice before failing an arXiv category.
 #  v1.3 2026-09-08
@@ -55,7 +58,7 @@ import feedparser
 import requests
 
 from ai_digest import CollectionResult, Entry, is_safe_url
-from ai_digest.transport import https_get
+from ai_digest.transport import https_get, read_capped_content
 
 API_ENDPOINT = "https://export.arxiv.org/api/query"
 
@@ -125,7 +128,8 @@ def _fetch_category(category: str, max_results: int, timeout: int,
         is_last_attempt = attempt == max_attempts
         retry = False
         try:
-            with https_get(url, timeout, user_agent) as response:
+            with https_get(url, timeout, user_agent,
+                           stream=True) as response:
                 if response.status_code == 429 and not is_last_attempt:
                     delay = RATE_LIMIT_RETRY_DELAYS[attempt - 1]
                     logger.warning(
@@ -135,7 +139,7 @@ def _fetch_category(category: str, max_results: int, timeout: int,
                     retry = True
                 else:
                     response.raise_for_status()
-                    content = response.content
+                    content = read_capped_content(response)
         except requests.RequestException as error:
             logger.warning("arXiv request failed for %s: %s", category, error)
             return [], "{0}".format(error)

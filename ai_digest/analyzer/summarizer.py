@@ -36,6 +36,9 @@
 #  - anthropic
 #
 #  Version History:
+#  v1.6 2026-09-22
+#       Validate to_topics() input by type instead of coercing it with
+#       str(), and require 2 to 4 usable bullets per API-backed topic.
 #  v1.5 2026-09-12
 #       Accept text JSON fallback only when the whole text block is the report.
 #  v1.4 2026-08-05
@@ -291,7 +294,7 @@ def _extract_tool_input(message: Any,
     )
 
 
-def to_topics(payload: Dict[str, Any], entries: List[Entry],
+def to_topics(payload: Any, entries: List[Entry],
               max_topics: int) -> List[Topic]:
     """
     Convert the raw tool arguments into Topic objects.
@@ -299,29 +302,78 @@ def to_topics(payload: Dict[str, Any], entries: List[Entry],
     This is public because ai_digest.demo feeds a stored payload through
     it, so that the demo report is validated exactly like a live one.
 
-    Source indexes outside the input range are ignored, and topics
-    without any usable source or bullet are dropped, so that a partial
-    hallucination cannot produce a citation free block.
+    The answer is untrusted input, checked by type rather than repaired:
+    a field of the wrong type drops the topic it belongs to, or the
+    whole answer when payload itself is not an object, instead of being
+    coerced into the type expected. A usable bullet is a nonblank
+    string and a usable source index is an int, excluding bool, inside
+    the entry range; an API-backed topic needs 2 to 4 usable bullets
+    and at least one usable source, so that a partial hallucination
+    cannot produce a citation free or near empty block.
     """
+    if not isinstance(payload, dict):
+        return []
+    raw_topics = payload.get("topics", [])
+    if not isinstance(raw_topics, list):
+        return []
+
     topics: List[Topic] = []
-    for raw_topic in payload.get("topics", [])[:max_topics]:
+    for raw_topic in raw_topics[:max_topics]:
+        if not isinstance(raw_topic, dict):
+            logger.warning("dropping malformed topic: not an object")
+            continue
+
+        raw_title = raw_topic.get("title")
+        if not isinstance(raw_title, str):
+            logger.warning("dropping malformed topic: non-string title")
+            continue
+        title = " ".join(raw_title.split())
+        if not title:
+            logger.warning("dropping malformed topic: blank title")
+            continue
+
+        raw_category = raw_topic.get("category", "その他")
+        if not isinstance(raw_category, str):
+            logger.warning("dropping malformed topic %r: non-string "
+                           "category", title)
+            continue
+        category = raw_category.strip() or "その他"
+
+        raw_bullets = raw_topic.get("bullets")
+        if not isinstance(raw_bullets, list):
+            logger.warning("dropping malformed topic %r: non-list bullets",
+                           title)
+            continue
         bullets = [
-            " ".join(str(bullet).split())
-            for bullet in raw_topic.get("bullets", [])
-            if str(bullet).strip()
+            " ".join(bullet.split())
+            for bullet in raw_bullets
+            if isinstance(bullet, str) and bullet.strip()
         ][:4]
+        if len(bullets) < 2:
+            logger.warning(
+                "dropping malformed topic %r: too few usable bullets",
+                title)
+            continue
+
+        raw_indexes = raw_topic.get("source_indexes")
+        if not isinstance(raw_indexes, list):
+            logger.warning("dropping malformed topic %r: non-list "
+                           "source_indexes", title)
+            continue
         sources = []
-        for index in raw_topic.get("source_indexes", [])[:3]:
-            if isinstance(index, int) and 0 <= index < len(entries):
+        for index in raw_indexes[:3]:
+            if (isinstance(index, int) and not isinstance(index, bool)
+                    and 0 <= index < len(entries)):
                 entry = entries[index]
                 sources.append({"title": entry.title, "url": entry.url})
-        if not bullets or not sources:
-            logger.warning("dropping malformed topic: %s",
-                           raw_topic.get("title", ""))
+        if not sources:
+            logger.warning("dropping malformed topic %r: no usable source",
+                           title)
             continue
+
         topics.append(Topic(
-            category=str(raw_topic.get("category", "その他")).strip() or "その他",
-            title=" ".join(str(raw_topic.get("title", "")).split()),
+            category=category,
+            title=title,
             bullets=bullets,
             sources=sources,
         ))

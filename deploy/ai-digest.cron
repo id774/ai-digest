@@ -12,7 +12,9 @@ SHELL=/bin/sh
 # the log file to see whether a run failed.
 MAILTO=root
 
-# 06:30 local time. arXiv announces on weekdays only, so a run on a
-# Saturday or Sunday routinely collects nothing and exits 1; that is
-# the source being quiet, not the batch being broken.
+# 06:30 local time. arXiv announces on weekdays only, so a Saturday or
+# Sunday run typically sees no papers; it still exits 0 if a configured
+# news feed offers something recent, and exits 1 only when nothing was
+# collected at all, which is the sources being quiet, not the batch
+# being broken.
 30 6 * * * cd /opt/ai-digest && .venv/bin/python cli.py run >> /var/log/ai-digest/run.log 2>&1

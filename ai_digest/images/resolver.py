@@ -29,8 +29,8 @@
 #
 #  Version History:
 #  v1.4 2026-09-22
-#       Refuse a page or image target that resolves to a non-public address,
-#       on the initial target and every redirect hop, closing an SSRF path.
+#       Pin scraping connections to the public address validated against DNS
+#       rebinding, and refuse decompression-bomb-warning-range images too.
 #  v1.3 2026-09-08
 #       Fetch source pages and images only over HTTPS.
 #  v1.2 2026-08-04
@@ -44,12 +44,14 @@
 #
 ########################################################################
 
+import contextlib
 import ipaddress
 import io
 import logging
 import re
 import socket
-from typing import List, Optional, Tuple, Union
+import warnings
+from typing import Iterator, List, Optional, Tuple, Union
 from urllib.parse import urljoin, urlparse, urlsplit
 
 import requests
@@ -138,15 +140,61 @@ def _resolve_addresses(hostname: str) -> List[IPAddress]:
     return [ipaddress.ip_address(info[4][0]) for info in resolved]
 
 
-def validate_public_target(url: str) -> None:
+def _pinned_getaddrinfo(hostname: str, addresses: List[IPAddress],
+                        real_getaddrinfo):
     """
-    Refuse a scraping target whose host is not a public network address.
+    Return a getaddrinfo() replacement answering only from addresses.
+
+    A call naming any other host is passed through to the real resolver
+    unchanged; a call naming hostname can only ever get back one of the
+    addresses already checked as public, whatever a name server would
+    answer for it at that moment.
+    """
+    def _getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        if host != hostname or type not in (0, socket.SOCK_STREAM):
+            return real_getaddrinfo(host, port, family, type, proto, flags)
+        results = []
+        for address in addresses:
+            addr_family = (socket.AF_INET6 if address.version == 6
+                          else socket.AF_INET)
+            if family not in (0, addr_family):
+                continue
+            sockaddr = ((str(address), port, 0, 0) if address.version == 6
+                       else (str(address), port))
+            results.append((addr_family, socket.SOCK_STREAM,
+                            socket.IPPROTO_TCP, "", sockaddr))
+        if not results:
+            raise socket.gaierror(
+                "no pinned address for {0} matches the requested family"
+                .format(host)
+            )
+        return results
+
+    return _getaddrinfo
+
+
+@contextlib.contextmanager
+def validate_and_pin_public_target(url: str) -> Iterator[None]:
+    """
+    Refuse a non-public scraping target, and pin the wrapped request's
+    DNS resolution to exactly the addresses just checked.
+
+    A preflight lookup and the lookup made when a connection is actually
+    opened are two separate DNS resolutions; a host that answers the
+    first with a public address and the second with a private one - DNS
+    rebinding - would otherwise let a validated hostname's connection
+    reach a private target anyway. Pinning closes that gap: for the life
+    of the wrapped request, a lookup of this exact hostname can only
+    return an address this function already checked, so the address
+    connected to is provably one of the addresses validated. The
+    original hostname still decides TLS SNI, certificate validation and
+    the Host header; only which address the connection reaches is
+    fixed, and it is never a non-public one, whatever a name server
+    answers meanwhile.
 
     Called on the initial target and on every redirect hop of a request
-    the image resolver sends, before that request goes out, so a host
-    that only turns private after a redirect is refused before the next
-    request rather than after. Collectors do not use this: the arXiv
-    API and the configured feeds are not subject to it, only pages and
+    the image resolver sends. Collectors do not use this: the arXiv API
+    and the configured feeds are not subject to it, only pages and
     images the resolver scrapes from source URLs it does not control.
 
     Raises:
@@ -159,12 +207,21 @@ def validate_public_target(url: str) -> None:
         raise PublicNetworkOnlyError(
             "refusing request with no host: {0}".format(url)
         )
-    for address in _resolve_addresses(hostname):
+    addresses = _resolve_addresses(hostname)
+    for address in addresses:
         if not _is_public_address(address):
             raise PublicNetworkOnlyError(
                 "refusing non-public request target {0}: {1} resolves to "
                 "{2}".format(url, hostname, address)
             )
+
+    real_getaddrinfo = socket.getaddrinfo
+    socket.getaddrinfo = _pinned_getaddrinfo(hostname, addresses,
+                                             real_getaddrinfo)
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = real_getaddrinfo
 
 
 def _read_capped(response: requests.Response, limit: int) -> Optional[bytes]:
@@ -199,7 +256,7 @@ def _fetch(url: str, timeout: int, user_agent: str,
     """
     try:
         with https_get(url, timeout, user_agent, stream=True,
-                       target_validator=validate_public_target) as response:
+                       target_pin=validate_and_pin_public_target) as response:
             response.raise_for_status()
             body = _read_capped(response, limit)
             if body is None:
@@ -228,11 +285,17 @@ def _download_image(url: str, timeout: int,
         return None
     content, _final_url = fetched
     try:
-        with Image.open(io.BytesIO(content)) as image:
-            image_format = (image.format or "").lower()
-            width, height = image.size
+        # Scoped to this one decode: Pillow only warns, rather than
+        # raising, below twice MAX_IMAGE_PIXELS, and simplefilter() here
+        # is undone by catch_warnings() on exit, so it never touches the
+        # process-wide warning filter other code relies on.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(content)) as image:
+                image_format = (image.format or "").lower()
+                width, height = image.size
     except (UnidentifiedImageError, Image.DecompressionBombError,
-            OSError) as error:
+            Image.DecompressionBombWarning, OSError) as error:
         # A picture whose pixel count would exhaust the memory of the
         # host compresses to far less than MAX_IMAGE_BYTES, so the byte
         # limit does not catch it and Pillow refuses it here. That error

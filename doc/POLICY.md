@@ -716,9 +716,10 @@ Before a change is proposed, it answers these:
 - Treat scraping and every external fetch as best effort: enforce timeouts and
   size limits, and fall back rather than failing the whole run when a single
   source misbehaves.
-- Every outbound request carries an explicit timeout and the configured
-  User-Agent. There is no request without a timeout, because an unattended run
-  must not hang until the next one starts.
+- Every outbound request carries an explicit timeout; there is no request
+  without one, because an unattended run must not hang until the next one
+  starts. A collector or scraper request also carries the configured
+  User-Agent; the summarization request does not carry it.
 - Treat everything fetched as untrusted input: a feed entry, a scraped page and
   a model answer are validated before they are stored, and a value that does not
   validate is dropped with a warning rather than repaired into something that

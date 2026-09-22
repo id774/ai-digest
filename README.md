@@ -161,7 +161,7 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. Blank probes automatically; an explicit value must be a font Pillow can load, or the command fails; see [Japanese font](#japanese-font). |
 | `DATA_DIR` | `data/reports` | Directory holding the generated reports. |
 | `HTTP_TIMEOUT` | `60` | Timeout in seconds of every collector and scraper request. The summarization request uses `SUMMARIZER_TIMEOUT`. |
-| `USER_AGENT` | `ai-digest/1.0 ...` | User-Agent sent with every outgoing request. |
+| `USER_AGENT` | `ai-digest/1.0 ...` | User-Agent sent with every collector and scraper request. The summarization request does not carry it. |
 | `PORT` | `3000` | Port of the development server and of gunicorn. |
 
 Every numeric setting above shares one rule: unset or blank uses the default
@@ -535,7 +535,9 @@ depends on a run having succeeded.
 
 `deploy/ai-digest.cron` redirects both stdout and stderr into
 `/var/log/ai-digest/run.log`, which turns these into the only monitoring the
-batch needs: check that file for the exit status and the log lines around it.
+batch needs. The log lines say which of these it was; the exit status itself
+is not written to that file, only acted on by cron and by whatever ran the
+command.
 
 ### What a failure says
 

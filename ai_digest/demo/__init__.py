@@ -10,13 +10,14 @@
 #  It exists so that a fresh clone can show what a finished report looks
 #  like before an API key is configured.
 #
-#  Two stages of the pipeline are replaced, because both need outbound
+#  Three stages of the pipeline are replaced, because they need outbound
 #  access. Collection is replaced by the 'entries' array of
-#  sample_input.json, and summarization by its 'build_report' object,
-#  which holds representative arguments from an API-backed build_report
-#  tool call. Everything downstream is the pipeline itself:
-#  the payload is validated by summarizer.to_topics(), and the caller
-#  illustrates, stores and renders the result as usual.
+#  sample_input.json, summarization by its 'build_report' object, which
+#  holds representative arguments from an API-backed build_report tool
+#  call, and illustration draws a local fallback card for every topic
+#  instead of scraping one. Everything downstream is the pipeline
+#  itself: the payload is validated by summarizer.to_topics(), and the
+#  caller stores and renders the result as usual.
 #
 #  The sample is data, not a recording of one API response, so a demo
 #  run costs nothing, needs no key and renders identically everywhere.

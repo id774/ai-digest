@@ -44,9 +44,12 @@
 #    - Refuse a malformed redirect target before the next request is sent.
 #    - Bound the redirect chain and raise TooManyRedirects.
 #    - Close the Session on both success and failure.
-#    - Run target_validator on the initial target before any request, and
-#      on every redirect hop before it is followed, stopping the chain
-#      when it refuses one.
+#    - Run target_pin on the initial target before any request, and on
+#      every redirect hop before it is followed, stopping the chain when
+#      it refuses one.
+#    - Return a streamed body within the limit, accept one at exactly the
+#      limit, and give up once it is exceeded without buffering an endless
+#      one in full first.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -54,13 +57,14 @@
 #
 #  Version History:
 #  v1.1 2026-09-22
-#       Cover the target_validator hook on the initial target and on every
-#       redirect hop.
+#       Cover target_pin, the per-hop request-wrapping context manager
+#       that replaced target_validator, and read_capped_content().
 #  v1.0 2026-09-08
 #       Initial release.
 #
 ########################################################################
 
+import contextlib
 import unittest
 from unittest import mock
 
@@ -259,57 +263,77 @@ class RedirectBoundTest(unittest.TestCase):
         self.assertTrue(r2.closed)
 
 
-class TargetValidatorTest(unittest.TestCase):
+class _RecordingPin:
     """
-    target_validator lets a caller add a stricter check of its own on
-    top of the HTTPS-only policy, run on the initial target and on
-    every redirect hop, before the request for it is sent.
+    A target_pin double: a context manager factory that records every
+    URL it wrapped, in call order, and refuses the call numbered
+    refuse_at (1-based) by raising before yielding.
     """
 
-    def test_validator_runs_on_the_initial_target_before_any_request(self):
+    def __init__(self, refuse_at=None, refuse_message="refused"):
+        self.calls = []
+        self.refuse_at = refuse_at
+        self.refuse_message = refuse_message
+
+    @contextlib.contextmanager
+    def __call__(self, url):
+        self.calls.append(url)
+        if self.refuse_at is not None and len(self.calls) == self.refuse_at:
+            raise RuntimeError(self.refuse_message)
+        yield
+
+
+class TargetPinTest(unittest.TestCase):
+    """
+    target_pin wraps the request itself, for the initial target and for
+    every redirect hop, before the request for it is sent: it can
+    refuse a target the way target_validator once did, and it can also
+    pin how the wrapped request resolves its host, since validating and
+    connecting now happen inside the same context.
+    """
+
+    def test_pin_wraps_the_initial_target_before_any_request(self):
+        pin = _RecordingPin(refuse_at=1)
+
         with mock.patch.object(transport.requests, "Session") as session_cls:
-            validator = mock.Mock(side_effect=RuntimeError("refused"))
             with self.assertRaises(RuntimeError):
                 with transport.https_get("https://example.test/a", 5, "ua",
-                                         target_validator=validator):
+                                         target_pin=pin):
                     pass
 
-        validator.assert_called_once_with("https://example.test/a")
-        session_cls.assert_not_called()
+        self.assertEqual(["https://example.test/a"], pin.calls)
+        session_cls.return_value.get.assert_not_called()
 
-    def test_validator_runs_on_each_redirect_hop(self):
+    def test_pin_wraps_each_redirect_hop(self):
         first = FakeResponse(
             302, headers={"Location": "https://other.example/b"},
             url="https://example.test/a")
         second = FakeResponse(200, url="https://other.example/b")
         session = _fake_session(first, second)
-        validator = mock.Mock()
+        pin = _RecordingPin()
 
         with mock.patch.object(transport.requests, "Session",
                                return_value=session):
             with transport.https_get("https://example.test/a", 5, "ua",
-                                     target_validator=validator):
+                                     target_pin=pin):
                 pass
 
         self.assertEqual(
-            [mock.call("https://example.test/a"),
-             mock.call("https://other.example/b")],
-            validator.call_args_list)
+            ["https://example.test/a", "https://other.example/b"],
+            pin.calls)
 
-    def test_a_redirect_refused_by_the_validator_stops_before_it_is_followed(
-            self):
+    def test_a_redirect_refused_by_the_pin_stops_before_it_is_followed(self):
         first = FakeResponse(
             302, headers={"Location": "https://internal.example/b"},
             url="https://example.test/a")
         session = _fake_session(first)
-        validator = mock.Mock(
-            side_effect=[None, RuntimeError("refusing internal target")])
+        pin = _RecordingPin(refuse_at=2, refuse_message="refusing internal")
 
         with mock.patch.object(transport.requests, "Session",
                                return_value=session):
             with self.assertRaises(RuntimeError):
                 with transport.https_get("https://example.test/a", 5, "ua",
-                                         target_validator=validator):
+                                         target_pin=pin):
                     pass
 
         self.assertEqual(1, session.get.call_count)
@@ -340,6 +364,68 @@ class SessionClosureTest(unittest.TestCase):
                     pass
 
         session.__exit__.assert_called_once()
+
+
+class _StreamedFakeResponse:
+    """ Minimal stand in for a streamed response's body iteration. """
+
+    def __init__(self, chunks):
+        self.chunks = list(chunks)
+
+    def iter_content(self, chunk_size=None):
+        for chunk in self.chunks:
+            yield chunk
+
+
+class ReadCappedContentTest(unittest.TestCase):
+    """
+    read_capped_content() is what keeps the arXiv and news feed
+    collectors from buffering an oversized or endless response body in
+    full: it counts as chunks arrive and gives up as soon as the limit
+    is passed, never after the whole body has already been read.
+    """
+
+    def test_returns_a_body_within_the_limit(self):
+        response = _StreamedFakeResponse([b"a" * 10, b"b" * 10])
+
+        self.assertEqual(b"a" * 10 + b"b" * 10,
+                         transport.read_capped_content(response, 100))
+
+    def test_accepts_a_body_at_exactly_the_limit(self):
+        response = _StreamedFakeResponse([b"a" * 100])
+
+        self.assertEqual(b"a" * 100,
+                         transport.read_capped_content(response, 100))
+
+    def test_raises_once_the_limit_is_exceeded(self):
+        response = _StreamedFakeResponse([b"a" * 60, b"b" * 60])
+
+        with self.assertRaises(transport.ResponseTooLargeError):
+            transport.read_capped_content(response, 100)
+
+    def test_does_not_read_the_whole_body_before_giving_up(self):
+        # An endless response must not be buffered in full first; the
+        # generator is abandoned as soon as the limit is passed.
+        read = []
+
+        def endless():
+            while True:
+                read.append(1)
+                yield b"x" * 1024
+
+        response = _StreamedFakeResponse([])
+        response.iter_content = lambda chunk_size=None: endless()
+
+        with self.assertRaises(transport.ResponseTooLargeError):
+            transport.read_capped_content(response, 4096)
+        self.assertLessEqual(len(read), 6)
+
+    def test_uses_the_default_limit_when_none_is_given(self):
+        response = _StreamedFakeResponse(
+            [b"x" * (transport.MAX_COLLECTOR_RESPONSE_BYTES + 1)])
+
+        with self.assertRaises(transport.ResponseTooLargeError):
+            transport.read_capped_content(response)
 
 
 if __name__ == "__main__":
