@@ -140,8 +140,8 @@
 #
 #  Version History:
 #  v2.0 2026-09-22
-#       Treat a whitespace-only SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN or
-#       SUMMARIZER_BASE_URL as unset instead of a truthy configured value.
+#       Treat a whitespace-only summarizer credential or base URL as unset,
+#       and require an explicit SUMMARIZER_BASE_URL to be absolute HTTPS.
 #  v1.9 2026-09-12
 #       Limit MAX_TOPICS to the six topics the report image can display.
 #  v1.8 2026-09-08
@@ -564,20 +564,29 @@ class Config:
 
     def validate_summarizer_base_url(self) -> None:
         """
-        Raise when the openai-compatible backend has no endpoint target.
+        Raise when SUMMARIZER_BASE_URL is missing where required, or set
+        to something that is not a requestable absolute HTTPS URL.
 
         An empty SUMMARIZER_BASE_URL used to be passed on to the OpenAI
         SDK unset, which let the SDK's own default endpoint decide where
         the request went; ai-digest must choose that destination itself.
-        The anthropic-compatible backend is not checked here: an empty
-        value there means Anthropic itself, by design.
+        The anthropic-compatible backend is not required to set one: an
+        empty value there means Anthropic itself, by design. Either
+        backend refuses an explicit value that is not HTTPS, since it
+        names an outbound network destination the same as any other
+        retrieval target.
         """
-        if (self.summarizer_backend == "openai-compatible"
-                and not (self.summarizer_base_url or "").strip()):
+        base_url = (self.summarizer_base_url or "").strip()
+        if self.summarizer_backend == "openai-compatible" and not base_url:
             raise RuntimeError(
                 "SUMMARIZER_BASE_URL is required by "
                 "SUMMARIZER_BACKEND=openai-compatible; the OpenAI SDK's "
                 "own default endpoint is not used in its place."
+            )
+        if base_url and not is_https_url(base_url):
+            raise RuntimeError(
+                "SUMMARIZER_BASE_URL is '{0}'; expected an absolute "
+                "HTTPS URL.".format(base_url)
             )
 
     def validate_retry_budget(self) -> None:

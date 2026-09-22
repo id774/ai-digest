@@ -65,6 +65,11 @@ reading the demo as a preview of your own runs:
   why each card repeats the headline of its topic. A live run first
   tries the `ar5iv` figure of a paper or the Open Graph image of an
   article, and only falls back when that fails.
+- **The summary image names its period "デモサンプル", not an hour count.**
+  The demo collects nothing, so there is no window to announce; the header
+  and the footer's 対象期間 show that fixed label instead of formatting a
+  fabricated number of hours, and the footer's データソース reflects
+  whatever the sample's topics actually cite.
 
 A CJK font is required all the same, since the cards and the composite
 image draw Japanese text; see [Japanese font](../README.md#japanese-font).

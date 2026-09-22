@@ -57,8 +57,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-22
-#       Cover target_pin, the per-hop request-wrapping context manager
-#       that replaced target_validator, and read_capped_content().
+#       Cover target_pin, trust_env, a fetch-wide elapsed deadline, and
+#       stricter HTTPS URL validation by hostname and port.
 #  v1.0 2026-09-08
 #       Initial release.
 #
@@ -121,6 +121,20 @@ class IsHttpsUrlTest(unittest.TestCase):
     def test_rejects_an_empty_value(self):
         self.assertFalse(transport.is_https_url(""))
 
+    def test_rejects_a_port_with_no_host(self):
+        self.assertFalse(transport.is_https_url("https://:8443/x"))
+
+    def test_rejects_credentials_with_no_host(self):
+        self.assertFalse(transport.is_https_url("https://user:pass@/x"))
+
+    def test_rejects_a_port_above_the_valid_range(self):
+        self.assertFalse(
+            transport.is_https_url("https://example.test:99999/x"))
+
+    def test_rejects_a_non_numeric_port(self):
+        self.assertFalse(
+            transport.is_https_url("https://example.test:abc/x"))
+
 
 class InitialTargetRefusalTest(unittest.TestCase):
 
@@ -131,6 +145,39 @@ class InitialTargetRefusalTest(unittest.TestCase):
                     pass
 
         session_cls.assert_not_called()
+
+
+class TrustEnvTest(unittest.TestCase):
+    """
+    trust_env controls whether the Session reads proxy settings (and
+    other environment-driven defaults) from the process environment.
+    Collectors need it on, so a configured proxy still carries their
+    requests; the image resolver turns it off, so a proxy can never
+    quietly pick the destination target_pin validated.
+    """
+
+    def test_defaults_to_true(self):
+        response = FakeResponse(200)
+        session = _fake_session(response)
+
+        with mock.patch.object(transport.requests, "Session",
+                               return_value=session):
+            with transport.https_get("https://example.test/a", 5, "ua"):
+                pass
+
+        self.assertTrue(session.trust_env)
+
+    def test_can_be_turned_off(self):
+        response = FakeResponse(200)
+        session = _fake_session(response)
+
+        with mock.patch.object(transport.requests, "Session",
+                               return_value=session):
+            with transport.https_get("https://example.test/a", 5, "ua",
+                                     trust_env=False):
+                pass
+
+        self.assertFalse(session.trust_env)
 
 
 class NormalRequestTest(unittest.TestCase):
@@ -148,7 +195,9 @@ class NormalRequestTest(unittest.TestCase):
         self.assertEqual(1, session.get.call_count)
         call = session.get.call_args
         self.assertEqual("https://example.test/a", call.args[0])
-        self.assertEqual(5, call.kwargs["timeout"])
+        # The remaining fetch budget, not the original timeout value
+        # verbatim: negligibly less, since computing it costs time too.
+        self.assertAlmostEqual(5, call.kwargs["timeout"], delta=1)
         self.assertEqual({"User-Agent": "ua"}, call.kwargs["headers"])
         self.assertTrue(call.kwargs["stream"])
         self.assertFalse(call.kwargs["allow_redirects"])
@@ -175,7 +224,7 @@ class RelativeRedirectTest(unittest.TestCase):
         self.assertEqual("https://example.test/a", first_call.args[0])
         self.assertEqual("https://example.test/b", second_call.args[0])
         for call in (first_call, second_call):
-            self.assertEqual(5, call.kwargs["timeout"])
+            self.assertAlmostEqual(5, call.kwargs["timeout"], delta=1)
             self.assertEqual({"User-Agent": "ua"}, call.kwargs["headers"])
             self.assertTrue(call.kwargs["stream"])
         self.assertTrue(first.closed)
@@ -366,6 +415,68 @@ class SessionClosureTest(unittest.TestCase):
         session.__exit__.assert_called_once()
 
 
+class FetchDeadlineTest(unittest.TestCase):
+    """
+    timeout bounds the whole fetch, not each hop separately: a redirect
+    chain must not add up to more than timeout seconds by handing every
+    hop the full budget again.
+    """
+
+    def test_a_later_hop_gets_less_time_than_the_first(self):
+        first = FakeResponse(302, headers={"Location": "https://example.test/b"},
+                             url="https://example.test/a")
+        second = FakeResponse(200, url="https://example.test/b")
+        session = _fake_session(first, second)
+        # monotonic() calls, in order: the initial deadline, the first
+        # hop's remaining-time check, the second hop's.
+        clock = mock.Mock(side_effect=[100.0, 100.0, 102.0])
+
+        with mock.patch.object(transport.time, "monotonic", clock):
+            with mock.patch.object(transport.requests, "Session",
+                                   return_value=session):
+                with transport.https_get("https://example.test/a", 5, "ua"):
+                    pass
+
+        first_timeout = session.get.call_args_list[0].kwargs["timeout"]
+        second_timeout = session.get.call_args_list[1].kwargs["timeout"]
+        self.assertAlmostEqual(5, first_timeout, delta=0.01)
+        self.assertAlmostEqual(3, second_timeout, delta=0.01)
+
+    def test_raises_when_no_budget_remains_before_a_hop_is_sent(self):
+        first = FakeResponse(302, headers={"Location": "https://example.test/b"},
+                             url="https://example.test/a")
+        session = _fake_session(first)
+        # The deadline has already passed by the time the second hop's
+        # remaining-time check runs, so that hop is never requested.
+        clock = mock.Mock(side_effect=[100.0, 100.0, 110.0])
+
+        with mock.patch.object(transport.time, "monotonic", clock):
+            with mock.patch.object(transport.requests, "Session",
+                                   return_value=session):
+                with self.assertRaises(transport.FetchTimeoutError):
+                    with transport.https_get("https://example.test/a", 5,
+                                             "ua"):
+                        pass
+
+        self.assertEqual(1, session.get.call_count)
+        self.assertTrue(first.closed)
+
+    def test_the_yielded_response_carries_the_deadline(self):
+        response = FakeResponse(200)
+        session = _fake_session(response)
+
+        with mock.patch.object(transport.time, "monotonic",
+                               return_value=100.0):
+            with mock.patch.object(transport.requests, "Session",
+                                   return_value=session):
+                with transport.https_get("https://example.test/a", 5,
+                                         "ua") as got:
+                    self.assertEqual(105.0, transport.fetch_deadline(got))
+
+    def test_fetch_deadline_is_none_for_an_unrelated_response(self):
+        self.assertIsNone(transport.fetch_deadline(FakeResponse(200)))
+
+
 class _StreamedFakeResponse:
     """ Minimal stand in for a streamed response's body iteration. """
 
@@ -426,6 +537,23 @@ class ReadCappedContentTest(unittest.TestCase):
 
         with self.assertRaises(transport.ResponseTooLargeError):
             transport.read_capped_content(response)
+
+    def test_stops_once_the_deadline_passes_despite_ongoing_progress(self):
+        # A byte trickle just fast enough that no single chunk ever
+        # exceeds the limit must still be bounded by elapsed time.
+        response = _StreamedFakeResponse([b"a" * 10, b"b" * 10, b"c" * 10])
+        setattr(response, transport._DEADLINE_ATTR, 5.0)
+        clock = mock.Mock(side_effect=[1.0, 6.0])
+
+        with mock.patch.object(transport.time, "monotonic", clock):
+            with self.assertRaises(transport.FetchTimeoutError):
+                transport.read_capped_content(response, 1000)
+
+    def test_a_response_with_no_deadline_is_not_time_bounded(self):
+        response = _StreamedFakeResponse([b"a" * 10, b"b" * 10])
+
+        self.assertEqual(b"a" * 10 + b"b" * 10,
+                         transport.read_capped_content(response, 100))
 
 
 if __name__ == "__main__":

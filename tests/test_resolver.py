@@ -78,7 +78,7 @@
 #
 #  Version History:
 #  v1.2 2026-09-22
-#       Cover connection pinning against DNS rebinding, and
+#       Cover connection pinning, proxy bypass, a fetch-wide deadline, and
 #       decompression-bomb-warning-range refusal.
 #  v1.1 2026-09-08
 #       Cover HTTPS-only page and image retrieval.
@@ -173,6 +173,21 @@ class ReadCappedTest(unittest.TestCase):
         self.assertIsNone(resolver._read_capped(response, 4096))
         self.assertLessEqual(len(read), 6)
 
+    def test_raises_once_the_fetch_deadline_passes_despite_progress(self):
+        response = FakeResponse([b"a" * 10, b"b" * 10, b"c" * 10])
+        setattr(response, transport._DEADLINE_ATTR, 5.0)
+        clock = mock.Mock(side_effect=[1.0, 6.0])
+
+        with mock.patch.object(resolver.time, "monotonic", clock):
+            with self.assertRaises(resolver.FetchTimeoutError):
+                resolver._read_capped(response, 1000)
+
+    def test_a_response_with_no_deadline_is_not_time_bounded(self):
+        response = FakeResponse([b"a" * 10, b"b" * 10])
+
+        self.assertEqual(b"a" * 10 + b"b" * 10,
+                         resolver._read_capped(response, 100))
+
 
 class FetchTest(unittest.TestCase):
 
@@ -189,6 +204,11 @@ class FetchTest(unittest.TestCase):
         self.assertEqual((b"body", "https://example.test/page"), result)
         self.assertTrue(getter.call_args.kwargs["stream"])
         self.assertTrue(response.closed)
+
+    def test_disables_trust_env_so_no_proxy_is_used(self):
+        _result, getter, _response = self.fetch("https://example.test/page")
+
+        self.assertFalse(getter.call_args.kwargs["trust_env"])
 
     def test_gives_up_on_an_oversized_body(self):
         result, _getter, _response = self.fetch(

@@ -36,6 +36,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.6 2026-09-22
+#       Copy only report.json and its referenced topic images into a
+#       re-render staging directory, not the whole stored directory.
 #  v1.5 2026-09-12
 #       Reject stored topic field types that downstream renderers cannot consume.
 #  v1.4 2026-09-06
@@ -283,12 +286,18 @@ def publication_workspace(data_dir: str, date: str) -> Iterator[str]:
 
 def copy_existing_report(data_dir: str, date: str, staging_dir: str) -> None:
     """
-    Copy a stored report's files into a staging directory.
+    Copy a stored report's authoritative files into a staging directory.
 
-    Used by 're-render' to bring the authoritative report.json and the
-    topic illustrations of an already published report into a staging
+    Used by 're-render' to bring report.json and the topic illustrations
+    it references, of an already published report, into a staging
     directory, without ever reading from or writing to the final
-    directory while the derived artifacts are being rebuilt.
+    directory while the derived artifacts are being rebuilt. Only those
+    files are copied: a stale summary.png, index.html, style.css or any
+    other leftover file the stored directory happens to hold is not
+    carried into the rebuild, since compose_image.compose() and
+    build.write_report_html() write their own replacements afterwards.
+    A topic 'image' naming anything other than a bare file name in the
+    report directory is skipped, the same way a corrupt one would be.
 
     Args:
         data_dir: Root directory of the archive.
@@ -299,13 +308,16 @@ def copy_existing_report(data_dir: str, date: str, staging_dir: str) -> None:
         ValueError: The date is not in YYYY-MM-DD form.
     """
     source_dir = report_dir(data_dir, date)
-    for name in os.listdir(source_dir):
+    names = [REPORT_FILENAME]
+    report = load_report(data_dir, date)
+    if report is not None:
+        for topic in report["topics"]:
+            if topic.image and os.path.basename(topic.image) == topic.image:
+                names.append(topic.image)
+    for name in names:
         source_path = os.path.join(source_dir, name)
-        dest_path = os.path.join(staging_dir, name)
-        if os.path.isdir(source_path):
-            shutil.copytree(source_path, dest_path)
-        else:
-            shutil.copy2(source_path, dest_path)
+        if os.path.isfile(source_path):
+            shutil.copy2(source_path, os.path.join(staging_dir, name))
 
 
 def _is_valid_topic_payload(data: Dict[str, Any]) -> bool:

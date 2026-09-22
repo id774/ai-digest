@@ -162,9 +162,18 @@ same collection rules.
   contributes nothing, records its reason in the outcome, and lets the run
   continue. One misbehaving source never invalidates the others.
 - **Every request carries a timeout and the configured User-Agent.**
+  `HTTP_TIMEOUT` bounds the whole fetch, not one socket operation: `https_get()`
+  computes a single monotonic deadline before the first request of a hop chain
+  and refuses to start the next hop, or to keep reading a response body, once
+  it has passed, so a server that answers with one byte per timeout interval
+  cannot hold a request open past the configured budget by resetting a
+  per-read timer.
 - **Every collector request goes through one HTTPS transport boundary.**
   The initial target and each resolved redirect target must be absolute HTTPS;
-  a downgrade is refused before the next request is sent.
+  a downgrade is refused before the next request is sent. `is_https_url()`
+  checks the parsed hostname and port as well as the scheme, so a URL with no
+  host or an out-of-range port is refused the same way a plain `http://` one
+  is, not treated as HTTPS merely because its scheme says so.
 - **A response body is read through `transport.read_capped_content()`,**
   streamed and counted as it arrives rather than buffered by
   `response.content` in full, so a response past
@@ -350,7 +359,10 @@ coerced with `str()` into the type expected. It enforces, in order:
 - **`source_indexes` must be a list**; anything else drops the topic. A
   usable index is an integer inside the range of the candidate list,
   `bool` explicitly excluded since it is otherwise a subclass of `int`;
-  anything else is ignored;
+  anything else is ignored. Up to 3 are kept, chosen by validity first: the
+  list is walked in order and the first 3 usable indexes are taken, so an
+  invalid entry ahead of a valid one costs nothing, instead of capping the
+  raw list to its first 3 entries before checking which are usable;
 - **a topic left with no usable source is dropped** with a logged warning.
 
 Citation restoration is the point of the index scheme:
@@ -382,7 +394,10 @@ the end of a run. Pillow's own decompression bomb guard is two thresholds, not
 one: past the higher one it raises, and past the lower one it only warns; the
 resolver turns that warning into the same refusal as the error, scoped to the
 one decode with `warnings.catch_warnings()`, never by changing the process-wide
-warning filter other code relies on.
+warning filter other code relies on. `render`'s composer applies the identical
+guard when it re-pastes a stored topic illustration to redraw the summary
+image, so a file that passed the resolver's own cap once cannot be made to
+decode as a decompression bomb just because it is already on disk.
 
 The resolver reaches a page or an image through the same shared HTTPS
 transport boundary as section 6's collectors, `https_get()`'s `target_pin`
@@ -412,6 +427,17 @@ configured feeds, never a target named by material collected from outside.
 An HTTP article citation is never fetched for illustration, an HTTP image
 candidate is never downloaded, and every one of these refusals degrades to
 the normal fallback card rather than the run.
+
+Pinning alone is not enough when an environment proxy is configured: a
+`requests.Session` that trusts `HTTPS_PROXY` and similar variables hands the
+connection to the proxy, which then performs its own, unpinned resolution of
+the real destination, letting a proxied request reach exactly the private
+address the pin was meant to rule out. The resolver's session disables
+`trust_env`, bypassing any configured proxy for its own scraping requests,
+so the pin it computed is the address every one of its own connections
+actually uses. Collectors keep the default, proxy-aware session: the targets
+they request are the operator's own configuration, not material a scraped
+page could redirect.
 
 ```text
 configured target
@@ -539,10 +565,13 @@ it, as a single directory swap:
   of what happened rather than a silently lost report.
 
 `render` reaches this same workspace from a stored report instead of from a
-fresh collection: it copies the authoritative `report.json` and the topic
-images into staging untouched, regenerates only the summary image and the
-HTML there, and publishes the same way, so a failed re-render never changes
-the report that was already on disk.
+fresh collection: it copies the authoritative `report.json`, and only the
+topic images its own topics reference, into staging untouched — never the
+stored directory's every file, so a stale image, `summary.png`, `index.html`
+or `style.css` a previous version left behind does not survive into the
+rebuild — regenerates the summary image and the HTML there, and publishes
+the same way, so a failed re-render never changes the report that was
+already on disk.
 
 The staging and backup directories are managed by `ai_digest/storage.py`
 alone, the module that already owns every path computation of the
@@ -570,6 +599,16 @@ metadata and a disclaimer. Legend entries are chosen before they are drawn, so a
 row too narrow for every category drops the trailing ones rather than the
 leading, most important ones. Three columns is why six topics fills the grid
 exactly.
+
+A demo report has no collected window to announce — `stats.model == "demo"`
+is what names it one, not merely the absence of a numeric `lookback_hours`,
+since a report stored before that field existed still lacks it — so the
+header and the footer's 対象期間 show a fixed "デモサンプル" label instead of
+formatting `None` hours into the fixed window text. The footer's データソース
+is derived from what the report's topics actually cite — an arXiv hostname,
+a non-arXiv hostname, both, or neither — rather than a fixed string, so an
+arXiv-only or a news-only report is not described as drawing from sources it
+does not.
 
 Category colour is derived from the label by a hash written in the package
 rather than the builtin one, which is salted per process and would recolour the
@@ -638,23 +677,25 @@ published complete report — exactly as it was, and the command fails.
 
 `demo` enters at step 8 with topics built from the sample and validated by the
 same function. `render` reaches the same publication workspace from a stored
-report instead: it copies the authoritative `report.json` and the topic
-images into staging unchanged, performs step 10 there, and publishes the same
-way, which is why it costs nothing beyond redrawing and is the cheap way to
-try a layout change; the window it announces is read from the statistics the
-original run stored, not from the current configuration, so a rebuild does
-not relabel history, and a rebuild that fails leaves the stored report
-untouched.
+report instead: it copies the authoritative `report.json`, and only the
+topic images its topics reference, into staging unchanged — never a stale
+file the stored directory otherwise still holds — performs step 10 there,
+and publishes the same way, which is why it costs nothing beyond redrawing
+and is the cheap way to try a layout change; the window it announces is read
+from the statistics the original run stored, not from the current
+configuration, so a rebuild does not relabel history, and a rebuild that
+fails leaves the stored report untouched.
 
 ### The sample
 
-The bundled sample replaces exactly the two stages that need outbound access —
-collection, and topic editing — and nothing downstream. Its payload is the tool
-call arguments a live endpoint would have returned, so it goes through the same
-validation, and it is data rather than a recording of one response, so a demo
-run costs nothing and renders identically everywhere. `--data-dir` directs the
-output somewhere other than the real archive. [`DEMO.md`](DEMO.md) states what
-it replaces and how it differs from a collected report.
+The bundled sample replaces exactly the stages that need outbound access —
+collection, topic editing, and illustration — and nothing downstream. Its
+payload is the tool call arguments a live endpoint would have returned, so it
+goes through the same validation, and it is data rather than a recording of
+one response, so a demo run costs nothing and renders identically everywhere.
+`--data-dir` directs the output somewhere other than the real archive.
+[`DEMO.md`](DEMO.md) states what it replaces and how it differs from a
+collected report.
 
 ## 15. The viewer
 
@@ -745,13 +786,30 @@ things.
   valid or invalid the same way whichever route set it; only the exit code
   differs, `2` from the parser against `1` from a failed load. This still
   only reaches a setting the running scope actually resolves.
+- **Normalizes a command line override the same way its environment
+  equivalent is resolved.** `apply_overrides()` trims `--data-dir`,
+  `--summarizer-model` and `--user-agent` before applying them, matching the
+  `.strip()` the loaders already apply when reading `DATA_DIR`,
+  `SUMMARIZER_MODEL` and `USER_AGENT`, and a token option —
+  `--summarizer-backend`, `--summarizer-thinking-mode`,
+  `--summarizer-tool-choice-mode`, `--summarizer-text-json-fallback` — is
+  trimmed and lower-cased at the `argparse` boundary the same way
+  `_env_token()` normalizes the setting from the environment, before either
+  one's `choices` check runs. `--summarizer-base-url` is deliberately left
+  untrimmed, since nothing repairs it from the environment either. Only
+  then does a blank scalar override clear to the same unset/default state a
+  blank environment value already means, rather than the literal blank
+  string.
 - **Validates by concern, on demand.** Backend, credential, model, endpoint
   target, retry budget, output budget, timeout and protocol options are
   separate checks, and the batch calls the ones the selected backend needs
   before collecting. The endpoint target check is what keeps the
   openai-compatible backend from reaching the SDK with no base URL of its
   own: the anthropic-compatible one accepts an empty one by design, so only
-  the former can fail this check.
+  the former can fail this check. An explicitly set `SUMMARIZER_BASE_URL` is
+  checked with the same `is_https_url()` the transport boundary uses,
+  whichever backend is selected, so a plain `http://` endpoint or a
+  malformed one is refused before collecting rather than reached later.
 - **Validates `NEWS_FEED_URLS` as HTTPS targets only after `apply_overrides()`.**
   The loaders read it as an ordinary list, unchecked; `Config.validate_news_feed_urls()`
   is called on the effective value `run` is about to collect from, so an

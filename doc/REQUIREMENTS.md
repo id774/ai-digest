@@ -100,9 +100,11 @@ report images and must remain renderable.
 
 All collection and illustration requests use HTTPS, and a redirect is followed
 only when its resolved target is also HTTPS; a downgrade target is refused
-before a plaintext request is sent. This retrieval rule is separate from
-citation compatibility: an ordinary absolute HTTP source link may remain in a
-report even though the batch will not fetch it.
+before a plaintext request is sent. **A URL is HTTPS only when it also has a
+usable host and port**: a scheme of `https` alone does not make a hostless or
+malformed-port URL acceptable. This retrieval rule is separate from citation
+compatibility: an ordinary absolute HTTP source link may remain in a report
+even though the batch will not fetch it.
 
 The image resolver's page and image scraping targets a page or a candidate
 image named by material collected from outside, so its HTTPS requests must
@@ -114,15 +116,21 @@ reach the host's own internal network. Checking the address a hostname
 resolves to is not enough on its own, since a name server can answer a
 preflight lookup and the connection's own lookup differently; **the address
 actually connected to must be one of the addresses checked**, not a fresh
-answer a name server gives in between, or the check protects nothing. The
-arXiv API and the configured RSS and Atom feeds are not subject to this
+answer a name server gives in between, or the check protects nothing. **An
+environment proxy must not be able to undo this check**: the resolver's own
+requests bypass a configured proxy so that the address checked is the address
+a connection actually reaches, rather than one a proxy resolves on its own.
+The arXiv API and the configured RSS and Atom feeds are not subject to this
 narrower rule; they keep the HTTPS-only requirement above, together with a
 bound on how much of a response body is read, so that an oversized or
-endless source fails that source alone rather than exhausting memory.
+endless source fails that source alone rather than exhausting memory, and a
+request-wide time budget that a slow trickle of bytes cannot extend past.
 
 An image accepted for illustration must also be safe to decode: a picture
 whose pixel count would exhaust the memory of the host is refused, at both
-the threshold Pillow raises on and the lower one it only warns at.
+the threshold Pillow raises on and the lower one it only warns at, whether it
+is being scraped for the first time or re-read from storage while a report is
+rebuilt.
 
 **An explicit font setting must name a font file that can actually be loaded**,
 or the command that read it fails rather than silently repairing the value by
@@ -330,7 +338,11 @@ three: **plain**, **anthropic-compatible** and **openai-compatible**.
 - **One endpoint per run.** Several are not configured at once, and there is no
   automatic failover between them. Selecting a backend is an operator's
   decision, not a recovery mechanism.
-- Connection target, credential, model, retry count and timeouts are settings.
+- Connection target, credential, model, retry count and timeouts are
+  settings. **An explicitly configured connection target must be HTTPS**; a
+  plain `http://` or malformed endpoint is a configuration error before
+  anything is collected, not a value passed on to the SDK to fail with
+  later.
 
 **Settings are read strictly**: an unknown value stops the run before anything
 is collected, rather than being read as the default, because a typo must not

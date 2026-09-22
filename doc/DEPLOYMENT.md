@@ -190,9 +190,11 @@ were built from.
 
 - **Nobody outside**: bind gunicorn to `127.0.0.1` and reach it over an SSH
   tunnel or a VPN. Then no nginx block is needed at all.
-- **Basic authentication**: the commented `auth_basic` block in the sample.
-  Create the file with `htpasswd -c /etc/nginx/ai-digest.htpasswd NAME`.
-- **An IP range**: the commented `allow`/`deny` block in the sample.
+- **Basic authentication**: uncomment the `auth_basic` directives inside the
+  sample's active `location /`. Create the file with
+  `htpasswd -c /etc/nginx/ai-digest.htpasswd NAME`.
+- **An IP range**: uncomment the `allow`/`deny` directives inside the same
+  `location /` instead.
 
 Whichever is chosen, gunicorn keeps listening on `127.0.0.1` only, so the
 restriction cannot be walked around by addressing the port directly.

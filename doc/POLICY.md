@@ -719,7 +719,10 @@ Before a change is proposed, it answers these:
 - Every outbound request carries an explicit timeout; there is no request
   without one, because an unattended run must not hang until the next one
   starts. A collector or scraper request also carries the configured
-  User-Agent; the summarization request does not carry it.
+  User-Agent; the summarization request does not carry it. A collector or
+  scraper timeout bounds the whole fetch by a single wall-clock deadline, not
+  each socket operation separately, so a slow trickle of bytes cannot reset
+  the budget and hold the request open past it.
 - Treat everything fetched as untrusted input: a feed entry, a scraped page and
   a model answer are validated before they are stored, and a value that does not
   validate is dropped with a warning rather than repaired into something that

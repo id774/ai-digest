@@ -13,8 +13,8 @@ v1.2.3 (Release Date: TBD)
   using a named function choice, allowing thinking models such as Kimi K3.
 - Require an explicit SUMMARIZER_BASE_URL for the openai-compatible backend,
   failing early when it is missing or blank.
-- Build a report in a staging directory and publish it whole only once complete,
-  so a failed run can no longer leave a half-written report.
+- Build a report in a staging directory and publish it whole only once
+  complete; render now copies only report.json and its referenced images.
 - Reject invalid numeric settings instead of silently using defaults or failing
   later in a run.
 - Scope configuration to each command and the viewer so unrelated settings cannot
@@ -22,8 +22,8 @@ v1.2.3 (Release Date: TBD)
 - Reject impossible calendar dates before report work begins or archive paths are
   accepted.
 - Reject unusable explicit font paths instead of silently selecting another font.
-- Require HTTPS for source collection and image scraping, refusing downgrade
-  redirects before any plaintext request is sent.
+- Require strict HTTPS targets for source collection, image scraping, and an
+  explicit SUMMARIZER_BASE_URL, checking hostname and port, not scheme alone.
 - Limit MAX_TOPICS to 1 through 6 so report.json, HTML and summary.png keep
   the same topic set.
 - Refuse text JSON fallback responses that embed a report inside surrounding
@@ -32,14 +32,16 @@ v1.2.3 (Release Date: TBD)
   the category as a source failure.
 - Stop the standalone HTML from linking to a nonexistent archive index, and
   give its footer backend-neutral wording instead of an AI-specific claim.
-- Refuse an image-scraping target that resolves to a non-public address, and
-  pin the connection to the validated address to close a DNS rebinding gap.
-- Treat a blank scalar setting, from the environment or from an explicit CLI
-  override, as unset/default instead of holding the literal blank string.
-- Bound external input further: refuse a decompression-bomb-warning-range
-  image, and cap a collector response body at 8 MiB.
-- Validate API-backed topic fields by type instead of coercing them with
-  str(), and require 2 to 4 usable bullets per topic.
+- Refuse an image-scraping target that resolves to a non-public address, pin
+  the connection past DNS rebinding, and bypass a proxy that could reach it.
+- Normalize a CLI override like its environment equivalent: trim scalars,
+  lower-case tokens, and clear a blank one to the same unset/default state.
+- Bound external input further: cap a fetch by wall-clock deadline, refuse a
+  decompression-bomb image when scraped or re-rendered, and cap body size.
+- Validate API-backed topic fields by type instead of str() coercion, require
+  2-4 usable bullets, and select up to 3 sources by validity, not position.
+- Show a demo report's period as a sample label instead of a fabricated hour
+  count, and derive the summary image's data-source label from citations.
 
 v1.2.2 (2026-08-26)
 -------------------
