@@ -35,9 +35,9 @@
 #  - Pillow
 #
 #  Version History:
-#  v1.4 2026-09-22
-#       Refuse a decompression-bomb stored illustration, show a demo period
-#       as a sample, and derive the data-source label from what topics cite.
+#  v1.4 2026-09-23
+#       Show a safe demo period and data-source label, refusing a stored
+#       decompression bomb, an unsafe image path, or a malformed citation.
 #  v1.3 2026-08-24
 #       Make fixed summary-image attribution backend-neutral so plain
 #       reports are not described as AI-generated.
@@ -63,6 +63,7 @@ from PIL import Image, ImageDraw
 
 from ai_digest import Topic, category_color
 from ai_digest.images.fallback import load_font, text_size, wrap_text
+from ai_digest.storage import report_local_asset_path
 
 # Canvas geometry. The canvas is fixed so that every daily image has the
 # same proportions and can be posted or archived without rescaling.
@@ -144,12 +145,21 @@ def _data_source_label(topics: List[Topic]) -> str:
     or news-only report is not described as drawing from both: a
     hostname of arxiv.org, or a subdomain of it, counts as arXiv, and
     every other absolute http or https citation counts as public news.
+    A stored source URL is only ever checked here as a string - a
+    report predating stricter validation, or edited by hand, can still
+    hold one urlparse() itself refuses, such as a malformed IPv6
+    literal - and one is skipped like a blank hostname rather than
+    letting the ValueError end the render.
     """
     has_arxiv = False
     has_news = False
     for topic in topics:
         for source in topic.sources:
-            hostname = (urlparse(source.get("url", "")).hostname or "").lower()
+            try:
+                hostname = (urlparse(source.get("url", "")).hostname
+                           or "").lower()
+            except ValueError:
+                continue
             if not hostname:
                 continue
             if hostname == "arxiv.org" or hostname.endswith(".arxiv.org"):
@@ -357,9 +367,10 @@ def _draw_card(canvas: Image.Image, draw: ImageDraw.ImageDraw, topic: Topic,
     image_top = top + 68
     image_bottom = image_top + int((bottom - top) * 0.44)
     image_box = (left + 14, image_top, right - 14, image_bottom)
-    if topic.image:
-        _paste_illustration(canvas, os.path.join(report_dir, topic.image),
-                            image_box)
+    image_path = (report_local_asset_path(report_dir, topic.image)
+                 if topic.image else None)
+    if image_path is not None:
+        _paste_illustration(canvas, image_path, image_box)
     else:
         draw.rectangle(image_box, fill=color)
 

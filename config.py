@@ -28,10 +28,16 @@
 #  on the openai-compatible backend both spell the Bearer header the
 #  SDK sends either way.
 #
-#  The module exposes a single dataclass, Config, plus the helper
-#  load_config() which builds a Config instance from os.environ. Nothing
-#  in this module performs network access or touches the file system
-#  beyond reading .env, so it is safe to import from anywhere.
+#  The module exposes a single dataclass, Config, plus a scoped loader
+#  per execution path - load_viewer_config(), load_list_config(),
+#  load_render_config(), load_demo_config() and load_run_config() -
+#  each resolving only the settings that path actually uses.
+#  load_config(), which resolves every setting, is kept for
+#  compatibility and for tests exercising a setting on its own; no
+#  execution path calls it. Nothing in this module performs network
+#  access, but resolving AI_DIGEST_FONT_PATH does touch the file system
+#  beyond reading .env: an explicit or a probed candidate is opened
+#  with Pillow to check it is actually a usable font.
 #
 #  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
@@ -41,6 +47,7 @@
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - python-dotenv
+#  - Pillow (font path usability check only)
 #
 #  Environment Variables:
 #  - SUMMARIZER_BACKEND
@@ -139,6 +146,9 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v2.1 2026-09-23
+#       Trim SUMMARIZER_BASE_URL like other scalars before validating and
+#       using it, and drop LOOKBACK_HOURS from demo's resolved scope.
 #  v2.0 2026-09-22
 #       Treat a whitespace-only summarizer credential or base URL as unset,
 #       and require an explicit SUMMARIZER_BASE_URL to be absolute HTTPS.
@@ -575,6 +585,13 @@ class Config:
         backend refuses an explicit value that is not HTTPS, since it
         names an outbound network destination the same as any other
         retrieval target.
+
+        summarizer_base_url is already the trimmed value by the time it
+        reaches here - _resolve_batch_settings() and apply_overrides()
+        both trim it the same way they trim summarizer_model - so the
+        value checked here and the value _build_client() later hands
+        the SDK are the same one; a value that is only whitespace was
+        already unset before this method ever saw it.
         """
         base_url = (self.summarizer_base_url or "").strip()
         if self.summarizer_backend == "openai-compatible" and not base_url:
@@ -718,7 +735,9 @@ def _resolve_batch_settings(env: Dict[str, str]) -> Dict[str, Any]:
         summarizer_auth_token=_blank_to_none(
             _setting(env, "SUMMARIZER_AUTH_TOKEN")
         ),
-        summarizer_base_url=_blank_to_none(_setting(env, "SUMMARIZER_BASE_URL")),
+        summarizer_base_url=_blank_to_none(
+            (_setting(env, "SUMMARIZER_BASE_URL") or "").strip()
+        ),
         summarizer_model=(_setting(env, "SUMMARIZER_MODEL") or "").strip(),
         summarizer_thinking_mode=_env_token(
             env, "SUMMARIZER_THINKING_MODE", "default"
@@ -805,13 +824,21 @@ def load_render_config() -> Config:
 
 
 def load_demo_config() -> Config:
-    """ Build the configuration 'demo' needs. """
+    """
+    Build the configuration 'demo' needs: DATA_DIR,
+    AI_DIGEST_FONT_PATH and MAX_TOPICS.
+
+    LOOKBACK_HOURS is not among them: demo collects nothing and records
+    no window (command_demo()'s stats carry no lookback_hours, and the
+    summary image shows a fixed sample label instead), so a malformed
+    LOOKBACK_HOURS must not be able to stop a demo run that never reads
+    it either way.
+    """
     env = _dotenv_values()
     return Config(
         data_dir=_resolve_data_dir(env),
         font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
         max_topics=_env_int(env, "MAX_TOPICS", 6, 1, MAX_REPORT_TOPICS),
-        lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
     )
 
 

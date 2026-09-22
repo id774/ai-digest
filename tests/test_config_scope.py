@@ -61,6 +61,9 @@
 #  - See requirements.txt (the app.py case imports Flask; font cases use Pillow)
 #
 #  Version History:
+#  v1.1 2026-09-23
+#       Cover demo's scope excluding LOOKBACK_HOURS, which it never
+#       resolves or reads.
 #  v1.0 2026-09-06
 #       Initial release.
 #
@@ -129,7 +132,9 @@ class ScopeMatrixTest(unittest.TestCase):
         })
 
         self.assertEqual(3, loaded.max_topics)
-        self.assertEqual(12, loaded.lookback_hours)
+        # Out of demo's scope: it collects nothing and records no
+        # window, so LOOKBACK_HOURS stays the untouched default.
+        self.assertEqual(24, loaded.lookback_hours)
 
     def test_run_resolves_the_batch_scope_but_never_port(self):
         loaded = load_with(config.load_run_config, {
@@ -255,6 +260,14 @@ class DemoIsolationTest(unittest.TestCase):
         loaded = load_with(config.load_demo_config, environment)
 
         self.assertEqual(6, loaded.max_topics)
+
+    def test_ignores_a_malformed_lookback_hours(self):
+        # demo never reads LOOKBACK_HOURS, so a value even the parser
+        # itself would refuse must not stop it either.
+        loaded = load_with(config.load_demo_config,
+                           {"LOOKBACK_HOURS": "not-a-number"})
+
+        self.assertEqual(24, loaded.lookback_hours)
 
     def test_still_rejects_its_own_invalid_max_topics(self):
         with self.assertRaisesRegex(RuntimeError, "MAX_TOPICS"):

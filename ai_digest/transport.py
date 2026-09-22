@@ -28,20 +28,23 @@
 #  - requests
 #
 #  Version History:
-#  v1.1 2026-09-22
-#       Add target_pin, trust_env and a fetch-wide elapsed deadline, and
-#       validate HTTPS URLs by hostname and port, not just netloc presence.
+#  v1.1 2026-09-23
+#       Add target_pin, trust_env and a hard, DNS-inclusive fetch-wide
+#       deadline; validate HTTPS URLs and pin by canonical hostname.
 #  v1.0 2026-09-08
 #       Initial release.
 #
 ########################################################################
 
+import signal
 import time
 from contextlib import contextmanager, nullcontext
 from typing import Callable, ContextManager, Iterator, Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
+from urllib3.exceptions import LocationParseError
+from urllib3.util import parse_url as _parse_connect_url
 
 # Redirect status codes handled by https_get() itself, since automatic
 # redirect following is turned off so that every hop can be inspected
@@ -73,6 +76,50 @@ class ResponseTooLargeError(requests.RequestException):
 
 class FetchTimeoutError(requests.RequestException):
     """ Report a fetch whose total elapsed time exceeded its deadline. """
+
+
+@contextmanager
+def hard_deadline(seconds: float) -> Iterator[None]:
+    """
+    Bound every blocking call made inside the block by seconds of real
+    wall-clock time, raising FetchTimeoutError the instant it elapses.
+
+    requests' own timeout= argument bounds a socket connect and a
+    socket read, but not the DNS resolution socket.getaddrinfo() does
+    before either one: getaddrinfo() accepts no timeout of its own, so
+    a name server that never answers could otherwise hold a hop open
+    indefinitely regardless of the budget computed for it. SIGALRM is
+    the standard way to bound a call neither the socket nor the ssl
+    layer gives a timeout hook for: a signal delivered while a blocking
+    syscall - resolution, connect, TLS handshake or a stalled read
+    alike - is in progress interrupts it, and raising from the handler,
+    rather than returning from it, is what turns that interruption into
+    FetchTimeoutError instead of the interrupted call being silently
+    retried (PEP 475). The interrupted operation itself ends there; no
+    retry and no background thread carries it on past the deadline.
+
+    Only usable from the main thread, where the batch's one fetch runs
+    at a time; signal.signal() raises ValueError anywhere else.
+
+    Raises:
+        FetchTimeoutError: seconds had already elapsed, or elapsed
+            while the block was running.
+    """
+    if seconds <= 0:
+        raise FetchTimeoutError(
+            "fetch deadline already elapsed before this step began")
+
+    def _on_alarm(_signum, _frame):
+        raise FetchTimeoutError(
+            "fetch deadline elapsed during a blocking network operation")
+
+    previous_handler = signal.signal(signal.SIGALRM, _on_alarm)
+    previous_interval = signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, *previous_interval)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 # Attribute name https_get() uses to hand its per-hop deadline to a body
@@ -107,11 +154,11 @@ def read_capped_content(response: requests.Response,
     the time this function sees it.
 
     A response from https_get() carries the monotonic deadline of the
-    fetch it came from. Bytes trickling in just fast enough that no
+    fetch it came from. The whole read is wrapped in a hard wall-clock
+    bound of its own: bytes trickling in just fast enough that no
     single socket read times out could otherwise stretch one fetch far
-    past its configured budget; checking elapsed time between chunks,
-    regardless of whether they keep arriving, is what actually bounds
-    the total.
+    past its configured budget, and only a deadline that keeps running
+    regardless of how many reads complete actually bounds the total.
 
     Raises:
         ResponseTooLargeError: More than limit bytes were read. A
@@ -121,20 +168,18 @@ def read_capped_content(response: requests.Response,
             Treated the same as any other request timeout.
     """
     deadline = fetch_deadline(response)
+    remaining = (deadline - time.monotonic()) if deadline is not None else None
+    bound = hard_deadline(remaining) if remaining is not None else nullcontext()
     chunks = []
     total = 0
-    for chunk in response.iter_content(chunk_size=_READ_CHUNK_BYTES):
-        if deadline is not None and time.monotonic() > deadline:
-            raise FetchTimeoutError(
-                "response body still incomplete after the fetch's "
-                "deadline elapsed"
-            )
-        total += len(chunk)
-        if total > limit:
-            raise ResponseTooLargeError(
-                "response exceeded {0} bytes".format(limit)
-            )
-        chunks.append(chunk)
+    with bound:
+        for chunk in response.iter_content(chunk_size=_READ_CHUNK_BYTES):
+            total += len(chunk)
+            if total > limit:
+                raise ResponseTooLargeError(
+                    "response exceeded {0} bytes".format(limit)
+                )
+            chunks.append(chunk)
     return b"".join(chunks)
 
 
@@ -166,6 +211,34 @@ def is_https_url(url: str) -> bool:
     return True
 
 
+def canonical_connect_hostname(url: str) -> str:
+    """
+    Return the hostname exactly as it reaches socket.getaddrinfo() when
+    url is requested through this module's requests-based transport.
+
+    requests parses and IDNA-encodes a target through this same
+    urllib3 parse_url(), before urllib3 ever resolves or connects to
+    it. A caller that validates or pins a scraping target by hostname
+    has to check and pin this identical, lower-cased, ASCII form: a raw
+    Unicode hostname taken straight from the URL is not what the
+    connection actually looks up, so validating that string instead
+    would silently protect nothing for a non-ASCII host, since the real
+    connection's own lookup would use a different string and never hit
+    the pin.
+
+    Raises:
+        ValueError: url has no host, or one urllib3 itself could not
+            parse or IDNA-encode; refuse it rather than guess a target.
+    """
+    try:
+        parsed = _parse_connect_url(url)
+    except LocationParseError as error:
+        raise ValueError(str(error)) from error
+    if not parsed.host:
+        raise ValueError("no host in {0}".format(url))
+    return parsed.host
+
+
 @contextmanager
 def https_get(url: str, timeout: int, user_agent: str,
               stream: bool = False,
@@ -183,11 +256,14 @@ def https_get(url: str, timeout: int, user_agent: str,
 
     Args:
         url: Initial request target.
-        timeout: Budget, in seconds, for the whole fetch - the initial
-            request, every redirect hop, and the body of the response
-            finally yielded - not a per-hop allowance: each hop is given
-            only what remains of it, so a redirect chain can never add
-            up to more than timeout seconds total. A body read through
+        timeout: Budget, in seconds, for the whole fetch - DNS
+            resolution, connecting, the TLS handshake, the header wait
+            and every redirect hop, plus the body of the response
+            finally yielded - not a per-hop allowance: each hop is
+            given only what remains of it, bounded by hard_deadline()
+            so a stalled name lookup cannot spend more than its share
+            either, and a redirect chain can never add up to more than
+            timeout seconds total. A body read through
             read_capped_content() shares the same deadline.
         user_agent: User-Agent header sent with every hop.
         stream: Whether the response body is streamed rather than read.
@@ -244,7 +320,7 @@ def https_get(url: str, timeout: int, user_agent: str,
                     "fetch deadline of {0}s elapsed before requesting "
                     "{1}".format(timeout, current_url)
                 )
-            with pin(current_url):
+            with pin(current_url), hard_deadline(remaining):
                 response = session.get(
                     current_url,
                     timeout=remaining,

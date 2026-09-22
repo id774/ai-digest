@@ -11,14 +11,14 @@ v1.2.3 (Release Date: TBD)
   returns 404 instead of failing while rendering.
 - Require the sole build_report tool on the OpenAI-compatible backend without
   using a named function choice, allowing thinking models such as Kimi K3.
-- Require an explicit SUMMARIZER_BASE_URL for the openai-compatible backend,
-  failing early when it is missing or blank.
+- Require an explicit SUMMARIZER_BASE_URL and the optional openai package
+  for the openai-compatible backend, both checked before collecting.
 - Build a report in a staging directory and publish it whole only once
-  complete; render now copies only report.json and its referenced images.
+  complete; confine a stored asset - copied, rendered, served - to its dir.
 - Reject invalid numeric settings instead of silently using defaults or failing
   later in a run.
-- Scope configuration to each command and the viewer so unrelated settings cannot
-  stop independent paths.
+- Scope configuration to each command, the viewer, and capture_screens.py,
+  so an unrelated setting - LOOKBACK_HOURS on demo included - cannot stop it.
 - Reject impossible calendar dates before report work begins or archive paths are
   accepted.
 - Reject unusable explicit font paths instead of silently selecting another font.
@@ -33,15 +33,19 @@ v1.2.3 (Release Date: TBD)
 - Stop the standalone HTML from linking to a nonexistent archive index, and
   give its footer backend-neutral wording instead of an AI-specific claim.
 - Refuse an image-scraping target that resolves to a non-public address, pin
-  the connection past DNS rebinding, and bypass a proxy that could reach it.
-- Normalize a CLI override like its environment equivalent: trim scalars,
-  lower-case tokens, and clear a blank one to the same unset/default state.
-- Bound external input further: cap a fetch by wall-clock deadline, refuse a
-  decompression-bomb image when scraped or re-rendered, and cap body size.
+  the connection, canonical hostname included, past DNS rebinding or a proxy.
+- Normalize a CLI override like its environment equivalent: trim every
+  scalar, SUMMARIZER_BASE_URL included, lower-case tokens, clear blanks.
+- Bound external input further: a fetch's hard deadline now covers DNS
+  too; refuse a decompression-bomb image scraped or re-rendered; cap body.
 - Validate API-backed topic fields by type instead of str() coercion, require
   2-4 usable bullets, and select up to 3 sources by validity, not position.
-- Show a demo report's period as a sample label instead of a fabricated hour
-  count, and derive the summary image's data-source label from citations.
+- Show a safe demo period and citation-derived data-source label, validate
+  a custom demo sample's shape, and ignore a malformed stored citation URL.
+- Default an implicit run report date to the host's local calendar date,
+  not UTC's, which could otherwise name the day before or after it.
+- Classify an arXiv illustration source by its parsed host and path, not
+  by a URL substring, so an unrelated host is never misread as arXiv.
 
 v1.2.2 (2026-08-26)
 -------------------

@@ -52,7 +52,10 @@
 #    - Refuse a direct http page and a direct http image candidate
 #      without ever creating a Session.
 #    - Refuse an HTTPS to http downgrade redirect target.
-#    - Derive the HTTPS ar5iv URL from an http arXiv citation.
+#    - Derive the HTTPS ar5iv URL from an http arXiv citation, a
+#      subdomain of arxiv.org, and one carrying a version suffix or a
+#      .pdf extension; never fetch a non-arXiv host merely carrying the
+#      text 'arxiv.org/abs/...' somewhere in its own path or query.
 #    - Judge a public, loopback, private, link-local, unspecified and
 #      multicast address correctly, multicast in particular, since it
 #      reports is_global True and is excluded only by is_multicast.
@@ -77,9 +80,9 @@
 #  - Pillow, requests, beautifulsoup4
 #
 #  Version History:
-#  v1.2 2026-09-22
-#       Cover connection pinning, proxy bypass, a fetch-wide deadline, and
-#       decompression-bomb-warning-range refusal.
+#  v1.2 2026-09-23
+#       Cover canonical-hostname pinning, proxy bypass, a fetch-wide
+#       deadline, bomb-warning refusal, and arXiv host/path classification.
 #  v1.1 2026-09-08
 #       Cover HTTPS-only page and image retrieval.
 #  v1.0 2026-08-05
@@ -89,6 +92,7 @@
 
 import io
 import ipaddress
+import time
 import unittest
 from unittest import mock
 
@@ -174,13 +178,22 @@ class ReadCappedTest(unittest.TestCase):
         self.assertLessEqual(len(read), 6)
 
     def test_raises_once_the_fetch_deadline_passes_despite_progress(self):
-        response = FakeResponse([b"a" * 10, b"b" * 10, b"c" * 10])
-        setattr(response, transport._DEADLINE_ATTR, 5.0)
-        clock = mock.Mock(side_effect=[1.0, 6.0])
+        # A byte trickle just fast enough that no single chunk is large
+        # is still bounded by real elapsed wall-clock time: each
+        # simulated chunk costs real time, and the deadline is a real,
+        # short one, so the alarm this relies on actually has to fire.
+        def trickle():
+            for chunk in (b"a" * 10, b"b" * 10, b"c" * 10):
+                time.sleep(0.03)
+                yield chunk
 
-        with mock.patch.object(resolver.time, "monotonic", clock):
-            with self.assertRaises(resolver.FetchTimeoutError):
-                resolver._read_capped(response, 1000)
+        response = FakeResponse([])
+        response.iter_content = lambda chunk_size=None: trickle()
+        setattr(response, transport._DEADLINE_ATTR,
+               time.monotonic() + 0.05)
+
+        with self.assertRaises(resolver.FetchTimeoutError):
+            resolver._read_capped(response, 1000)
 
     def test_a_response_with_no_deadline_is_not_time_bounded(self):
         response = FakeResponse([b"a" * 10, b"b" * 10])
@@ -478,6 +491,54 @@ class ValidatePublicTargetTest(unittest.TestCase):
         self.assertEqual(other_host_answer, other)
         self.assertEqual(2, real_getaddrinfo.call_count)
 
+    def test_a_unicode_host_is_resolved_and_pinned_under_its_ascii_form(
+            self):
+        # requests IDNA-encodes a non-ASCII host before it ever reaches
+        # socket.getaddrinfo(); validating and pinning the raw Unicode
+        # string instead would leave the real connection's lookup, for
+        # the ASCII form, unpinned and unchecked.
+        addrinfo = [(None, None, None, None, ("93.184.216.34", 443))]
+        real_getaddrinfo = mock.Mock(return_value=addrinfo)
+
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               real_getaddrinfo):
+            with resolver.validate_and_pin_public_target(
+                    "https://MÜNCHEN.example/x"):
+                pinned = resolver.socket.getaddrinfo(
+                    "xn--mnchen-3ya.example", 443)
+
+        real_getaddrinfo.assert_called_once_with(
+            "xn--mnchen-3ya.example", None)
+        self.assertEqual([("93.184.216.34", 443)],
+                         [info[4] for info in pinned])
+
+    def test_a_unicode_host_rebinding_second_lookup_is_still_pinned(self):
+        # Same DNS-rebinding scenario as above, but for the ASCII form a
+        # Unicode hostname's real connection actually looks up.
+        public_answer = [(None, None, None, None, ("93.184.216.34", 443))]
+        rebound_answer = [(None, None, None, None, ("127.0.0.1", 443))]
+        real_getaddrinfo = mock.Mock(
+            side_effect=[public_answer, rebound_answer])
+
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               real_getaddrinfo):
+            with resolver.validate_and_pin_public_target(
+                    "https://MÜNCHEN.example/x"):
+                reconnect = resolver.socket.getaddrinfo(
+                    "xn--mnchen-3ya.example", 443)
+
+        self.assertEqual([("93.184.216.34", 443)],
+                         [info[4] for info in reconnect])
+        self.assertEqual(1, real_getaddrinfo.call_count)
+
+    def test_refuses_a_host_that_cannot_be_idna_encoded(self):
+        # A zero-width space is not a label idna can encode; the target
+        # must be refused rather than resolved under some other guess.
+        with self.assertRaises(resolver.PublicNetworkOnlyError):
+            with resolver.validate_and_pin_public_target(
+                    "https://exa​mple.test/x"):
+                pass
+
 
 class SSRFRefusalIntegrationTest(unittest.TestCase):
     """
@@ -561,6 +622,53 @@ class ArxivFigureUrlTest(unittest.TestCase):
         fetcher.assert_called_once()
         self.assertEqual("https://ar5iv.labs.arxiv.org/html/2601.00001",
                          fetcher.call_args.args[0])
+
+    def test_a_non_arxiv_host_carrying_the_text_in_its_path_is_not_fetched(
+            self):
+        # 'arxiv.org/abs/...' appearing somewhere in an unrelated URL -
+        # a redirector, a tracking link - must not be misread as an
+        # arXiv citation just because the substring is present.
+        with mock.patch.object(resolver, "_fetch") as fetcher:
+            result = resolver.arxiv_figure_url(
+                "https://evil.example/redirect?to=arxiv.org/abs/2301.12345",
+                5, "ai-digest")
+
+        self.assertIsNone(result)
+        fetcher.assert_not_called()
+
+    def test_a_host_only_resembling_arxiv_org_is_not_fetched(self):
+        with mock.patch.object(resolver, "_fetch") as fetcher:
+            result = resolver.arxiv_figure_url(
+                "https://not-arxiv.org/abs/2301.12345", 5, "ai-digest")
+
+        self.assertIsNone(result)
+        fetcher.assert_not_called()
+
+    def test_a_subdomain_of_arxiv_org_is_still_fetched(self):
+        with mock.patch.object(resolver, "_fetch",
+                               return_value=None) as fetcher:
+            resolver.arxiv_figure_url(
+                "https://export.arxiv.org/abs/2301.12345", 5, "ai-digest")
+
+        fetcher.assert_called_once()
+        self.assertEqual("https://ar5iv.labs.arxiv.org/html/2301.12345",
+                         fetcher.call_args.args[0])
+
+    def test_a_version_suffix_and_pdf_extension_still_resolve(self):
+        for url, expected_id in (
+                ("https://arxiv.org/abs/2301.12345v2", "2301.12345"),
+                ("https://arxiv.org/pdf/2301.12345.pdf", "2301.12345"),
+        ):
+            with self.subTest(url=url):
+                with mock.patch.object(resolver, "_fetch",
+                                       return_value=None) as fetcher:
+                    resolver.arxiv_figure_url(url, 5, "ai-digest")
+
+                fetcher.assert_called_once()
+                self.assertEqual(
+                    "https://ar5iv.labs.arxiv.org/html/{0}".format(
+                        expected_id),
+                    fetcher.call_args.args[0])
 
 
 if __name__ == "__main__":

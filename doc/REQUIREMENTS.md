@@ -116,21 +116,33 @@ reach the host's own internal network. Checking the address a hostname
 resolves to is not enough on its own, since a name server can answer a
 preflight lookup and the connection's own lookup differently; **the address
 actually connected to must be one of the addresses checked**, not a fresh
-answer a name server gives in between, or the check protects nothing. **An
-environment proxy must not be able to undo this check**: the resolver's own
-requests bypass a configured proxy so that the address checked is the address
-a connection actually reaches, rather than one a proxy resolves on its own.
-The arXiv API and the configured RSS and Atom feeds are not subject to this
-narrower rule; they keep the HTTPS-only requirement above, together with a
-bound on how much of a response body is read, so that an oversized or
-endless source fails that source alone rather than exhausting memory, and a
-request-wide time budget that a slow trickle of bytes cannot extend past.
+answer a name server gives in between, or the check protects nothing. **This
+must hold for a non-ASCII hostname too**, judged and pinned under the same
+canonical form the connection layer actually resolves, not the raw string a
+URL happens to spell it with, or a Unicode target's real connection would
+never be checked at all. **An environment proxy must not be able to undo
+this check**: the resolver's own requests bypass a configured proxy so that
+the address checked is the address a connection actually reaches, rather
+than one a proxy resolves on its own. The arXiv API and the configured RSS
+and Atom feeds are not subject to this narrower rule; they keep the
+HTTPS-only requirement above, together with a bound on how much of a
+response body is read, so that an oversized or endless source fails that
+source alone rather than exhausting memory, and a request-wide time budget -
+DNS resolution included, not only the connection and the read - that a slow
+trickle of bytes cannot extend past.
 
 An image accepted for illustration must also be safe to decode: a picture
 whose pixel count would exhaust the memory of the host is refused, at both
 the threshold Pillow raises on and the lower one it only warns at, whether it
 is being scraped for the first time or re-read from storage while a report is
 rebuilt.
+
+**A stored topic's image reference must not reach a file outside its own
+report directory**, whether read while rendering, copied while re-rendering,
+or requested through the viewer: an absolute path, a `..` escape, or a
+symlink leading elsewhere is refused the same way a missing file is, and the
+refusal degrades to no image, or to a 404, rather than serving or decoding
+whatever it pointed to.
 
 **An explicit font setting must name a font file that can actually be loaded**,
 or the command that read it fails rather than silently repairing the value by
@@ -163,6 +175,13 @@ figure in it is right.
 **Publication timestamps must be interpreted correctly**, and the host's local
 time zone must not silently shorten or lengthen the window. "The last N hours"
 must mean N hours on every host.
+
+**The date a report is filed under is a different question from the window it
+covers.** An unattended run with no explicit date names the archive directory
+after the host's own local calendar date — the day cron actually started it
+on — not UTC's, which could otherwise file it a day early or a day late
+around the date boundary; the window collected, and what the stored statistics
+record as generated, stay UTC-based regardless.
 
 **arXiv does not announce on weekends.** A run on a Saturday or a Sunday
 routinely collects no papers at all. That is an ordinary state and must not look
@@ -328,6 +347,13 @@ loading, storage, HTML, images, and the viewer reading the result — with no
 external service at all. It must be possible to direct that output somewhere
 other than the real archive.
 
+**A custom sample given in the bundled one's place is untrusted input, not a
+trusted local file.** A malformed shape — the wrong JSON type at the top
+level, a missing or unreal date, entries that are not a list of usable
+objects — must fail the command cleanly, the same way a malformed live
+answer does, rather than reaching the rest of the pipeline as an uncaught
+exception.
+
 ## 16. The summarization endpoint
 
 The topic editing backend is interchangeable, and the current design recognizes
@@ -343,6 +369,12 @@ three: **plain**, **anthropic-compatible** and **openai-compatible**.
   plain `http://` or malformed endpoint is a configuration error before
   anything is collected, not a value passed on to the SDK to fail with
   later.
+- **A backend's own optional dependency, when it needs one, is checked
+  before anything is collected too.** The openai-compatible backend needs
+  a package that is not installed by default; its absence must fail the
+  run immediately, the same as a missing credential or an invalid setting,
+  not only once summarization is finally reached after a collection pass
+  already spent.
 
 **Settings are read strictly**: an unknown value stops the run before anything
 is collected, rather than being read as the default, because a typo must not
@@ -399,7 +431,11 @@ The batch runs unattended, so how it fails is part of what it is.
 - a required artifact could not be generated.
 
 An empty report is never written as a success, and no half written report is
-left in the archive.
+left in the archive for any failure the process itself detects and handles -
+a generation error, a failed rename, an OS-level publication failure. This is
+not a guarantee against the process itself being killed or the host crashing
+mid-publish; the staged-replacement design in `doc/BASIC_DESIGN.md` states
+exactly what is and is not covered.
 
 **When nothing was collected, the diagnosis must distinguish at least three
 cases** — the sources could not be reached, the sources answered and had nothing

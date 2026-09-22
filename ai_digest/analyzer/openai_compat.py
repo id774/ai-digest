@@ -32,6 +32,9 @@
 #  - openai, installed separately: pip install openai
 #
 #  Version History:
+#  v1.5 2026-09-23
+#       Add package_available(), so cli.py can preflight the optional
+#       openai package before collecting, not only when a client is built.
 #  v1.4 2026-09-12
 #       Use required tool choice so thinking models can call the sole
 #       build_report tool.
@@ -79,6 +82,23 @@ def build_function_tool() -> Dict[str, Any]:
             "parameters": BUILD_REPORT_TOOL["input_schema"],
         },
     }
+
+
+def package_available() -> bool:
+    """
+    Return True when the optional openai package can be imported.
+
+    cli.py calls this before collecting anything, so a run that cannot
+    reach the openai-compatible backend fails immediately instead of
+    after spending a collection pass it was always going to discard;
+    _build_client() keeps its own check too, for a caller that reaches
+    it some other way.
+    """
+    try:
+        import openai  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def _build_client(api_key: str, base_url: Optional[str],

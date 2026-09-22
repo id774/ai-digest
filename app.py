@@ -42,6 +42,9 @@
 #  - Flask 3.x
 #
 #  Version History:
+#  v1.3 2026-09-23
+#       Serve a report asset only when it resolves directly inside its
+#       report directory, symlinks included, not merely past a path check.
 #  v1.2 2026-09-06
 #       Load only viewer settings instead of batch configuration.
 #  v1.1 2026-08-02
@@ -58,7 +61,8 @@ from flask import Flask, abort, render_template, send_from_directory
 from ai_digest import category_color, safe_url
 from ai_digest.render import STATIC_DIR, TEMPLATE_DIR
 from ai_digest.storage import (is_valid_date, list_dates, load_report,
-                               report_dir, summary_image_path)
+                               report_dir, report_local_asset_path,
+                               summary_image_path)
 from config import load_viewer_config
 
 config = load_viewer_config()
@@ -105,13 +109,19 @@ def report_asset(date: str, filename: str):
     Serve a file from that report directory; templates use it for topic
     illustrations.
 
-    send_from_directory rejects paths escaping the report directory, and
-    the date itself is validated before it is turned into a path.
+    report_local_asset_path() is what actually decides the file served:
+    it re-resolves filename directly inside the report directory,
+    symlinks included, so send_from_directory rejecting a lexical
+    escape in the request path is not the only thing standing between a
+    request and a file outside it. The date itself is validated before
+    it is turned into a path.
     """
     if not is_valid_date(date):
         abort(404)
     directory = report_dir(config.data_dir, date)
     if not os.path.isdir(directory):
+        abort(404)
+    if report_local_asset_path(directory, filename) is None:
         abort(404)
     return send_from_directory(directory, filename)
 

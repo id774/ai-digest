@@ -49,12 +49,17 @@
 #      untouched; on a publication failure it rolls the stored report
 #      back; on success it keeps the authoritative report.json and topic
 #      assets while replacing the derived artifacts.
+#    - 'run' with no --date files the report under the host's local
+#      calendar date, not UTC's, when the two disagree.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.1 2026-09-23
+#       Cover an implicit report date filing under the host's local
+#       calendar date, not UTC's, when the two disagree.
 #  v1.0 2026-09-06
 #       Initial release.
 #
@@ -66,6 +71,7 @@ import os
 import tempfile
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 from unittest import mock
 
 from PIL import Image
@@ -177,6 +183,37 @@ class RunNewDateTest(unittest.TestCase):
                 os.path.join(directory, "summary.png")))
             self.assertTrue(os.path.isfile(
                 os.path.join(directory, "index.html")))
+
+
+class ImplicitReportDateTest(unittest.TestCase):
+    """
+    An implicit report date - 'run' with --date left out - files the
+    report under the host's local calendar date, not UTC's, since cron
+    runs it on the host's own clock and a report naming the wrong day
+    around the date boundary is filed where nobody looking for it that
+    day would find it.
+    """
+
+    def test_files_the_report_under_the_local_date_not_utc(self):
+        # Local midday the day after a UTC instant that is still the
+        # previous UTC calendar day: the two dates disagree by exactly
+        # one day, so which one command_run() used is unambiguous.
+        local_now = datetime(2026, 8, 3, 12, 0, 0)
+        utc_now = datetime(2026, 8, 2, 15, 0, 0, tzinfo=timezone.utc)
+
+        class _FixedDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return utc_now if tz is not None else local_now
+
+        with tempfile.TemporaryDirectory() as data_dir:
+            config = make_config(data_dir)
+            with mock.patch.object(cli, "datetime", _FixedDatetime):
+                status = run_with_stub_collection(
+                    ["run", "--no-images"], config)
+
+            self.assertEqual(0, status)
+            self.assertEqual(["2026-08-03"], list_dates(data_dir))
 
 
 class RunSameDateTest(unittest.TestCase):

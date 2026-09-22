@@ -36,9 +36,9 @@
 #  - Standard library only
 #
 #  Version History:
-#  v1.6 2026-09-22
-#       Copy only report.json and its referenced topic images into a
-#       re-render staging directory, not the whole stored directory.
+#  v1.6 2026-09-23
+#       Copy only report.json and its referenced topic images, resolved
+#       report-local, into a re-render staging directory, never the rest.
 #  v1.5 2026-09-12
 #       Reject stored topic field types that downstream renderers cannot consume.
 #  v1.4 2026-09-06
@@ -122,6 +122,44 @@ def report_dir(data_dir: str, date: str) -> str:
     if not is_valid_date(date):
         raise ValueError("invalid report date: {0}".format(date))
     return os.path.join(data_dir, date)
+
+
+def report_local_asset_path(directory: str, name: str) -> Optional[str]:
+    """
+    Return the path of a report-local asset, or None when name does
+    not name one directly inside directory.
+
+    Every asset this application itself ever writes into a report
+    directory - report.json, the summary image, a topic illustration,
+    the standalone HTML and its stylesheet - is a bare file name with
+    no path separator, sitting directly in that directory. A stored
+    topic 'image' or a URL path segment naming one is untrusted by the
+    time it reaches here, whether it came from report.json, a crafted
+    request, or a symlink already sitting in the directory some other
+    way: an absolute path, a name carrying a path separator, and a
+    symlink that resolves outside directory are all refused the same
+    way a missing file is, rather than joined and opened on the
+    caller's behalf.
+
+    Args:
+        directory: Directory of one stored report, as report_dir()
+            returns it.
+        name: File name to resolve directly inside it.
+
+    Returns:
+        The path of the asset, unresolved, or None when name is not a
+        bare file name, does not exist, or resolves (symlinks
+        included) outside directory.
+    """
+    if not name or os.path.basename(name) != name:
+        return None
+    candidate = os.path.join(directory, name)
+    if not os.path.isfile(candidate):
+        return None
+    if os.path.dirname(os.path.realpath(candidate)) != os.path.realpath(
+            directory):
+        return None
+    return candidate
 
 
 def ensure_report_dir(data_dir: str, date: str) -> str:
@@ -296,8 +334,9 @@ def copy_existing_report(data_dir: str, date: str, staging_dir: str) -> None:
     other leftover file the stored directory happens to hold is not
     carried into the rebuild, since compose_image.compose() and
     build.write_report_html() write their own replacements afterwards.
-    A topic 'image' naming anything other than a bare file name in the
-    report directory is skipped, the same way a corrupt one would be.
+    A topic 'image' report_local_asset_path() does not resolve to a
+    file directly inside the report directory is skipped, the same way
+    a corrupt one would be.
 
     Args:
         data_dir: Root directory of the archive.
@@ -312,7 +351,8 @@ def copy_existing_report(data_dir: str, date: str, staging_dir: str) -> None:
     report = load_report(data_dir, date)
     if report is not None:
         for topic in report["topics"]:
-            if topic.image and os.path.basename(topic.image) == topic.image:
+            if topic.image and report_local_asset_path(
+                    source_dir, topic.image):
                 names.append(topic.image)
     for name in names:
         source_path = os.path.join(source_dir, name)

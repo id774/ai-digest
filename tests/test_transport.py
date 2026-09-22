@@ -56,15 +56,17 @@
 #  - requests
 #
 #  Version History:
-#  v1.1 2026-09-22
-#       Cover target_pin, trust_env, a fetch-wide elapsed deadline, and
-#       stricter HTTPS URL validation by hostname and port.
+#  v1.1 2026-09-23
+#       Cover target_pin, trust_env, a hard DNS-inclusive fetch-wide
+#       deadline, canonical hostname resolution, and stricter HTTPS URLs.
 #  v1.0 2026-09-08
 #       Initial release.
 #
 ########################################################################
 
 import contextlib
+import signal
+import time
 import unittest
 from unittest import mock
 
@@ -134,6 +136,87 @@ class IsHttpsUrlTest(unittest.TestCase):
     def test_rejects_a_non_numeric_port(self):
         self.assertFalse(
             transport.is_https_url("https://example.test:abc/x"))
+
+
+class HardDeadlineTest(unittest.TestCase):
+    """
+    hard_deadline() has to bound a real blocking call, DNS resolution
+    included, that requests' own timeout= cannot reach: these cases use
+    real, short deadlines around a real time.sleep() standing in for
+    any such call, so a mocked clock can never substitute for the
+    signal actually having to fire.
+    """
+
+    def test_interrupts_a_blocking_call_once_it_elapses(self):
+        started = time.monotonic()
+        with self.assertRaises(transport.FetchTimeoutError):
+            with transport.hard_deadline(0.05):
+                time.sleep(2)
+        # Interrupted promptly, not merely eventually completed: proves
+        # the block was actually cut off rather than run to the end.
+        self.assertLess(time.monotonic() - started, 1.0)
+
+    def test_does_not_raise_when_the_block_finishes_in_time(self):
+        with transport.hard_deadline(1):
+            pass
+
+    def test_raises_immediately_for_a_non_positive_deadline(self):
+        with self.assertRaises(transport.FetchTimeoutError):
+            with transport.hard_deadline(0):
+                self.fail("the block must not run at all")
+
+    def test_disarms_the_timer_after_a_normal_exit(self):
+        with transport.hard_deadline(5):
+            pass
+        self.assertEqual((0.0, 0.0),
+                         signal.getitimer(signal.ITIMER_REAL))
+
+    def test_disarms_the_timer_after_an_exception(self):
+        with self.assertRaises(ValueError):
+            with transport.hard_deadline(5):
+                raise ValueError("boom")
+        self.assertEqual((0.0, 0.0),
+                         signal.getitimer(signal.ITIMER_REAL))
+
+    def test_restores_the_previous_signal_handler(self):
+        previous = signal.getsignal(signal.SIGALRM)
+        with transport.hard_deadline(1):
+            pass
+        self.assertIs(previous, signal.getsignal(signal.SIGALRM))
+
+
+class CanonicalConnectHostnameTest(unittest.TestCase):
+    """
+    canonical_connect_hostname() must return exactly what urllib3 hands
+    socket.getaddrinfo() for the same URL, since a caller pinning or
+    validating a target by hostname relies on that identity matching.
+    """
+
+    def test_an_ascii_host_is_lower_cased(self):
+        self.assertEqual(
+            "example.test",
+            transport.canonical_connect_hostname("https://Example.TEST/x"))
+
+    def test_a_unicode_host_is_idna_encoded(self):
+        self.assertEqual(
+            "xn--mnchen-3ya.example",
+            transport.canonical_connect_hostname(
+                "https://MÜNCHEN.example/x"))
+
+    def test_a_port_is_not_part_of_the_hostname(self):
+        self.assertEqual(
+            "example.test",
+            transport.canonical_connect_hostname(
+                "https://example.test:8443/x"))
+
+    def test_raises_for_a_hostless_url(self):
+        with self.assertRaises(ValueError):
+            transport.canonical_connect_hostname("https:///x")
+
+    def test_raises_for_a_host_urllib3_cannot_parse_or_encode(self):
+        with self.assertRaises(ValueError):
+            transport.canonical_connect_hostname(
+                "https://exa​mple.test/x")
 
 
 class InitialTargetRefusalTest(unittest.TestCase):
@@ -540,14 +623,21 @@ class ReadCappedContentTest(unittest.TestCase):
 
     def test_stops_once_the_deadline_passes_despite_ongoing_progress(self):
         # A byte trickle just fast enough that no single chunk ever
-        # exceeds the limit must still be bounded by elapsed time.
-        response = _StreamedFakeResponse([b"a" * 10, b"b" * 10, b"c" * 10])
-        setattr(response, transport._DEADLINE_ATTR, 5.0)
-        clock = mock.Mock(side_effect=[1.0, 6.0])
+        # exceeds the limit is still bounded by real elapsed wall-clock
+        # time: each simulated chunk costs real time against a real,
+        # short deadline, so the alarm this relies on actually fires.
+        def trickle():
+            for chunk in (b"a" * 10, b"b" * 10, b"c" * 10):
+                time.sleep(0.03)
+                yield chunk
 
-        with mock.patch.object(transport.time, "monotonic", clock):
-            with self.assertRaises(transport.FetchTimeoutError):
-                transport.read_capped_content(response, 1000)
+        response = _StreamedFakeResponse([])
+        response.iter_content = lambda chunk_size=None: trickle()
+        setattr(response, transport._DEADLINE_ATTR,
+               time.monotonic() + 0.05)
+
+        with self.assertRaises(transport.FetchTimeoutError):
+            transport.read_capped_content(response, 1000)
 
     def test_a_response_with_no_deadline_is_not_time_bounded(self):
         response = _StreamedFakeResponse([b"a" * 10, b"b" * 10])

@@ -167,7 +167,15 @@ same collection rules.
   and refuses to start the next hop, or to keep reading a response body, once
   it has passed, so a server that answers with one byte per timeout interval
   cannot hold a request open past the configured budget by resetting a
-  per-read timer.
+  per-read timer. The remaining budget of each hop is also passed to
+  `transport.hard_deadline()`, a `SIGALRM`-based bound around DNS resolution,
+  connecting, the TLS handshake and the read alike: `requests`' own `timeout=`
+  argument never reaches `socket.getaddrinfo()`, so a name server that never
+  answers would otherwise hold a hop open regardless of the budget computed
+  for it. A signal delivered mid-syscall interrupts it outright, ending the
+  operation there rather than letting it continue in the background past the
+  deadline; the interrupt itself raises `FetchTimeoutError` instead of the
+  call being silently retried.
 - **Every collector request goes through one HTTPS transport boundary.**
   The initial target and each resolved redirect target must be absolute HTTPS;
   a downgrade is refused before the next request is sent. `is_https_url()`
@@ -386,7 +394,13 @@ Per topic, the sources are tried in order until one yields an image; otherwise a
 card is drawn.
 
 The resolver reads the figure of a paper from its HTML rendering, or the image an
-article declares for social sharing. The resolver enforces a page-byte cap, an
+article declares for social sharing. A source is recognized as an arXiv paper by
+its parsed hostname - `arxiv.org` or a subdomain of it - and the start of its
+path, `/abs/<id>` or `/pdf/<id>`, not by searching the whole URL for that text
+as a substring: an unrelated host that merely carries `arxiv.org/abs/...`
+somewhere in its own path or query, a redirector or a tracking link, must not
+be misread as an arXiv citation and pointed at the wrong ar5iv rendering.
+The resolver enforces a page-byte cap, an
 image-byte cap, and a minimum image side **while reading** rather than after
 buffering, so oversized or unusable material is rejected before it is fully
 retained, and a decoder refusing an image is an ordinary "no image" rather than
@@ -427,6 +441,15 @@ configured feeds, never a target named by material collected from outside.
 An HTTP article citation is never fetched for illustration, an HTTP image
 candidate is never downloaded, and every one of these refusals degrades to
 the normal fallback card rather than the run.
+
+The hostname validated, resolved and pinned is the one `canonical_connect_hostname()`
+derives, not the raw string a URL happens to spell it with: requests IDNA-encodes
+a non-ASCII host through the same `urllib3.util.parse_url()` before it ever
+reaches `socket.getaddrinfo()`, so pinning the original Unicode string would
+leave the real connection's own lookup, for the encoded form, unpinned and
+free to answer a rebound address instead. Resolving, validating and pinning
+under that identical canonical form is what keeps a Unicode scraping target
+covered by the same guarantee as an ASCII one.
 
 Pinning alone is not enough when an environment proxy is configured: a
 `requests.Session` that trusts `HTTPS_PROXY` and similar variables hands the
@@ -530,6 +553,16 @@ The following properties of this module carry weight:
   cannot take the archive down; an impossible calendar date reaches this same
   defensive path, since `report_dir()` raising `ValueError` for it is caught
   where every other lookup failure is.
+- **A stored asset is resolved through `report_local_asset_path()` alone.**
+  A topic's `image` field is untrusted by the time a consumer opens it —
+  read from `report.json` on disk, or named in a URL path segment — so an
+  absolute path, a `..` escape, a name carrying a path separator, or a
+  symlink resolving outside the report directory is refused the same way a
+  missing file is. `compose_image.py`'s card renderer, `copy_existing_report()`'s
+  re-render staging copy, and `app.py`'s `/reports/<date>/assets/<file>` route
+  all resolve a stored asset through this one function, so an unsafe
+  reference degrades to no image or a 404 instead of reaching the file
+  system on the caller's behalf.
 
 Listing returns only directories that are named like a date, hold a report,
 *and* name a calendar date that actually exists, newest first.
@@ -572,6 +605,19 @@ or `style.css` a previous version left behind does not survive into the
 rebuild — regenerates the summary image and the HTML there, and publishes
 the same way, so a failed re-render never changes the report that was
 already on disk.
+
+What this design guarantees is failure-atomic replacement for a handled
+failure: an ordinary Python exception, or a rename the operating system
+refuses, leaves the previous report exactly as it was, or names the backup
+that still holds it. It is not a crash-safe filesystem transaction: each
+individual `os.rename()` is atomic on its own, but the two-rename replacement
+of an already-published date - moving the old tree aside, then moving the
+new one into place - is not one atomic step as a whole. A process killed, or
+a host that crashes, between those two renames can leave `<DATA_DIR>/<date>`
+absent until the run is repeated; nothing in this design journals across that
+gap or restores it automatically. This scope is deliberate: the repository is
+a single unattended daily batch, not a database, and a rerun is always the
+next scheduled run away.
 
 The staging and backup directories are managed by `ai_digest/storage.py`
 alone, the module that already owns every path computation of the
@@ -645,12 +691,22 @@ custom sample when `--date` is not given; that date bypasses the parser, so
 `command_demo()` checks it with the same `is_valid_date()` before staging,
 illustrating or writing anything, failing the command instead.
 
+`run`'s own implicit date, `--date` left out, is the host's local calendar
+date rather than UTC's: cron starts it on the host's own clock, and the two
+can name different days around the date boundary depending on how far the
+host's zone sits from UTC. Only which date directory an unattended run's
+report lands in follows local time; the collected window and `generated_at`
+stay UTC-based, unaffected by it.
+
 ### One run, in order
 
 1. **Validate the settings needed before collection** — the backend name
-   first, then the credential, model, retry budget, output budget and timeout,
-   and for the anthropic-compatible backend the three protocol options, then
-   the effective `NEWS_FEED_URLS` as HTTPS targets. Nothing has been collected
+   first; for the openai-compatible backend, whether the optional `openai`
+   package can even be imported, before spending a collection pass on a run
+   that was always going to fail building its client; then the credential,
+   model, retry budget, output budget and timeout, and for the
+   anthropic-compatible backend the three protocol options, then the
+   effective `NEWS_FEED_URLS` as HTTPS targets. Nothing has been collected
    and no request spent at this point.
 2. **Collect**, papers then news, merged into one outcome.
 3. **Nothing collected?** Log which of the four cases it was, and fail.
@@ -696,6 +752,16 @@ one response, so a demo run costs nothing and renders identically everywhere.
 `--data-dir` directs the output somewhere other than the real archive.
 [`DEMO.md`](DEMO.md) states what it replaces and how it differs from a
 collected report.
+
+A custom `--input` sample is untrusted structured input even though it comes
+from local disk: `demo.build_topics()` checks its shape before building
+anything from it — the top level an object, `date` a real calendar date,
+`entries` a non-empty list of objects each with a nonblank `title` and a
+safe absolute `http` or `https` `url` — raising `ValueError` on the first
+violation rather than letting a malformed one reach `Entry.from_dict()` or
+`is_valid_date()` as an uncaught `AttributeError` or `TypeError`. Its
+`build_report` object is not checked here; it goes through the same
+`to_topics()` validation a live tool call's answer does.
 
 ## 15. The viewer
 
@@ -744,13 +810,15 @@ resolves exactly that scope and nothing past it.
 | `load_viewer_config()` | `app.py` | `DATA_DIR`, `PORT` |
 | `load_list_config()` | `cli.py list` | `DATA_DIR` |
 | `load_render_config()` | `cli.py render` | `DATA_DIR`, `AI_DIGEST_FONT_PATH`, `LOOKBACK_HOURS` |
-| `load_demo_config()` | `cli.py demo` | `DATA_DIR`, `AI_DIGEST_FONT_PATH`, `MAX_TOPICS`, `LOOKBACK_HOURS` |
+| `load_demo_config()` | `cli.py demo` | `DATA_DIR`, `AI_DIGEST_FONT_PATH`, `MAX_TOPICS` |
 | `load_run_config()` | `cli.py run` | every batch and endpoint setting except `PORT` |
 
 `LOOKBACK_HOURS` belongs to `render` as well as `run`, because it is what a
 stored report predating that statistic falls back on when its window is
-redrawn. `PORT` belongs to the viewer alone: `run` never resolves it, so an
-invalid one cannot stop a batch run, exactly as a malformed batch setting
+redrawn; `demo` does not resolve it at all, since it collects nothing and
+records no window of its own. `PORT` belongs to the viewer alone: `run`
+never resolves it, so an invalid one cannot stop a batch run, exactly as a
+malformed batch setting
 cannot stop the viewer. `load_config()`, which resolves every setting `PORT`
 included, still exists for compatibility and for a test exercising a setting
 on its own, but no execution path calls it; `cli.py` calls the loader its
