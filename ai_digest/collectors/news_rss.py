@@ -27,6 +27,9 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.4 2026-09-22
+#       Cap the read body at MAX_COLLECTOR_RESPONSE_BYTES, failing an
+#       oversized feed the same way an unreachable one fails.
 #  v1.3 2026-09-08
 #       Fetch configured feeds only over HTTPS, including redirects.
 #  v1.2 2026-08-03
@@ -50,7 +53,7 @@ import feedparser
 import requests
 
 from ai_digest import CollectionResult, Entry, is_safe_url
-from ai_digest.transport import https_get
+from ai_digest.transport import https_get, read_capped_content
 
 # Strip HTML markup from feed summaries; feeds mix plain text, escaped
 # HTML and full articles, and only the readable text is useful here.
@@ -119,9 +122,9 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
 
     for url in feed_urls:
         try:
-            with https_get(url, timeout, user_agent) as response:
+            with https_get(url, timeout, user_agent, stream=True) as response:
                 response.raise_for_status()
-                content = response.content
+                content = read_capped_content(response)
         except requests.RequestException as error:
             logger.warning("feed request failed for %s: %s", url, error)
             result.sources_failed += 1

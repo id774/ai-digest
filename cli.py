@@ -117,6 +117,9 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v2.1 2026-09-22
+#       Clear a scalar override given blank to its unset/default state
+#       instead of holding the literal blank string.
 #  v2.0 2026-09-12
 #       Reject --max-topics values above the six-topic report limit.
 #  v1.9 2026-09-08
@@ -155,7 +158,7 @@ import os
 import sys
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ai_digest import CollectionResult, Topic, __version__, demo
 from ai_digest.analyzer import openai_compat, plain, summarizer
@@ -167,8 +170,8 @@ from ai_digest.storage import (ReportPublicationError, copy_existing_report,
                                is_valid_date, list_dates, load_report,
                                publication_workspace, report_dir,
                                write_report_json)
-from config import (MAX_REPORT_TOPICS, SUMMARIZER_BACKENDS,
-                    SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
+from config import (BASE_DIR, DEFAULT_USER_AGENT, MAX_REPORT_TOPICS,
+                    SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                     SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
                     Config, is_usable_font_path, load_demo_config,
                     load_list_config, load_render_config, load_run_config,
@@ -300,21 +303,46 @@ def news_feed_urls_option(value: str) -> List[str]:
         raise argparse.ArgumentTypeError(str(error))
 
 
+# Scalar string options where an explicit blank is not "leave this
+# alone" but a request to clear a configured value back to what the
+# same setting means when it is blank in the environment or in .env:
+# each factory below mirrors that field's own resolution in config.py.
+# font_path, the list options and the choice options keep their own
+# existing semantics and are not in this table.
+_BLANK_OVERRIDE_DEFAULTS: Dict[str, Callable[[], Any]] = {
+    "data_dir": lambda: os.path.abspath(
+        os.path.join(BASE_DIR, "data", "reports")),
+    "summarizer_base_url": lambda: None,
+    "summarizer_model": lambda: "",
+    "user_agent": lambda: DEFAULT_USER_AGENT,
+}
+
+
 def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
     """
     Replace the settings the command line gave, and only those.
 
     An option left out is None and keeps whatever the environment or
     .env configured, so an invocation without overrides behaves as it
-    did before they existed. The replacements are logged, because a
-    report has to stay explainable from the run that wrote it.
+    did before they existed. An option given as an explicit blank
+    string is not left out, though: for the fields in
+    _BLANK_OVERRIDE_DEFAULTS, it clears a nonblank environment or
+    .env value back to that field's own unset/default state, the same
+    state a blank value in the environment already means, rather than
+    holding the literal blank string. The replacements are logged,
+    because a report has to stay explainable from the run that wrote
+    it.
     """
     given = vars(args)
     overrides: Dict[str, Any] = {}
     for name in OVERRIDABLE_FIELDS:
         value = given.get(name)
-        if value is not None:
-            overrides[name] = value
+        if value is None:
+            continue
+        if (name in _BLANK_OVERRIDE_DEFAULTS and isinstance(value, str)
+                and not value.strip()):
+            value = _BLANK_OVERRIDE_DEFAULTS[name]()
+        overrides[name] = value
     if not overrides:
         return config
 
@@ -688,8 +716,8 @@ def add_collection_options(parser: argparse.ArgumentParser) -> None:
                         help="timeout of every request, in seconds "
                              "(HTTP_TIMEOUT)")
     parser.add_argument("--user-agent",
-                        help="User-Agent sent with every request "
-                             "(USER_AGENT)")
+                        help="User-Agent sent with every collector and "
+                             "scraper request (USER_AGENT)")
 
 
 def add_summarizer_options(parser: argparse.ArgumentParser) -> None:

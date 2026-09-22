@@ -110,9 +110,19 @@ also resolve to a public network address: a target whose host is a loopback,
 private, link-local, unspecified, multicast or otherwise non-global address is
 refused before the request is sent, on the initial target and on every
 redirect hop alike, closing the path a scraped page could otherwise use to
-reach the host's own internal network. The arXiv API and the configured RSS
-and Atom feeds are not subject to this narrower rule; they keep the
-HTTPS-only requirement above.
+reach the host's own internal network. Checking the address a hostname
+resolves to is not enough on its own, since a name server can answer a
+preflight lookup and the connection's own lookup differently; **the address
+actually connected to must be one of the addresses checked**, not a fresh
+answer a name server gives in between, or the check protects nothing. The
+arXiv API and the configured RSS and Atom feeds are not subject to this
+narrower rule; they keep the HTTPS-only requirement above, together with a
+bound on how much of a response body is read, so that an oversized or
+endless source fails that source alone rather than exhausting memory.
+
+An image accepted for illustration must also be safe to decode: a picture
+whose pixel count would exhaust the memory of the host is refused, at both
+the threshold Pillow raises on and the lower one it only warns at.
 
 **An explicit font setting must name a font file that can actually be loaded**,
 or the command that read it fails rather than silently repairing the value by

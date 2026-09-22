@@ -32,10 +32,14 @@ v1.2.3 (Release Date: TBD)
   the category as a source failure.
 - Stop the standalone HTML from linking to a nonexistent archive index, and
   give its footer backend-neutral wording instead of an AI-specific claim.
-- Refuse an image-scraping target that resolves to a non-public address,
-  closing an SSRF path through scraped source pages.
-- Treat a whitespace-only SUMMARIZER_API_KEY, SUMMARIZER_AUTH_TOKEN or
-  SUMMARIZER_BASE_URL as unset instead of a configured value.
+- Refuse an image-scraping target that resolves to a non-public address, and
+  pin the connection to the validated address to close a DNS rebinding gap.
+- Treat a blank scalar setting, from the environment or from an explicit CLI
+  override, as unset/default instead of holding the literal blank string.
+- Bound external input further: refuse a decompression-bomb-warning-range
+  image, and cap a collector response body at 8 MiB.
+- Validate API-backed topic fields by type instead of coercing them with
+  str(), and require 2 to 4 usable bullets per topic.
 
 v1.2.2 (2026-08-26)
 -------------------

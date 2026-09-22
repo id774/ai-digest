@@ -63,12 +63,18 @@
 #    - Continue with the next arXiv category after one exhausts its
 #      HTTP 429 retries.
 #    - Never retry an arXiv category for a non-429 HTTP error.
+#    - Stream both collectors' requests, parse a body within the response
+#      cap normally, and fail only the oversized source, continuing with
+#      the next one, when the cap is exceeded.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.3 2026-09-22
+#       Cover the collector response body cap: streaming, normal parsing
+#       in-cap, and an oversized source failing without ending the run.
 #  v1.2 2026-09-15
 #       Cover bounded retry handling for arXiv HTTP 429 responses.
 #  v1.1 2026-09-08
@@ -166,6 +172,11 @@ class _FakeHttpsResponse:
                 "{0} error".format(self.status_code), response=self)
         return None
 
+    def iter_content(self, chunk_size=None):
+        chunk_size = chunk_size or len(self.content) or 1
+        for start in range(0, len(self.content), chunk_size):
+            yield self.content[start:start + chunk_size]
+
 
 def _collect_news(links, lookback_hours=24):
     """ Run the news collector over stubbed feed entries. """
@@ -261,6 +272,98 @@ class ArxivEndpointTest(unittest.TestCase):
         url = getter.call_args.args[0]
         self.assertTrue(url.startswith(
             "https://export.arxiv.org/api/query?"))
+
+
+class ResponseBodyCapTest(unittest.TestCase):
+    """
+    Both collectors read their body through
+    transport.read_capped_content(), which refuses to buffer past
+    MAX_COLLECTOR_RESPONSE_BYTES: an oversized source becomes an
+    ordinary source failure and the run continues with the rest,
+    exactly like any other unreachable source. Streaming is what makes
+    the cap actually bound memory, so each collector's request is
+    checked too.
+    """
+
+    def test_arxiv_streams_the_request(self):
+        response = _FakeHttpsResponse(b"<feed></feed>")
+        parsed = SimpleNamespace(entries=[], bozo=0)
+        with mock.patch.object(arxiv, "https_get",
+                               return_value=response) as getter:
+            with mock.patch.object(arxiv.feedparser, "parse",
+                                   return_value=parsed):
+                arxiv._fetch_category("cs.AI", 10, 15, "ai-digest")
+
+        self.assertTrue(getter.call_args.kwargs.get("stream"))
+
+    def test_news_streams_the_request(self):
+        parsed = SimpleNamespace(feed=SimpleNamespace(title="Feed"),
+                                 entries=[])
+        response = _FakeHttpsResponse(b"<rss/>")
+        with mock.patch.object(news_rss, "https_get",
+                               return_value=response) as getter:
+            with mock.patch.object(news_rss.feedparser, "parse",
+                                   return_value=parsed):
+                news_rss.collect(["https://feed.test/rss"], 24)
+
+        self.assertTrue(getter.call_args.kwargs.get("stream"))
+
+    def test_a_body_within_the_cap_still_parses(self):
+        body = b"<feed></feed>"
+        response = _FakeHttpsResponse(body)
+        parsed = SimpleNamespace(
+            entries=[_feed_entry("https://arxiv.org/abs/1")], bozo=0)
+        with mock.patch.object(arxiv, "https_get", return_value=response):
+            with mock.patch.object(arxiv.feedparser, "parse",
+                                   return_value=parsed) as parser:
+                entries, failure = arxiv._fetch_category(
+                    "cs.AI", 10, 15, "ai-digest")
+
+        self.assertEqual("", failure)
+        self.assertEqual(1, len(entries))
+        parser.assert_called_once_with(body)
+
+    def test_an_oversized_arxiv_category_becomes_an_ordinary_source_failure(
+            self):
+        oversized = b"x" * (transport.MAX_COLLECTOR_RESPONSE_BYTES + 1)
+        response = _FakeHttpsResponse(oversized)
+        with mock.patch.object(arxiv, "https_get", return_value=response):
+            with self.assertLogs(arxiv.logger, "WARNING"):
+                entries, failure = arxiv._fetch_category(
+                    "cs.AI", 10, 15, "ai-digest")
+
+        self.assertEqual([], entries)
+        self.assertTrue(failure)
+
+    def test_an_oversized_feed_becomes_an_ordinary_source_failure(self):
+        oversized = b"x" * (transport.MAX_COLLECTOR_RESPONSE_BYTES + 1)
+        response = _FakeHttpsResponse(oversized)
+        with mock.patch.object(news_rss, "https_get", return_value=response):
+            with self.assertLogs(news_rss.logger, "WARNING"):
+                result = news_rss.collect(["https://feed.test/rss"], 24)
+
+        self.assertEqual([], result.entries)
+        self.assertEqual(1, result.sources_failed)
+        self.assertTrue(result.failures)
+
+    def test_continues_with_the_next_feed_after_an_oversized_one(self):
+        oversized = b"x" * (transport.MAX_COLLECTOR_RESPONSE_BYTES + 1)
+        parsed = SimpleNamespace(
+            feed=SimpleNamespace(title="Feed"),
+            entries=[_feed_entry("https://example.test/ok")])
+        with mock.patch.object(news_rss, "https_get", side_effect=[
+                _FakeHttpsResponse(oversized), _FakeHttpsResponse(b"<rss/>")]):
+            with mock.patch.object(news_rss.feedparser, "parse",
+                                   return_value=parsed):
+                with self.assertLogs(news_rss.logger, "WARNING"):
+                    result = news_rss.collect(
+                        ["https://feed.test/big", "https://feed.test/ok"],
+                        24)
+
+        self.assertEqual(2, result.sources_total)
+        self.assertEqual(1, result.sources_failed)
+        self.assertEqual(1, result.sources_read)
+        self.assertEqual(1, len(result.entries))
 
 
 class ArxivRateLimitRetryTest(unittest.TestCase):

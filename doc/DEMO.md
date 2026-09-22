@@ -31,13 +31,14 @@ overwrite the same directory instead of filling the archive. Delete
 
 ## What the demo replaces
 
-Everything that shapes the output is the pipeline itself. Only the two
-stages that need outbound access are replaced:
+Everything that shapes the output is the pipeline itself. Only the stages
+that need outbound access are replaced:
 
 | Stage | `cli.py run` | `cli.py demo` |
 |---|---|---|
 | Collection | arXiv API and the news feeds | the `entries` array of the sample |
 | Summarization | a `build_report` tool call through the configured API-backed backend | the `build_report` object of the sample |
+| Illustration | scraping the paper's figure or the article's Open Graph image | a locally drawn fallback card for every topic |
 
 The stored payload goes through `summarizer.to_topics()`, the same
 validation a live tool call passes, and the topics are then illustrated,

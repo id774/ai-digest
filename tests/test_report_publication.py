@@ -303,7 +303,7 @@ class DemoPublicationTest(unittest.TestCase):
             "build_report": {"topics": [{
                 "category": "テスト",
                 "title": "見出し",
-                "bullets": ["箇条書き。"],
+                "bullets": ["箇条書き其の一。", "箇条書き其の二。"],
                 "source_indexes": [0],
             }]},
         }

@@ -24,9 +24,9 @@
 #
 #  No request is made. resolver.https_get is replaced by a stub
 #  returning a stand-in response for most cases; the direct HTTP source
-#  cases go through the real transport helper with requests.Session
-#  mocked instead, so that "no Session is ever created" is proven rather
-#  than assumed. The suite needs no network either way.
+#  and SSRF refusal cases go through the real transport helper with
+#  requests.Session mocked instead, so that "no request is ever sent" is
+#  proven rather than assumed. The suite needs no network either way.
 #
 #  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/ai-digest
@@ -64,7 +64,13 @@
 #    - Prove, through the real transport with Session mocked, that a
 #      direct loopback or private target, a DNS name resolving to one, and
 #      a redirect from a public target to a private one are all refused
-#      before a Session is ever created or a next request is sent.
+#      before a next request is sent.
+#    - Prove that validate_and_pin_public_target() pins a hostname's
+#      resolution to the address it validated, restores the real resolver
+#      on exit, and leaves a lookup for any other host untouched, so a
+#      second, rebound DNS answer for the pinned host is never reached.
+#    - Refuse a decompression-bomb-warning-range image the same as one
+#      past the error threshold, and keep an ordinary image usable.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -72,8 +78,8 @@
 #
 #  Version History:
 #  v1.2 2026-09-22
-#       Cover the public-network-only SSRF boundary: address judgment,
-#       validate_public_target(), and refusal before any request is sent.
+#       Cover connection pinning against DNS rebinding, and
+#       decompression-bomb-warning-range refusal.
 #  v1.1 2026-09-08
 #       Cover HTTPS-only page and image retrieval.
 #  v1.0 2026-08-05
@@ -261,6 +267,38 @@ class DownloadImageTest(unittest.TestCase):
                 resolver._download_image("https://example.test/i.png",
                                          5, "ai-digest"))
 
+    def test_a_decompression_bomb_warning_range_image_also_yields_none(self):
+        # Below 2x MAX_IMAGE_PIXELS, Pillow only warns instead of
+        # raising; that range must be refused just as the error range
+        # is, not let through as a usable image.
+        side = int((1.5 * Image.MAX_IMAGE_PIXELS) ** 0.5) + 10
+        buffer = io.BytesIO()
+        Image.new("L", (side, side)).save(buffer, format="PNG")
+        self.assertLess(len(buffer.getvalue()), resolver.MAX_IMAGE_BYTES)
+
+        with mock.patch.object(resolver, "_fetch",
+                               return_value=(buffer.getvalue(),
+                                             "https://example.test/i.png")):
+            self.assertIsNone(
+                resolver._download_image("https://example.test/i.png",
+                                         5, "ai-digest"))
+
+    def test_an_ordinary_image_is_still_usable(self):
+        buffer = io.BytesIO()
+        Image.new("RGB", (300, 300), color=(10, 20, 30)).save(
+            buffer, format="PNG")
+
+        with mock.patch.object(resolver, "_fetch",
+                               return_value=(buffer.getvalue(),
+                                             "https://example.test/i.png")):
+            result = resolver._download_image("https://example.test/i.png",
+                                              5, "ai-digest")
+
+        self.assertIsNotNone(result)
+        content, extension = result
+        self.assertEqual(buffer.getvalue(), content)
+        self.assertEqual("png", extension)
+
 
 class PublicAddressJudgmentTest(unittest.TestCase):
     """ _is_public_address() judges is_global and multicast together. """
@@ -306,39 +344,49 @@ class PublicAddressJudgmentTest(unittest.TestCase):
 
 class ValidatePublicTargetTest(unittest.TestCase):
     """
-    validate_public_target() is the target_validator the resolver hands
-    to https_get(), so it must refuse before any request rather than
-    after: these cases call it directly, on both a literal IP host and
-    a DNS name resolved through a mocked getaddrinfo().
+    validate_and_pin_public_target() is the target_pin the resolver
+    hands to https_get(), so it must refuse before any request rather
+    than after: these cases enter it directly, on both a literal IP
+    host and a DNS name resolved through a mocked getaddrinfo().
     """
 
     def test_accepts_a_public_ip_literal(self):
-        resolver.validate_public_target("https://8.8.8.8/x")
+        with resolver.validate_and_pin_public_target("https://8.8.8.8/x"):
+            pass
 
     def test_refuses_a_loopback_ip_literal(self):
         with self.assertRaises(resolver.PublicNetworkOnlyError):
-            resolver.validate_public_target("https://127.0.0.1/x")
+            with resolver.validate_and_pin_public_target(
+                    "https://127.0.0.1/x"):
+                pass
 
     def test_refuses_a_private_ip_literal(self):
         with self.assertRaises(resolver.PublicNetworkOnlyError):
-            resolver.validate_public_target("https://192.168.1.1/x")
+            with resolver.validate_and_pin_public_target(
+                    "https://192.168.1.1/x"):
+                pass
 
     def test_refuses_a_url_with_no_host(self):
         with self.assertRaises(resolver.PublicNetworkOnlyError):
-            resolver.validate_public_target("https:///x")
+            with resolver.validate_and_pin_public_target("https:///x"):
+                pass
 
     def test_accepts_a_dns_name_resolving_to_a_public_address(self):
         addrinfo = [(None, None, None, None, ("93.184.216.34", 443))]
         with mock.patch.object(resolver.socket, "getaddrinfo",
                                return_value=addrinfo):
-            resolver.validate_public_target("https://example.test/x")
+            with resolver.validate_and_pin_public_target(
+                    "https://example.test/x"):
+                pass
 
     def test_refuses_a_dns_name_resolving_to_a_private_address(self):
         addrinfo = [(None, None, None, None, ("10.0.0.9", 443))]
         with mock.patch.object(resolver.socket, "getaddrinfo",
                                return_value=addrinfo):
             with self.assertRaises(resolver.PublicNetworkOnlyError):
-                resolver.validate_public_target("https://internal.example/x")
+                with resolver.validate_and_pin_public_target(
+                        "https://internal.example/x"):
+                    pass
 
     def test_refuses_when_any_resolved_address_is_non_global(self):
         addrinfo = [
@@ -348,14 +396,67 @@ class ValidatePublicTargetTest(unittest.TestCase):
         with mock.patch.object(resolver.socket, "getaddrinfo",
                                return_value=addrinfo):
             with self.assertRaises(resolver.PublicNetworkOnlyError):
-                resolver.validate_public_target("https://mixed.example/x")
+                with resolver.validate_and_pin_public_target(
+                        "https://mixed.example/x"):
+                    pass
 
     def test_dns_resolution_failure_raises_the_same_error_family(self):
         with mock.patch.object(
                 resolver.socket, "getaddrinfo",
                 side_effect=resolver.socket.gaierror("name not known")):
             with self.assertRaises(resolver.PublicNetworkOnlyError):
-                resolver.validate_public_target("https://nowhere.example/x")
+                with resolver.validate_and_pin_public_target(
+                        "https://nowhere.example/x"):
+                    pass
+
+    def test_restores_getaddrinfo_after_the_context_exits(self):
+        addrinfo = [(None, None, None, None, ("93.184.216.34", 443))]
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               return_value=addrinfo):
+            patched_during_test = resolver.socket.getaddrinfo
+            with resolver.validate_and_pin_public_target(
+                    "https://example.test/x"):
+                self.assertIsNot(patched_during_test,
+                                 resolver.socket.getaddrinfo)
+            self.assertIs(patched_during_test, resolver.socket.getaddrinfo)
+
+    def test_pins_the_connection_against_a_rebinding_second_lookup(self):
+        # Simulates DNS rebinding: the name server answers the
+        # validation lookup with a public address, then would answer a
+        # second lookup for the same host with a private one. Pinning
+        # must mean a lookup made from inside the context never reaches
+        # that second, rebound answer.
+        public_answer = [(None, None, None, None, ("93.184.216.34", 443))]
+        rebound_answer = [(None, None, None, None, ("127.0.0.1", 443))]
+        real_getaddrinfo = mock.Mock(
+            side_effect=[public_answer, rebound_answer])
+
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               real_getaddrinfo):
+            with resolver.validate_and_pin_public_target(
+                    "https://rebind.example/x"):
+                reconnect = resolver.socket.getaddrinfo(
+                    "rebind.example", 443)
+
+        self.assertEqual([("93.184.216.34", 443)],
+                         [info[4] for info in reconnect])
+        self.assertEqual(1, real_getaddrinfo.call_count)
+
+    def test_a_lookup_for_a_different_host_passes_through_during_the_pin(
+            self):
+        addrinfo = [(None, None, None, None, ("93.184.216.34", 443))]
+        other_host_answer = [(None, None, None, None, ("198.51.100.7", 80))]
+        real_getaddrinfo = mock.Mock(
+            side_effect=[addrinfo, other_host_answer])
+
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               real_getaddrinfo):
+            with resolver.validate_and_pin_public_target(
+                    "https://pinned.example/x"):
+                other = resolver.socket.getaddrinfo("other.example", 80)
+
+        self.assertEqual(other_host_answer, other)
+        self.assertEqual(2, real_getaddrinfo.call_count)
 
 
 class SSRFRefusalIntegrationTest(unittest.TestCase):
@@ -363,8 +464,11 @@ class SSRFRefusalIntegrationTest(unittest.TestCase):
     These cases go through the real transport.https_get(), with
     requests.Session mocked, so that a loopback or private target -
     direct or reached through a redirect from a public one - is proven
-    to never create a Session, the same guarantee DirectHttpSourceTest
-    pins for a plaintext target.
+    to never reach an actual request, the same guarantee
+    DirectHttpSourceTest pins for a plaintext target. target_pin wraps
+    the request itself rather than running before the Session exists,
+    so what these cases pin is that Session.get() is never called, not
+    that Session() itself is never constructed.
     """
 
     def test_a_direct_loopback_ip_target_is_never_requested(self):
@@ -373,7 +477,7 @@ class SSRFRefusalIntegrationTest(unittest.TestCase):
                                      "ai-digest", 1024)
 
         self.assertIsNone(result)
-        session_cls.assert_not_called()
+        session_cls.return_value.get.assert_not_called()
 
     def test_a_direct_private_ip_target_is_never_requested(self):
         with mock.patch.object(transport.requests, "Session") as session_cls:
@@ -381,7 +485,7 @@ class SSRFRefusalIntegrationTest(unittest.TestCase):
                                      "ai-digest", 1024)
 
         self.assertIsNone(result)
-        session_cls.assert_not_called()
+        session_cls.return_value.get.assert_not_called()
 
     def test_a_dns_name_resolving_to_a_private_address_is_never_requested(
             self):
@@ -394,7 +498,7 @@ class SSRFRefusalIntegrationTest(unittest.TestCase):
                                          "ai-digest", 1024)
 
         self.assertIsNone(result)
-        session_cls.assert_not_called()
+        session_cls.return_value.get.assert_not_called()
 
     def test_a_redirect_from_public_to_private_is_refused_before_the_next_request(
             self):

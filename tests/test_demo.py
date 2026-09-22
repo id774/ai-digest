@@ -111,7 +111,7 @@ class CustomSampleTest(unittest.TestCase):
             "build_report": {"topics": [{
                 "category": "分類",
                 "title": "見出し",
-                "bullets": ["箇条書き。"],
+                "bullets": ["箇条書き其の一。", "箇条書き其の二。"],
                 "source_indexes": [0],
             }]},
         })
@@ -131,7 +131,7 @@ class CustomSampleTest(unittest.TestCase):
             "build_report": {"topics": [{
                 "category": "分類",
                 "title": "見出し",
-                "bullets": ["箇条書き。"],
+                "bullets": ["箇条書き其の一。", "箇条書き其の二。"],
                 "source_indexes": [7],
             }]},
         }

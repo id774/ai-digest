@@ -165,12 +165,18 @@ same collection rules.
 - **Every collector request goes through one HTTPS transport boundary.**
   The initial target and each resolved redirect target must be absolute HTTPS;
   a downgrade is refused before the next request is sent.
+- **A response body is read through `transport.read_capped_content()`,**
+  streamed and counted as it arrives rather than buffered by
+  `response.content` in full, so a response past
+  `MAX_COLLECTOR_RESPONSE_BYTES` (8 MiB) is refused as a source-local
+  failure instead of being read to exhaustion first.
 
 ```text
 configured target
     -> HTTPS validation
     -> request without automatic redirects
     -> HTTPS redirect validation
+    -> capped read of the response body
     -> response
 ```
 
@@ -325,16 +331,27 @@ function before citation restoration. The mechanical `plain` backend does not
 produce tool arguments: it builds `Topic` values directly from collected `Entry`
 values, so there is no model-supplied citation to validate or restore.
 
-It enforces, in order:
+The answer is untrusted input, so every field is checked by type rather than
+repaired: a field of the wrong shape drops the topic it belongs to, or the
+whole answer when the payload itself is not an object, instead of being
+coerced with `str()` into the type expected. It enforces, in order:
 
+- **the payload must be an object, and its `topics` field a list**; otherwise
+  no topic is produced;
+- **each raw topic must itself be an object**; anything else is dropped;
 - topics beyond the configured limit are dropped;
-- bullets are whitespace-normalized, non-strings and blanks discarded, and the
-  remainder capped at 4;
-- **each source index must be an integer inside the range of the candidate
-  list**; anything else is ignored;
-- **a topic with no usable bullet, or no usable source, is dropped** with a
-  logged warning;
-- a missing or blank category becomes a neutral label rather than an empty one.
+- **`title` must be a nonblank string**; anything else drops the topic;
+- **`category` must be a string**; anything else drops the topic, and a
+  blank one becomes a neutral label rather than an empty one;
+- **`bullets` must be a list**; anything else drops the topic. A usable
+  bullet is a nonblank string - a non-string entry is left out, never
+  stringified - and the usable ones are whitespace-normalized and capped
+  at 4; **a topic left with fewer than 2 is dropped**;
+- **`source_indexes` must be a list**; anything else drops the topic. A
+  usable index is an integer inside the range of the candidate list,
+  `bool` explicitly excluded since it is otherwise a subclass of `int`;
+  anything else is ignored;
+- **a topic left with no usable source is dropped** with a logged warning.
 
 Citation restoration is the point of the index scheme:
 
@@ -361,31 +378,50 @@ article declares for social sharing. The resolver enforces a page-byte cap, an
 image-byte cap, and a minimum image side **while reading** rather than after
 buffering, so oversized or unusable material is rejected before it is fully
 retained, and a decoder refusing an image is an ordinary "no image" rather than
-the end of a run.
+the end of a run. Pillow's own decompression bomb guard is two thresholds, not
+one: past the higher one it raises, and past the lower one it only warns; the
+resolver turns that warning into the same refusal as the error, scoped to the
+one decode with `warnings.catch_warnings()`, never by changing the process-wide
+warning filter other code relies on.
 
 The resolver reaches a page or an image through the same shared HTTPS
-transport boundary as section 6's collectors, `https_get()`'s
-`target_validator` hook, with a stricter check of its own layered on top:
-the host of the initial target, and of every resolved redirect target, must
-resolve to a public network address. A loopback, private, link-local,
-unspecified, multicast or otherwise non-global address is refused before the
-request for it is sent, whether it is a literal IP in the URL or one among
-the addresses a DNS name resolves to; a name that fails to resolve is refused
-the same way. This closes the path a scraped page could otherwise use to
-redirect the resolver's own request into the host's internal network, a risk
-the collectors do not carry: they request the arXiv API and the operator's
-own configured feeds, never a target named by material collected from
-outside. An HTTP article citation is never fetched for illustration, an HTTP
-image candidate is never downloaded, and every one of these refusals degrades
-to the normal fallback card rather than the run.
+transport boundary as section 6's collectors, `https_get()`'s `target_pin`
+hook, with a stricter check of its own layered on top: the host of the
+initial target, and of every resolved redirect target, must resolve to a
+public network address. A loopback, private, link-local, unspecified,
+multicast or otherwise non-global address is refused before the request for
+it is sent, whether it is a literal IP in the URL or one among the addresses
+a DNS name resolves to; a name that fails to resolve is refused the same way.
+
+Checking a hostname's resolved address is not, by itself, a guarantee about
+the address a connection actually reaches: the lookup that validates a target
+and the lookup requests performs when it opens the connection are two
+separate DNS queries, and a name server free to answer them differently -
+DNS rebinding - could pass the first with a public address and let the
+second, unvalidated one answer with a private one. `target_pin` closes that
+gap by pinning, not only validating: for the life of one wrapped request, a
+resolution of the validated hostname can return only the address set already
+checked, monkey-patching `socket.getaddrinfo()` for that hostname alone and
+restoring it once the request returns. The original hostname still decides
+TLS SNI, certificate validation and the `Host` header; only the address a
+connection actually reaches is fixed, and it is provably one already found
+public. This closes the path a scraped page could otherwise use to redirect
+the resolver's own request into the host's internal network, a risk the
+collectors do not carry: they request the arXiv API and the operator's own
+configured feeds, never a target named by material collected from outside.
+An HTTP article citation is never fetched for illustration, an HTTP image
+candidate is never downloaded, and every one of these refusals degrades to
+the normal fallback card rather than the run.
 
 ```text
 configured target
     -> HTTPS validation
-    -> public-network-only validation
+    -> resolve and validate every address as public
+    -> pin DNS resolution of this hostname to those addresses
     -> request without automatic redirects
+    -> unpin
     -> HTTPS redirect validation
-    -> public-network-only redirect validation
+    -> repeat from resolve, for the redirect target
     -> response
 ```
 
