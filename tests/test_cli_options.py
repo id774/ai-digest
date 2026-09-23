@@ -56,6 +56,7 @@
 #      --user-agent like their environment equivalents.
 #    - Accept a token option normalized the same way _env_token() would
 #      normalize it, whatever whitespace or case it arrives with.
+#    - Print only the package version number for -v and --version.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -63,8 +64,8 @@
 #
 #  Version History:
 #  v1.4 2026-09-23
-#       Cover blank overrides clearing to the environment's unset state,
-#       every scalar trimmed the same way, and tokens normalized like it.
+#       Cover scalar normalization and require version options to print only
+#       the package release version.
 #  v1.3 2026-09-12
 #       Cover the six-topic upper bound of --max-topics.
 #  v1.2 2026-09-08
@@ -96,6 +97,24 @@ def refused(argv):
         except SystemExit as exit_request:
             return exit_request.code
     raise AssertionError("{0} was accepted".format(argv))
+
+
+class VersionOptionTest(unittest.TestCase):
+    """ Version options must print only the package release version. """
+
+    def test_version_options_print_only_the_version_number(self):
+        for option in ("-v", "--version"):
+            with self.subTest(option=option):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    with self.assertRaises(SystemExit) as exit_request:
+                        cli.parse_args([option])
+
+                self.assertEqual(0, exit_request.exception.code)
+                self.assertEqual(
+                    "{0}\n".format(cli.__version__),
+                    output.getvalue(),
+                )
 
 
 class OverrideTest(unittest.TestCase):

@@ -45,7 +45,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 
 # Schemes accepted for any link that ends up in a report. Collected
 # links come from third party feeds and are rendered as anchors, where

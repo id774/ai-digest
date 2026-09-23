@@ -1,8 +1,8 @@
 ai-digest Repository Version History
 ====================================
 
-v1.2.3 (Release Date: TBD)
---------------------------
+v1.2.3 (2026-09-23)
+-------------------
 - Preserve Unicode letters and digits during title deduplication so distinct
   non-ASCII titles are not collapsed by normalization.
 - Split plain-mode Japanese summaries after Japanese sentence terminators even
