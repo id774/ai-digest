@@ -332,12 +332,13 @@ ANTHROPIC_API_KEY is no longer read by ai-digest; use SUMMARIZER_API_KEY.
 Presence is what is refused, not the value: an exported but empty
 `ANTHROPIC_BASE_URL` still says the host was set up for the old names. Unset it,
 in `.env` and in whatever exported it — a systemd unit, a cron environment, a
-shell profile — rather than blanking it. The check runs in `load_config()`, so
-it stops the viewer as well as the batch even though the viewer reads none of
-these settings: a host half way through the rename is exactly the one where the
-old name still decides something, and a viewer that keeps serving would hide
-that rather than settle it. The command line options moved the same
-way: `--anthropic-model` and `--openai-model` are now `--summarizer-model`.
+shell profile — rather than blanking it. The check runs when endpoint settings
+are resolved: `cli.py run` therefore refuses the stale name, while the viewer,
+`list`, `render` and `demo` ignore it because their scoped loaders do not
+resolve endpoint settings. The compatibility `load_config()` retains the same
+refusal for tests and callers that deliberately resolve the full configuration.
+The command line options moved the same way: `--anthropic-model` and
+`--openai-model` are now `--summarizer-model`.
 
 ### Timeouts
 
@@ -629,6 +630,7 @@ python -m unittest discover -s tests -p "test_c*.py"             # modules match
 | `test_cli_options.py` | the command line overrides: one setting replaced at a time, list splitting, the absolute data directory, that every overridable name is a real field, that no credential has an option, and the values the parser refuses |
 | `test_cli_run.py` | run preflight refusing invalid effective settings before collection |
 | `test_collectors.py` | arXiv and RSS collection, look back window, partial source failures |
+| `test_dedup.py` | title normalization and duplicate removal |
 | `test_transport.py` | the shared HTTPS-only request target and its redirect boundary |
 | `test_storage.py` | report persistence, corrupt report handling, date validation, path traversal refusal |
 | `test_report_publication.py` | staged publication and failure-atomic report replacement across run, demo and render |

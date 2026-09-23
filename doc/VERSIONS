@@ -11,21 +11,20 @@ v1.2.3 (Release Date: TBD)
   returns 404 instead of failing while rendering.
 - Require the sole build_report tool on the OpenAI-compatible backend without
   using a named function choice, allowing thinking models such as Kimi K3.
-- Require an explicit SUMMARIZER_BASE_URL and the optional openai package
-  for the openai-compatible backend, both checked before collecting.
+- Incompatible: require explicit SUMMARIZER_BASE_URL and the optional openai
+  package for openai-compatible, both checked before collecting.
 - Build a report in a staging directory and publish it whole only once
   complete; confine a stored asset - copied, rendered, served - to its dir.
-- Reject invalid numeric settings instead of silently using defaults or failing
-  later in a run.
-- Scope configuration to each command, the viewer, and capture_screens.py,
-  so an unrelated setting - LOOKBACK_HOURS on demo included - cannot stop it.
-- Reject impossible calendar dates before report work begins or archive paths are
-  accepted.
-- Reject unusable explicit font paths instead of silently selecting another font.
-- Require strict HTTPS targets for source collection, image scraping, and an
-  explicit SUMMARIZER_BASE_URL, checking hostname and port, not scheme alone.
-- Limit MAX_TOPICS to 1 through 6 so report.json, HTML and summary.png keep
-  the same topic set.
+- Incompatible: reject invalid numeric settings instead of using defaults or
+  failing later in a run.
+- Incompatible: scope configuration to each execution path, the viewer and
+  capture_screens.py so unrelated settings cannot stop them.
+- Reject impossible calendar dates before report or archive path work.
+- Incompatible: reject unusable explicit font paths instead of falling back.
+- Incompatible: require strict HTTPS for configured retrieval targets and an
+  explicit SUMMARIZER_BASE_URL; validate hostname and port.
+- Incompatible: limit MAX_TOPICS to 1 through 6 so report.json, HTML and
+  summary.png keep the same topic set.
 - Refuse text JSON fallback responses that embed a report inside surrounding
   prose instead of returning the report as the whole text block.
 - Retry arXiv category requests twice after HTTP 429 responses before treating
@@ -34,16 +33,16 @@ v1.2.3 (Release Date: TBD)
   give its footer backend-neutral wording instead of an AI-specific claim.
 - Refuse an image-scraping target that resolves to a non-public address, pin
   the connection, canonical hostname included, past DNS rebinding or a proxy.
-- Normalize a CLI override like its environment equivalent: trim every
-  scalar, SUMMARIZER_BASE_URL included, lower-case tokens, clear blanks.
+- Incompatible: normalize CLI scalar overrides like environment values: trim,
+  lower-case tokens and clear blanks.
 - Bound external input further: a fetch's hard deadline now covers DNS
   too; refuse a decompression-bomb image scraped or re-rendered; cap body.
 - Validate API-backed topic fields by type instead of str() coercion, require
   2-4 usable bullets, and select up to 3 sources by validity, not position.
 - Show a safe demo period and citation-derived data-source label, validate
   a custom demo sample's shape, and ignore a malformed stored citation URL.
-- Default an implicit run report date to the host's local calendar date,
-  not UTC's, which could otherwise name the day before or after it.
+- Incompatible: default an implicit run report date to the host-local calendar
+  date instead of UTC.
 - Classify an arXiv illustration source by its parsed host and path, not
   by a URL substring, so an unrelated host is never misread as arXiv.
 

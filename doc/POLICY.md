@@ -687,10 +687,13 @@ Before a change is proposed, it answers these:
   dataclass, read from environment variables and optionally from `.env`. The
   module performs no network access and touches no file beyond `.env`, so it is
   safe to import from anywhere, including the viewer and the tests.
-- Validation belongs where the meaning of a setting is decided: `load_config()`
-  converts and normalizes values, and the `validate_*` methods refuse a
-  configuration no backend can serve. A command runs the checks it needs before
-  it collects anything; `--version` and the tests run none.
+- Validation belongs where the meaning of a setting is decided: the scoped
+  loaders and their shared resolution helpers convert and normalize only the
+  settings used by that execution path, and the `validate_*` methods refuse an
+  effective configuration no backend can serve. `load_config()` is retained
+  for compatibility and tests and is not called by an application execution
+  path. A command runs the checks it needs before it collects anything;
+  `--version` and the tests run none.
 - An empty or whitespace-only string setting reads as unset, so that a bare
   `NAME=` line in `.env` behaves exactly like the absent line.
 - Every setting is documented in three places that must agree: the
