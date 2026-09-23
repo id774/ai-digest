@@ -70,10 +70,12 @@ Set `SUMMARIZER_BACKEND=plain` instead to run without any credential at all, at
 the cost of translation and clustering. A host upgraded from an earlier release
 must unset the `ANTHROPIC_*` and `OPENAI_*` variables wherever they were
 exported: `cli.py run` refuses to start while one of them is present and names
-its replacement. This `.env` is the batch's configuration source alone; the
-viewer never reads it, so a stale legacy name here stops only the batch, never
-the site. Every setting is listed in [`.env.example`](../.env.example) and
-under [Configuration](../README.md#configuration).
+its replacement. In this deployment, `.env` supplies the batch settings; the
+viewer unit supplies `DATA_DIR` and `PORT` directly. `config.py` may parse
+`.env` for the viewer, but its scoped loader ignores endpoint settings, so a
+stale legacy name here stops only the batch, never the site. Every setting is
+listed in [`.env.example`](../.env.example) and under
+[Configuration](../README.md#configuration).
 
 `chmod 600` is part of the step rather than an afterthought. The file holds a
 credential and is read by one service user. `.env` is ignored by Git and must
@@ -104,10 +106,12 @@ the success condition. See [`DEMO.md`](DEMO.md).
 ## Start the viewer
 
 Review [`deploy/ai-digest.service`](../deploy/ai-digest.service) before copying
-it. Its user and paths must match the installation. It does not read `.env`:
-`DATA_DIR` and `PORT` are set directly in the unit's `Environment=` lines, and
-`ExecStart` binds gunicorn to that same `PORT` rather than a separate literal,
-so adjust the port in one place. Edit both if the default 3000 is taken.
+it. Its user and paths must match the installation. The unit sets `DATA_DIR`
+and `PORT` directly in its `Environment=` lines; those exported values take
+precedence over matching `.env` entries, and the viewer's scoped loader ignores
+batch-only settings. `ExecStart` binds gunicorn to that same `PORT` rather than
+a separate literal, so adjust the port in one place. Edit both if the default
+3000 is taken.
 
 ```sh
 sudo cp deploy/ai-digest.service /etc/systemd/system/
@@ -126,11 +130,13 @@ Read startup and request errors with:
 sudo journalctl -u ai-digest --since today
 ```
 
-The viewer needs no credential, and its unit is not given one: it resolves
-only `DATA_DIR` and `PORT`, never the batch's `.env`, so a credential the
-batch holds is not part of the viewer's process environment even when the two
-run under the same account. A viewer that cannot reach the API cannot spend
-one.
+The viewer needs no credential, and its unit is not given one:
+`load_viewer_config()` resolves only `DATA_DIR` and `PORT`. `config.py` may
+parse `.env` into a plain dictionary, but settings outside the viewer's scope
+are neither exported into its process environment nor stored in its Config.
+The sample systemd unit supplies `DATA_DIR` and `PORT` directly, so a batch
+credential in `.env` is not part of the viewer's effective configuration. A
+viewer that cannot reach the API cannot spend one.
 
 ## Schedule the batch
 
@@ -300,18 +306,21 @@ sudo -u ai-digest .venv/bin/pip install -r requirements.txt
 sudo systemctl restart ai-digest
 ```
 
-The viewer does not read `.env`, so changing it never requires restarting the
-viewer; the batch reads the file on every run, so it needs no restart step of
-its own either. Changing `DATA_DIR` or `PORT` in the unit's `Environment=`
-lines requires `systemctl daemon-reload` followed by a restart. Changing the
-nginx block requires `nginx -t` and a reload.
+In this deployment, changing batch settings in `.env` never requires
+restarting the viewer: its unit supplies `DATA_DIR` and `PORT` directly, and
+settings outside the viewer's scope are not used by it. The batch reads `.env`
+on every run, so it needs no restart step of its own either. Changing
+`DATA_DIR` or `PORT` in the unit's `Environment=` lines requires
+`systemctl daemon-reload` followed by a restart. Changing the nginx block
+requires `nginx -t` and a reload.
 
-**Rotate the API key** by replacing it in `.env`. The viewer does not use it
-and reads none of `.env`, so nothing needs restarting on its account; the next
-batch run is the first thing that exercises the new key, so run `cli.py run`
-by hand to confirm it rather than waiting for cron. Never put a
-key on a command line: `ps` is readable by every user of the host, which is why
-no credential has a command line option.
+**Rotate the API key** by replacing it in `.env`. The viewer does not use the
+key: although `config.py` may parse `.env`, the credential is outside the
+viewer scope and is neither exported nor stored in its Config. Nothing needs
+restarting on the viewer's account; the next batch run is the first thing that
+exercises the new key, so run `cli.py run` by hand to confirm it rather than
+waiting for cron. Never put a key on a command line: `ps` is readable by every
+user of the host, which is why no credential has a command line option.
 
 **Rotate the batch log.** `deploy/ai-digest.cron` appends to
 `/var/log/ai-digest/run.log`, which nothing truncates on its own:

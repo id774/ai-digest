@@ -119,23 +119,24 @@
 #
 #  Version History:
 #  v2.2 2026-09-23
-#       Default an implicit report date to local time, preflight the
-#       openai package before collecting, and trim SUMMARIZER_BASE_URL.
+#       Incompatible: default an implicit report date to host-local time;
+#       also preflight openai and trim SUMMARIZER_BASE_URL.
 #  v2.1 2026-09-22
-#       Normalize scalar overrides the same way the environment does: trim,
-#       clear blanks, lower-case tokens; stop recording demo lookback_hours.
+#       Incompatible: normalize scalar overrides: trim, clear blanks and
+#       lower-case tokens; stop recording demo lookback_hours.
 #  v2.0 2026-09-12
-#       Reject --max-topics values above the six-topic report limit.
+#       Incompatible: reject --max-topics values above the six-topic limit.
 #  v1.9 2026-09-08
-#       Reject non-HTTPS news-feed overrides before collection.
+#       Incompatible: reject non-HTTPS --news-feed-urls values.
 #  v1.8 2026-09-06
-#       Scope configuration and reject invalid dates and font paths early.
+#       Incompatible: scope configuration and reject invalid dates and
+#       unusable explicit font paths before work begins.
 #  v1.7 2026-09-06
 #       Stage 'run', 'demo' and 'render' reports and publish them only
 #       once complete, instead of writing the date directory in place.
 #  v1.6 2026-09-05
-#       Refuse a missing or blank SUMMARIZER_BASE_URL on the
-#       openai-compatible backend before collecting anything.
+#       Incompatible: require SUMMARIZER_BASE_URL on openai-compatible
+#       instead of allowing the SDK default endpoint.
 #  v1.5 2026-08-05
 #       Name the endpoint options and settings after the summarization stage instead of a vendor: --anthropic-* and --openai-* become one
 #       --summarizer-* set, matching the SUMMARIZER_* variables they override, and one credential serves whichever backend is selected.

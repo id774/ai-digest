@@ -147,22 +147,23 @@
 #
 #  Version History:
 #  v2.1 2026-09-23
-#       Trim SUMMARIZER_BASE_URL like other scalars before validating and
-#       using it, and drop LOOKBACK_HOURS from demo's resolved scope.
+#       Incompatible: trim SUMMARIZER_BASE_URL before use and stop resolving
+#       LOOKBACK_HOURS for demo.
 #  v2.0 2026-09-22
-#       Treat a whitespace-only summarizer credential or base URL as unset,
-#       and require an explicit SUMMARIZER_BASE_URL to be absolute HTTPS.
+#       Incompatible: treat blank summarizer credentials and base URLs as
+#       unset, and require explicit SUMMARIZER_BASE_URL to use HTTPS.
 #  v1.9 2026-09-12
-#       Limit MAX_TOPICS to the six topics the report image can display.
+#       Incompatible: reject MAX_TOPICS values above the six-topic limit.
 #  v1.8 2026-09-08
-#       Validate configured news feeds as HTTPS retrieval targets.
+#       Incompatible: reject configured news feeds that are not HTTPS.
 #  v1.7 2026-09-06
-#       Scope settings by execution path and reject unusable explicit fonts.
+#       Incompatible: scope settings by execution path and reject unusable
+#       explicit font paths instead of selecting another font.
 #  v1.6 2026-09-06
-#       Reject invalid numeric settings instead of silently using defaults.
+#       Incompatible: reject invalid numeric settings instead of using defaults.
 #  v1.5 2026-09-05
-#       Add validate_summarizer_base_url(), refusing an openai-compatible backend with SUMMARIZER_BASE_URL
-#       missing or blank instead of falling back on the OpenAI SDK's own default endpoint.
+#       Incompatible: require SUMMARIZER_BASE_URL for openai-compatible
+#       instead of falling back to the SDK default endpoint.
 #  v1.4 2026-08-05
 #       Rename ANTHROPIC_*/OPENAI_* to a single SUMMARIZER_* set naming the wire
 #       protocol; refuse the old variable names at startup.
