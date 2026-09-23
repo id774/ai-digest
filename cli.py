@@ -119,7 +119,7 @@
 #
 #  Version History:
 #  v2.2 2026-09-23
-#       Incompatible: default an implicit report date to host-local time;
+#       Incompatible: use host-local implicit dates and number-only --version;
 #       also preflight openai and trim SUMMARIZER_BASE_URL.
 #  v2.1 2026-09-22
 #       Incompatible: normalize scalar overrides: trim, clear blanks and
@@ -831,7 +831,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                     "which overrides the environment and .env.",
     )
     parser.add_argument("-v", "--version", action="version",
-                        version="ai-digest {0}".format(__version__))
+                        version=__version__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run_parser = subparsers.add_parser(
