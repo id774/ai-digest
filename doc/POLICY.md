@@ -101,7 +101,42 @@ These lines are not crossed by a setting, by an option or by an extension.
   as its successor, so that a stale value on a host part way through a rename
   cannot decide where a run is sent or what it is billed to.
 
-### 1.3 Logging and Output
+### 1.3 The Summarization Endpoint
+The settings decide which API a run is sent to and what it is billed for, so
+they are read strictly.
+
+- Do not choose an endpoint implicitly. What is required follows from
+  `SUMMARIZER_BACKEND`: `plain` needs none of the credential, the base URL or
+  the model; `anthropic-compatible` needs the credential, and falls back to
+  the Anthropic default endpoint and model when the base URL or the model is
+  left unset; `openai-compatible` needs the credential, the base URL and the
+  model, none of which it defaults. A setting required by the selected
+  backend and left unset stops the run instead of being filled in with a
+  default.
+- Do not accept an unknown backend. A value the code has no analyzer for is
+  refused before a request, never read as one of the backends that does exist.
+- Do not infer what an endpoint supports from its model name or its URL.
+  Speaking a wire protocol is not behaving like the vendor that defined it:
+  whether a named `tool_choice` is honoured, and whether the thinking output
+  can be turned off, are named settings, and a mode that is configured and
+  unavailable is an error rather than a reason to try the other one.
+- Distinguish a retry from a change of route. Retries belong to the SDK and
+  their number is a setting an operator can see. The two backends are two
+  explicit paths that a setting selects, not a fallback: neither is tried
+  because the other failed, and both validate the parsed arguments identically,
+  so a report does not differ by the route it took.
+- Do not accept part of an answer. A report is the arguments of the tool call,
+  or the whole of a text block that parses into an object carrying `topics`;
+  an object cut out of surrounding prose is refused. Reading a report from a
+  text block at all is a path an operator turns on by name, and a run that
+  takes it says so.
+- Do not vary the number of requests silently. A run costs the requests its
+  settings describe.
+- Say in the prompt what the request actually carries. A prompt that announces
+  a window, a count or a kind of material the request does not carry describes
+  something the model cannot see, and the answer is shaped by the description.
+
+### 1.4 Logging and Output
 - Use the standard `logging` module. Do not print status to standard output
   from library modules; obtain a module logger with
   `logging.getLogger(__name__)` and log through it.
@@ -140,7 +175,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   as it arrived is how a run that returned no tool call is diagnosed, so the
   rule that a system handling private text would keep here does not apply.
 
-### 1.4 Control Flow Rules
+### 1.5 Control Flow Rules
 - Reserve explicit termination (`sys.exit`) for the process entry point.
   Commands and helpers return their status; they do not call `sys.exit`.
 - Normal execution paths must return normally and propagate status explicitly.
@@ -155,7 +190,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   terms, such as a date that is not a date. The caller that received the value
   from outside decides whether that means a refusal or a `404`.
 
-### 1.5 CLI Conventions
+### 1.6 CLI Conventions
 - Command-line tools must provide consistent options:
   - `-h`, `--help` to display usage information and exit with code `0`.
   - `-v`, `--version` to display version information and exit with code `0`.
@@ -173,7 +208,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   A new mode of operation becomes a subcommand; it does not become a flag that
   changes what an existing subcommand means.
 
-### 1.6 Error Handling and Exit Codes
+### 1.7 Error Handling and Exit Codes
 - Treat the operation result, whether later independent work continues, and
   whether anything needs to be reported as separate decisions. A required
   prerequisite whose absence makes correct completion impossible stops the
@@ -186,7 +221,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Exit code semantics follow widely accepted UNIX/Linux conventions and remain
   consistent across the repository.
 
-#### 1.6.1 Exit Code Conventions
+#### 1.7.1 Exit Code Conventions
 - **0: Success**
   The command completed successfully. This includes terminating after displaying
   help or version information without encountering an error.
@@ -202,7 +237,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   Reserved by the shell and by signal convention. Do not redefine them for
   application errors.
 
-### 1.7 Environment Differences
+### 1.8 Environment Differences
 - Branch on what the environment provides, not on what it is called. A
   distribution name, a release number, a platform string or a Python build
   each answer a question the code is not asking. The question is whether the
@@ -220,7 +255,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   it is degraded, actionable, or otherwise operationally relevant. Do not emit
   the same non-actionable absence on every scheduled run.
 
-### 1.8 Documentation and Versioning
+### 1.9 Documentation and Versioning
 - Every module must contain a structured header, in this order:
   `Description`, `Routes` (the viewer only), the standard `Author`,
   `Source Code`, `License`, `Contact` block used across the repository,
@@ -241,7 +276,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   behavior that a reader would look for in the README, in `.env.example` or in
   `doc/VERSIONS` is not finished until it is there as well.
 
-#### 1.8.1 When to Bump a Module Version
+#### 1.9.1 When to Bump a Module Version
 - These rules apply to the `Version History` in each module header. Repository
   release versions and Git tags follow the separate rules below.
 - Do not bump the version mechanically every time a file is touched. Decide
@@ -274,7 +309,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - The first entry, at the lowest version the file's own history reaches,
   reads only `Initial release.` and nothing else.
 
-#### 1.8.2 Module Version Numbering
+#### 1.9.2 Module Version Numbering
 - Versions use a two-level `major.minor` scheme.
 - When incrementing `minor` would reach `10`, roll over instead: increment
   `major` by 1 and reset `minor` to `0` (for example `v0.9` -> `v1.0`,
@@ -289,7 +324,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   changes. Say so in the `Version History` entry and in `doc/VERSIONS`, so that
   the number the change is released under is chosen knowing that.
 
-#### 1.8.3 Repository Versioning
+#### 1.9.3 Repository Versioning
 - Repository release versions are independent of individual module versions.
 - Record repository release versions in `doc/VERSIONS` and use the same versions
   for Git tags.
@@ -314,7 +349,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   tracks the application, and is bumped when a release warrants it, not on every
   change.
 
-#### 1.8.4 doc/VERSIONS Structure
+#### 1.9.4 doc/VERSIONS Structure
 - `doc/VERSIONS` reads as a version-level summary of overall changes, not a raw
   commit log. It is a plain text document and follows the rules for one stated
   below, with the one exception of line length described here.
@@ -355,7 +390,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   a version comes before preserving the order the commits happened in.
 - Use UTF-8.
 
-#### 1.8.5 Document Format
+#### 1.9.5 Document Format
 - The format of a document is decided by what it is for and by the name it
   carries, not by whether part of its content happens to parse as Markdown.
 - A document named with `.md` is written, displayed and maintained as Markdown.
@@ -373,7 +408,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   bytes are all there is. A rule that serves one damages the other, which is
   why the two sets of rules below are stated separately and are not merged.
 
-#### 1.8.6 Markdown Documents
+#### 1.9.6 Markdown Documents
 - A Markdown document may assume that it will be rendered, on GitHub or
   elsewhere.
 - Use headings, lists, tables, code blocks, links and emphasis to make the
@@ -396,7 +431,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   correctness of the notation and the rendered result come before the length of
   a physical line.
 
-#### 1.8.7 Plain Text Documents
+#### 1.9.7 Plain Text Documents
 - A plain text document is read as it is, without GitHub's rendering and
   without any particular viewer.
 - It stays readable on an old fixed-width terminal, under `less` or `cat`, in
@@ -413,7 +448,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Judge it as raw text: how readable and how stable it is line by line, not
   what a renderer would make of it.
 
-#### 1.8.8 Document File Naming
+#### 1.9.8 Document File Naming
 - A document written in Markdown takes a `.md` extension when it is newly
   created. ai-digest is a recent repository, so its Markdown documents carry
   the extension from the moment they are written: `doc/POLICY.md`,
@@ -442,7 +477,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   and the historical naming of an older repository is not copied into a recent
   one. Each name is decided where it lives.
 
-#### 1.8.9 The Extensionless Documents Here
+#### 1.9.9 The Extensionless Documents Here
 - `doc/VERSIONS` is the version history, plain text, without an extension.
 - `doc/COPYING` and `doc/COPYING.LESSER` hold the official licence texts as
   plain text.
@@ -457,7 +492,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Do not rename `doc/VERSIONS`, `doc/COPYING` or `doc/COPYING.LESSER` to `.md`
   because they contain a symbol a Markdown renderer would accept.
 
-#### 1.8.10 Document File Attributes
+#### 1.9.10 Document File Attributes
 - What `.gitattributes` says about a diff does not decide the format of a
   document. It describes documents whose format their names have already
   settled.
@@ -475,7 +510,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - How a document appears on GitHub is not a reason on its own to change its
   format or its attributes.
 
-#### 1.8.11 Form and Role
+#### 1.9.11 Form and Role
 - Bringing every document to one extension, one line width and one way of being
   displayed is not a goal in itself.
 - Choose the form from the role of the document, where it is read, the path it
@@ -489,7 +524,7 @@ These lines are not crossed by a setting, by an option or by an extension.
 - Before changing a file name or a line width, find out why the current form
   was chosen.
 
-### 1.9 Comments, Docstrings and Language
+### 1.10 Comments, Docstrings and Language
 - Comments must be written in English only.
 - Comments must be imperative, concise, and action-oriented
   (for example `# Validate input`, `# Initialize environment`), avoiding
@@ -510,7 +545,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   itself. This applies to the headers, the documents and the commit messages as
   much as to the comments.
 
-### 1.10 Testing and Operation
+### 1.11 Testing and Operation
 - Tests live under `tests/` as `test_*.py` and run with
   `python -m unittest discover -s tests`.
 - Use only the standard library for tests: `unittest` and `unittest.mock`.
@@ -537,13 +572,13 @@ These lines are not crossed by a setting, by an option or by an extension.
   needs and no more. A step that needs a raised privilege takes it for that
   step; the process does not run its whole body under it.
 
-### 1.11 Pull Request Scope and History
+### 1.12 Pull Request Scope and History
 A pull request presents the change it proposes, not the sequence of corrections
 that produced it. It carries one purpose, and when the direction is revised part
 way through a review, the branch is rewritten so that it reads as the change
 finally intended, and merges as if it had been written that way.
 
-#### 1.11.1 One Purpose to a Pull Request
+#### 1.12.1 One Purpose to a Pull Request
 - "Purpose" means the higher-level reason the pull request exists, not an
   individual finding, issue, file, function, or review comment. Several
   findings may belong to one purpose when they are part of the same
@@ -573,7 +608,7 @@ finally intended, and merges as if it had been written that way.
   or reviewable without the other, they are proposed together and the request
   says why.
 
-#### 1.11.2 Keeping a Branch to Its Change
+#### 1.12.2 Keeping a Branch to Its Change
 - A branch that carries one coherent change carries it as one commit. That
   commit is amended and force pushed with `--force-with-lease`, rather than
   gaining a further commit for each remark received.
@@ -584,7 +619,7 @@ finally intended, and merges as if it had been written that way.
   independent changes. The reasoning is the one that decides a `doc/VERSIONS`
   bullet: coherence, not chronology.
 
-#### 1.11.3 Leaving No Trace of the Correction
+#### 1.12.3 Leaving No Trace of the Correction
 - Each revision is read against the base branch, not against the revision
   before it, so that a correction leaves no residue in the diff that is merged.
 - A correction withdraws what it replaces. Code, comments and wording
@@ -596,50 +631,7 @@ finally intended, and merges as if it had been written that way.
   is confined to the branch under review, and the rewrite is stated whenever
   the branch is shared.
 
-### 1.12 License
-- The repository is dual licensed under the GPL version 3 or the LGPL version 3,
-  at the user's option. The full texts live in `doc/LICENSE.md`, `doc/COPYING` and
-  `doc/COPYING.LESSER`.
-- Every module header repeats the license line of the standard block, so that a
-  file read on its own still states its terms.
-- Add a dependency only when its license is compatible with that choice.
-
-### 1.13 The Summarization Endpoint
-The settings decide which API a run is sent to and what it is billed for, so
-they are read strictly.
-
-- Do not choose an endpoint implicitly. What is required follows from
-  `SUMMARIZER_BACKEND`: `plain` needs none of the credential, the base URL or
-  the model; `anthropic-compatible` needs the credential, and falls back to
-  the Anthropic default endpoint and model when the base URL or the model is
-  left unset; `openai-compatible` needs the credential, the base URL and the
-  model, none of which it defaults. A setting required by the selected
-  backend and left unset stops the run instead of being filled in with a
-  default.
-- Do not accept an unknown backend. A value the code has no analyzer for is
-  refused before a request, never read as one of the backends that does exist.
-- Do not infer what an endpoint supports from its model name or its URL.
-  Speaking a wire protocol is not behaving like the vendor that defined it:
-  whether a named `tool_choice` is honoured, and whether the thinking output
-  can be turned off, are named settings, and a mode that is configured and
-  unavailable is an error rather than a reason to try the other one.
-- Distinguish a retry from a change of route. Retries belong to the SDK and
-  their number is a setting an operator can see. The two backends are two
-  explicit paths that a setting selects, not a fallback: neither is tried
-  because the other failed, and both validate the parsed arguments identically,
-  so a report does not differ by the route it took.
-- Do not accept part of an answer. A report is the arguments of the tool call,
-  or the whole of a text block that parses into an object carrying `topics`;
-  an object cut out of surrounding prose is refused. Reading a report from a
-  text block at all is a path an operator turns on by name, and a run that
-  takes it says so.
-- Do not vary the number of requests silently. A run costs the requests its
-  settings describe.
-- Say in the prompt what the request actually carries. A prompt that announces
-  a window, a count or a kind of material the request does not carry describes
-  something the model cannot see, and the answer is shaped by the description.
-
-### 1.14 Judging a Change
+### 1.13 Judging a Change
 Before a change is proposed, it answers these:
 
 - Does it cross an Invariant? Then it is not made.
@@ -659,6 +651,14 @@ Before a change is proposed, it answers these:
   README, `doc/VERSIONS`?
 
 ---
+
+### 1.14 License
+- The repository is dual licensed under the GPL version 3 or the LGPL version 3,
+  at the user's option. The full texts live in `doc/LICENSE.md`, `doc/COPYING` and
+  `doc/COPYING.LESSER`.
+- Every module header repeats the license line of the standard block, so that a
+  file read on its own still states its terms.
+- Add a dependency only when its license is compatible with that choice.
 
 ## 2. Python Implementation Policy
 
