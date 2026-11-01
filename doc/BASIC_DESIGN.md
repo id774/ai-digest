@@ -156,7 +156,12 @@ two passes merge into one outcome so the pipeline sees a single result.
 ## 6. Collection
 
 arXiv and the news feeds are separate collectors with the same shape and the
-same collection rules.
+same collection rules. The default sources are the five arXiv categories
+`cs.AI,cs.LG,cs.CL,cs.CV,cs.CR`, 60 entries each, and seven RSS or Atom feeds
+(OpenAI News, Google AI Blog, Hugging Face Blog, Google Research, Apple Machine
+Learning Research, Microsoft Research and NVIDIA Developer Blog), all handled by
+the existing arXiv and `news_rss` collectors. `config.py` holds these defaults
+and resolves any override of them.
 
 - **A collector never raises on a network error.** A source that cannot be read
   contributes nothing, records its reason in the outcome, and lets the run
@@ -231,7 +236,7 @@ is announced cannot drift apart.
 ## 7. Mechanical deduplication
 
 Applied to the merged entries before any model is involved, and before the
-candidate cap of section 8.
+candidate selection of section 8.
 
 - **Exact URL match** — the first occurrence is kept.
 - **Title similarity** — titles are reduced to a comparison key by NFKC
@@ -268,11 +273,22 @@ never a failover chain.
 | `openai-compatible` | a Chat Completions tool call |
 | `plain` | mechanical, no model and no credential |
 
-**The `anthropic-compatible` and `openai-compatible` backends cap the candidates at 60 entries** before building the
-request, taking them in the order deduplication left them — papers first, then
-news, each newest first within its source. Ordering and truncation are part of
-the design because they decide what the model is able to consider at all. The
-mechanical backend applies no candidate cap, since it selects by date directly.
+**The `anthropic-compatible` and `openai-compatible` backends share one candidate selection of at most 60 entries**
+made before building the request. The deduplicated entries are split by kind
+into papers and news, each keeping the order deduplication left it. The basic
+allocation is 45 papers and 15 news articles, taken from the front of each
+kind. Places a kind cannot fill are given to the other kind, and when fewer than
+60 entries remain all of them are taken. The selection is then laid out papers
+first, then news. Because deduplication keeps the paper where a paper and
+reporting about it collide, the split does not undo that rule.
+
+That single selected list numbers the candidates in the prompt and is the list
+`source_indexes` are resolved against during citation restoration, so a cited
+number always names the entry the model was shown. The allocation fixes which
+candidates the model can consider at all; it is not a quota on topics, which the
+model still ranks by importance up to `MAX_TOPICS`. The mechanical backend
+applies no such selection: it takes the most recent of all deduplicated entries
+by publication time, up to `MAX_TOPICS`.
 
 ## 9. The model backends
 
@@ -1041,7 +1057,7 @@ sources or the endpoint being reachable.
 | §9 citations | the index scheme and its restoration in §10 |
 | §10 deduplication | §7 mechanically; the model for the rest |
 | §11 topic editing | the tool schema and the shared prompt in §9 |
-| §12 display limits | 60 candidates, 6 topics, 4 bullets, 3 citations, enforced at validation |
+| §12 display limits | 60 candidates (45 papers and 15 news with reassignment), 6 topics, 4 bullets, 3 citations, enforced at validation |
 | §13 categories | freely chosen labels; colour from a package-local hash |
 | §14 illustrations | resolver then fallback card, per topic |
 | §15 running without a model | the mechanical backend and the bundled sample |

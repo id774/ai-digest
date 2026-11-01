@@ -151,9 +151,9 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `SUMMARIZER_THINKING_MODE` | `default` | Read by `anthropic-compatible`. `default` sends no thinking parameter and keeps the provider default. `disabled` sends `thinking.type=disabled`, for a model that would otherwise think until the output budget is gone. |
 | `SUMMARIZER_TOOL_CHOICE_MODE` | `forced` | Read by `anthropic-compatible`. `forced` names `build_report` in `tool_choice`. `any` demands a tool without naming one. `auto` lets the model choose the tool and disables parallel tool use. |
 | `SUMMARIZER_TEXT_JSON_FALLBACK` | `disabled` | Read by `anthropic-compatible`. `enabled` also accepts a report written as JSON text when no tool call came back; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
-| `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL` | arXiv categories to collect, comma separated. |
+| `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL,cs.CV,cs.CR` | arXiv categories to collect, comma separated: artificial intelligence, machine learning, computation and language, computer vision, and cryptography and security. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
-| `NEWS_FEED_URLS` | list defined by `DEFAULT_NEWS_FEED_URLS` in `config.py` | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL; blank disables news-feed collection. |
+| `NEWS_FEED_URLS` | the seven feeds listed below | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL; blank disables news-feed collection. |
 | `LOOKBACK_HOURS` | `24` | Age limit of the collected entries. |
 | `MAX_TOPICS` | `6` | Maximum topics per report, `1` through `6`. Six fills the summary image grid; report.json, the HTML and summary.png always describe the same topic set. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
@@ -163,6 +163,20 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `HTTP_TIMEOUT` | `60` | Timeout in seconds of every collector and scraper request. The summarization request uses `SUMMARIZER_TIMEOUT`. |
 | `USER_AGENT` | `ai-digest/1.0 ...` | User-Agent sent with every collector and scraper request. The summarization request does not carry it. |
 | `PORT` | `3000` | Port of the development server and of gunicorn. |
+
+The default `NEWS_FEED_URLS` are, in this order:
+
+| Feed | URL |
+|---|---|
+| OpenAI News | `https://openai.com/news/rss.xml` |
+| Google AI Blog | `https://blog.google/technology/ai/rss/` |
+| Hugging Face Blog | `https://huggingface.co/blog/feed.xml` |
+| Google Research | `https://research.google/blog/rss/` |
+| Apple Machine Learning Research | `https://machinelearning.apple.com/rss.xml` |
+| Microsoft Research | `https://www.microsoft.com/en-us/research/blog/feed/` |
+| NVIDIA Developer Blog | `https://developer.nvidia.com/blog/feed` |
+
+With `anthropic-compatible` or `openai-compatible`, at most 60 deduplicated entries are sent to the model: 45 papers and 15 news articles in the usual case. A kind that has fewer entries than its share leaves the unused places to the other kind, and when fewer than 60 entries remain all of them are sent. The model still chooses at most `MAX_TOPICS` topics by importance. The share is fixed and is not a setting. `plain` does not use it and takes the most recent deduplicated entries by publication time.
 
 Every numeric setting above shares one rule: unset or blank uses the default
 shown; an explicit value that is not a whole number, or that is out of range,
@@ -430,16 +444,16 @@ The command collects the last 24 hours, summarizes them, writes `data/reports/<t
 The error names the cause, so a quiet day and a broken network never look alike. Every source that answered normally but had nothing recent to offer:
 
 ```
-INFO ai_digest.collectors.arxiv: collected 0 arXiv papers from 3 of 3 categories (150 papers offered, look back 24 hours)
-INFO ai_digest.collectors.news_rss: collected 0 news articles from 3 of 3 feeds (60 articles offered, look back 24 hours)
-ERROR ai_digest.cli: no entry collected: 6 of 6 sources answered and offered 210 items, none of them published within the last 24 hours; raise --lookback-hours or LOOKBACK_HOURS, or review ARXIV_CATEGORIES and NEWS_FEED_URLS
+INFO ai_digest.collectors.arxiv: collected 0 arXiv papers from 5 of 5 categories (300 papers offered, look back 24 hours)
+INFO ai_digest.collectors.news_rss: collected 0 news articles from 7 of 7 feeds (140 articles offered, look back 24 hours)
+ERROR ai_digest.cli: no entry collected: 12 of 12 sources answered and offered 440 items, none of them published within the last 24 hours; raise --lookback-hours or LOOKBACK_HOURS, or review ARXIV_CATEGORIES and NEWS_FEED_URLS
 ```
 
 Nothing reachable at all:
 
 ```
 WARNING ai_digest.collectors.arxiv: arXiv request failed for cs.AI: HTTPSConnectionPool(host='export.arxiv.org', port=443): Max retries exceeded
-ERROR ai_digest.cli: no entry collected: all 6 sources failed, so nothing was read at all; check the network connection, the proxy settings and the configured URLs (arXiv cs.AI: ...)
+ERROR ai_digest.cli: no entry collected: all 12 sources failed, so nothing was read at all; check the network connection, the proxy settings and the configured URLs (arXiv cs.AI: ...)
 ```
 
 An empty window is expected, not a bug, and it is unrelated to `SUMMARIZER_BACKEND`, since collection happens before summarization runs. Two causes are common:
@@ -564,7 +578,7 @@ Every failure names its cause at `ERROR` level and ends the run:
 
 A degraded source is a `WARNING`, not a failure. An unreachable feed, a page
 that does not scrape and an image that is refused each fall back and the run
-continues: `continuing with 5 of 6 sources; 1 failed (...)` is a report that was
+continues: `continuing with 11 of 12 sources; 1 failed (...)` is a report that was
 still written.
 
 The viewer answers `404` for an address it does not serve, for a date that is
