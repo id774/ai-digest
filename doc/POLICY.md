@@ -544,6 +544,13 @@ they are read strictly.
   reaches for the interface, the format or the container instead of the thing
   itself. This applies to the headers, the documents and the commit messages as
   much as to the comments.
+- Write prose in plain, natural English that a reader outside the programming
+  trade can follow. Do not use a label and a colon, a symbol or an abbreviation
+  in place of a sentence. This applies to the `Version History` of each module,
+  `doc/VERSIONS`, documents, commit messages and pull request text.
+- State an effect on compatibility in a sentence, for example "an incompatible
+  change to the sources a run reads", and not as a prefix such as
+  `Incompatible:`. The entries already written are not reflowed to suit this.
 
 ### 1.11 Testing and Operation
 - Tests live under `tests/` as `test_*.py` and run with

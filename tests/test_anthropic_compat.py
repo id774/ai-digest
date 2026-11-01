@@ -76,6 +76,9 @@
 #  - Standard library only (the anthropic package is stubbed, never imported)
 #
 #  Version History:
+#  v1.2 2026-11-01
+#       Cover the paper and news candidate selection and its use by both
+#       the prompt and citation restoration.
 #  v1.1 2026-09-22
 #       Cover to_topics() typed validation, the 2-4 bullet requirement, and
 #       usable-source selection order/cap independent of raw list position.
@@ -341,6 +344,91 @@ class PromptWindowTest(unittest.TestCase):
 
         request = client.messages.create.call_args.kwargs
         self.assertIn("過去 72 時間", request["messages"][0]["content"])
+
+
+def _make(kind, count):
+    return [Entry(source_type=kind, title="%s %d" % (kind, i),
+                  url="https://example.test/%s/%d" % (kind, i),
+                  summary="S.", published="2026-08-02T00:00:00+00:00",
+                  origin="O") for i in range(count)]
+
+
+class CandidateSelectionTest(unittest.TestCase):
+
+    CASES = [
+        (100, 100, 45, 15), (30, 100, 30, 30), (100, 5, 55, 5),
+        (0, 100, 0, 60), (20, 10, 20, 10), (100, 0, 60, 0), (0, 0, 0, 0),
+        (44, 16, 44, 16), (46, 14, 46, 14),
+    ]
+
+    def test_the_required_allocations(self):
+        for papers, news, want_papers, want_news in self.CASES:
+            with self.subTest(papers=papers, news=news):
+                chosen = summarizer.select_candidates(
+                    _make("news", news) + _make("paper", papers))
+
+                self.assertEqual(
+                    want_papers,
+                    len([e for e in chosen if e.source_type == "paper"]))
+                self.assertEqual(
+                    want_news,
+                    len([e for e in chosen if e.source_type == "news"]))
+
+    def test_the_limit_boundaries(self):
+        for papers, news, total in [(30, 29, 59), (30, 30, 60), (30, 31, 60),
+                                    (45, 16, 60), (46, 15, 60)]:
+            with self.subTest(papers=papers, news=news):
+                chosen = summarizer.select_candidates(
+                    _make("paper", papers) + _make("news", news))
+
+                self.assertEqual(total, len(chosen))
+
+    def test_papers_first_and_order_kept_within_a_kind(self):
+        papers, news = _make("paper", 50), _make("news", 20)
+        mixed = [x for pair in zip(news, papers) for x in pair] + papers[20:]
+
+        chosen = summarizer.select_candidates(mixed)
+
+        self.assertEqual(papers[:45] + news[:15], chosen)
+
+    def test_nothing_is_invented_or_repeated(self):
+        entries = _make("paper", 70) + _make("news", 70)
+
+        chosen = summarizer.select_candidates(entries)
+
+        self.assertEqual(len(chosen), len({e.url for e in chosen}))
+        self.assertTrue(all(any(e is c for e in entries) for c in chosen))
+
+    def test_prompt_and_citations_use_the_same_list(self):
+        entries = _make("paper", 100) + _make("news", 100)
+        client = mock.Mock()
+        # Index 45 is the first news article of the selection; 60 is
+        # outside the 60 numbered candidates.
+        client.messages.create.return_value = types.SimpleNamespace(
+            content=[types.SimpleNamespace(
+                type="tool_use", name="build_report",
+                input={"topics": [{"category": "c", "title": "t",
+                                   "bullets": ["a", "b"],
+                                   "source_indexes": [45, 0, 60]}]})],
+            stop_reason="tool_use", usage=None, id="m-1", model="m")
+        with mock.patch.object(summarizer, "_build_client",
+                               return_value=client):
+            topics = summarizer.summarize(entries, api_key="k", model="m",
+                                          max_topics=6)
+
+        prompt = client.messages.create.call_args.kwargs[
+            "messages"][0]["content"]
+        numbered = [line for line in prompt.splitlines()
+                    if line.startswith("[")]
+        self.assertEqual(60, len(numbered))
+        self.assertEqual("[0] (論文) paper 0", numbered[0])
+        self.assertEqual("[44] (論文) paper 44", numbered[44])
+        self.assertEqual("[45] (ニュース) news 0", numbered[45])
+        self.assertEqual("[59] (ニュース) news 14", numbered[59])
+        self.assertEqual(
+            [{"title": "news 0", "url": "https://example.test/news/0"},
+             {"title": "paper 0", "url": "https://example.test/paper/0"}],
+            topics[0].sources)
 
 
 class EmptyInputTest(unittest.TestCase):

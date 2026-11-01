@@ -32,6 +32,9 @@
 #  - openai, installed separately: pip install openai
 #
 #  Version History:
+#  v1.6 2026-11-01
+#       Use the shared paper and news candidate selection of summarizer.py
+#       instead of the first 60 entries.
 #  v1.5 2026-09-23
 #       Add package_available(), so cli.py can preflight the optional
 #       openai package before collecting, not only when a client is built.
@@ -60,9 +63,9 @@ from ai_digest import Entry, Topic
 from ai_digest.analyzer.summarizer import (BUILD_REPORT_TOOL,
                                            DEFAULT_LOOKBACK_HOURS,
                                            DEFAULT_TIMEOUT,
-                                           MAX_INPUT_ENTRIES,
                                            MAX_OUTPUT_TOKENS, SYSTEM_PROMPT,
-                                           build_prompt, to_topics)
+                                           build_prompt, select_candidates,
+                                           to_topics)
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +230,7 @@ def summarize(entries: List[Entry], api_key: str, model: str,
     if not entries:
         return []
 
-    candidates = entries[:MAX_INPUT_ENTRIES]
+    candidates = select_candidates(entries)
     client = _build_client(api_key, base_url, max_retries, timeout)
     response = client.chat.completions.create(
         model=model,

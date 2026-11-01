@@ -36,6 +36,9 @@
 #  - anthropic
 #
 #  Version History:
+#  v1.7 2026-11-01
+#       Choose API-backed candidates as 45 papers and 15 news within 60,
+#       an incompatible change from taking the first 60 entries.
 #  v1.6 2026-09-22
 #       Validate to_topics() input by type instead of str() coercion,
 #       require 2-4 usable bullets, and select sources by validity first.
@@ -67,6 +70,35 @@ from ai_digest import Entry, Topic
 # Entries handed to the model. Sending the whole collection would be
 # wasteful, and the newest items are the relevant ones anyway.
 MAX_INPUT_ENTRIES = 60
+
+# Places of the candidate limit reserved for news, so that a day with
+# many papers still shows the model some news. The rest is for papers.
+NEWS_BASE_ENTRIES = 15
+
+
+def select_candidates(entries: List[Entry]) -> List[Entry]:
+    """
+    Choose the candidates handed to an API-backed topic editor.
+
+    At most MAX_INPUT_ENTRIES are taken: the basic allocation is
+    MAX_INPUT_ENTRIES - NEWS_BASE_ENTRIES papers (45) and NEWS_BASE_ENTRIES
+    news entries (15), each from the front of its own kind. Places one kind
+    cannot fill go to the other. Papers come first in the result, news
+    after, each kept in the order it arrived in.
+
+    Args:
+        entries: Deduplicated entries in order of preference.
+
+    Returns:
+        The one list to number in the prompt and to restore citations from.
+    """
+    papers = [e for e in entries if e.source_type == "paper"]
+    news = [e for e in entries if e.source_type != "paper"]
+    paper_count = min(len(papers),
+                      MAX_INPUT_ENTRIES - min(len(news), NEWS_BASE_ENTRIES))
+    news_count = min(len(news), MAX_INPUT_ENTRIES - paper_count)
+    return papers[:paper_count] + news[:news_count]
+
 
 # Characters of an abstract kept per entry in the prompt.
 SUMMARY_CHARS = 700
@@ -515,7 +547,7 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
     if not entries:
         return []
 
-    candidates = entries[:MAX_INPUT_ENTRIES]
+    candidates = select_candidates(entries)
     client = _build_client(api_key, auth_token, base_url, max_retries,
                            timeout)
     message = client.messages.create(**_build_request(

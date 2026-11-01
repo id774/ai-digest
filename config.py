@@ -105,7 +105,8 @@
 #      object but never wraps it in a tool_use block. It is off by
 #      default because prose is easy to mistake for a report.
 #  - ARXIV_CATEGORIES
-#      Comma separated arXiv categories to collect (e.g. cs.AI,cs.LG).
+#      Comma separated arXiv categories to collect. Defaults to
+#      cs.AI,cs.LG,cs.CL,cs.CV,cs.CR.
 #  - ARXIV_MAX_RESULTS
 #      Upper bound of arXiv entries fetched per category.
 #  - NEWS_FEED_URLS
@@ -146,6 +147,9 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v2.2 2026-11-01
+#       Default to five arXiv categories and seven news feeds, an
+#       incompatible change to the sources a run reads without any setting.
 #  v2.1 2026-09-23
 #       Incompatible: trim SUMMARIZER_BASE_URL before use and stop resolving
 #       LOOKBACK_HOURS for demo.
@@ -259,21 +263,25 @@ LEGACY_BACKENDS = {
 # topic set, which is only possible up to the six the grid holds.
 MAX_REPORT_TOPICS = 6
 
-# Default arXiv categories: artificial intelligence, machine learning
-# and computation and language.
-DEFAULT_ARXIV_CATEGORIES = "cs.AI,cs.LG,cs.CL"
+# Default arXiv categories: artificial intelligence, machine learning,
+# computation and language, computer vision, and cryptography and security.
+DEFAULT_ARXIV_CATEGORIES = "cs.AI,cs.LG,cs.CL,cs.CV,cs.CR"
 
 # Identity sent to arXiv and to the feed and publisher hosts. It names
 # the project so that an operator reading their logs can tell who is
 # calling and where to complain.
 DEFAULT_USER_AGENT = "ai-digest/1.0 (+https://github.com/id774/ai-digest)"
 
-# Default news feeds. They are deliberately few and stable; extend the
-# list through NEWS_FEED_URLS instead of editing this constant.
+# Default news feeds. They are official, stable feeds; extend the list
+# through NEWS_FEED_URLS instead of editing this constant.
 DEFAULT_NEWS_FEED_URLS = ",".join([
     "https://openai.com/news/rss.xml",
     "https://blog.google/technology/ai/rss/",
     "https://huggingface.co/blog/feed.xml",
+    "https://research.google/blog/rss/",
+    "https://machinelearning.apple.com/rss.xml",
+    "https://www.microsoft.com/en-us/research/blog/feed/",
+    "https://developer.nvidia.com/blog/feed",
 ])
 
 # Font paths probed when AI_DIGEST_FONT_PATH is not set. Only fonts with

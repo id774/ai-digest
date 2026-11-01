@@ -459,7 +459,7 @@ ERROR ai_digest.cli: no entry collected: all 12 sources failed, so nothing was r
 An empty window is expected, not a bug, and it is unrelated to `SUMMARIZER_BACKEND`, since collection happens before summarization runs. Two causes are common:
 
 - **arXiv does not announce papers on weekends.** Friday through Sunday submissions are all announced on Monday, so `cli.py run` on a Saturday or Sunday routinely collects 0 arXiv papers.
-- **The configured news feeds do not publish every day.** The default feeds (OpenAI, Google AI Blog, Hugging Face Blog) can go a day or more between posts.
+- **The configured news feeds do not publish every day.** The configured feeds may go a day or more without new posts.
 
 When only some sources fail, the run continues with the rest and logs a `WARNING ... continuing with N of M sources` line, so a single broken feed neither hides the report nor passes unnoticed.
 
