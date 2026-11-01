@@ -159,6 +159,26 @@ demonstration only. The archive is exactly what must survive.
 configured list of RSS or Atom feeds. Both lists are settings: adding or
 removing a source is configuration, not a code change.
 
+The default papers come from five arXiv categories, in this order: `cs.AI`
+(artificial intelligence), `cs.LG` (machine learning), `cs.CL` (computation and
+language), `cs.CV` (computer vision) and `cs.CR` (cryptography and security),
+with up to 60 entries asked for per category.
+
+The default news comes from seven RSS or Atom feeds, in this order:
+
+| Feed | URL |
+|---|---|
+| OpenAI News | `https://openai.com/news/rss.xml` |
+| Google AI Blog | `https://blog.google/technology/ai/rss/` |
+| Hugging Face Blog | `https://huggingface.co/blog/feed.xml` |
+| Google Research | `https://research.google/blog/rss/` |
+| Apple Machine Learning Research | `https://machinelearning.apple.com/rss.xml` |
+| Microsoft Research | `https://www.microsoft.com/en-us/research/blog/feed/` |
+| NVIDIA Developer Blog | `https://developer.nvidia.com/blog/feed` |
+
+Both defaults can be replaced by configuration, and an empty feed list turns
+news collection off. Which feeds are allowed is not restricted to the defaults.
+
 Every non-empty NEWS_FEED_URLS item is an absolute HTTPS URL. A malformed or
 non-HTTPS effective value is a configuration error before collection begins.
 
@@ -264,6 +284,27 @@ are:
 - reduce them to the number of topics that can be displayed,
 - and say which input items each topic rests on.
 
+**An API-backed editor receives a balanced candidate set.** After mechanical
+deduplication, at most 60 candidates are sent. The basic allocation is 45 papers
+and 15 news articles, each kind taken in its existing order of preference. When
+one kind has fewer candidates than its allocation, the unused places go to the
+other kind; when fewer than 60 candidates remain, all of them are sent. For
+example:
+
+| Papers available | News available | Sent |
+|---|---|---|
+| 100 | 100 | 45 papers, 15 news |
+| 30 | 100 | 30 papers, 30 news |
+| 100 | 5 | 55 papers, 5 news |
+| 0 | 100 | 0 papers, 60 news |
+| 20 | 10 | 20 papers, 10 news |
+
+The selected candidates are presented papers first, then news, and the numbers
+the model cites refer to exactly that list. The allocation decides only which
+candidates the model can consider. It is not a quota on the report: the model
+still chooses up to six topics by importance, and the allocation is not
+configurable.
+
 **Importance is relative, not absolute.** It is a ranking within the configured
 sources, the configured window and the candidates actually collected — not a
 judgement about the AI field as a whole.
@@ -280,7 +321,7 @@ could process.**
 
 | Limit | Value |
 |---|---|
-| Candidates sent to an API-backed topic editor | 60 |
+| Candidates sent to an API-backed topic editor | 60, allocated 45 papers and 15 news with unused places reassigned |
 | Topics in a report | 6 |
 | API-backed bullet points per topic | 2 to 4, one sentence each |
 | Plain-mode bullet points per topic | 1 to 4, taken mechanically from the source summary |
@@ -335,7 +376,10 @@ deduplication, images, structured storage, HTML generation, the daily summary
 image, and browsing what is stored.
 
 Not performed in plain mode: semantic grouping, translation and Japanese
-editing, content based category naming, and model ranking.
+editing, content based category naming, and model ranking. The paper and news
+allocation of section 11 does not apply either: plain mode selects the most
+recent deduplicated entries by publication time, up to the configured number of
+topics.
 
 **A model is not a required dependency of the system.** It is an interchangeable
 stage that raises the quality of the topic editing, and everything before and
@@ -587,3 +631,8 @@ like is not a property of where its material came from.**
     file.
 13. A stored day can be re-rendered without calling any endpoint.
 14. The whole test suite passes offline.
+15. A run with no source setting collects from the five default arXiv categories
+    and the seven default feeds, and a source that fails alone does not stop it.
+16. With enough of both kinds collected, an API-backed editor is sent 45 papers
+    and 15 news articles; with fewer of one kind, the unused places go to the
+    other; and the plain backend ignores this allocation.
