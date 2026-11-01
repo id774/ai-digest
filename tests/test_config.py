@@ -99,6 +99,9 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.6 2026-11-01
+#       Cover the five default arXiv categories and seven default feeds, and
+#       their match with .env.example.
 #  v1.5 2026-09-23
 #       Cover trimming SUMMARIZER_BASE_URL's surrounding whitespace before
 #       storing it, unlike a credential, which keeps it as given.
@@ -743,6 +746,61 @@ class NewsFeedUrlsTest(unittest.TestCase):
 
         self.assertEqual(["http://example.test/feed"],
                          loaded.news_feed_urls)
+
+
+DEFAULT_CATEGORIES = ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.CR"]
+DEFAULT_FEEDS = [
+    "https://openai.com/news/rss.xml",
+    "https://blog.google/technology/ai/rss/",
+    "https://huggingface.co/blog/feed.xml",
+    "https://research.google/blog/rss/",
+    "https://machinelearning.apple.com/rss.xml",
+    "https://www.microsoft.com/en-us/research/blog/feed/",
+    "https://developer.nvidia.com/blog/feed",
+]
+
+
+class DefaultSourceTest(unittest.TestCase):
+    """The default sources are fixed in value and order and stay overridable."""
+
+    def load(self, environment):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with mock.patch.object(config, "load_dotenv", None):
+                return config.load_config()
+
+    def test_default_categories_and_feeds(self):
+        loaded = self.load({})
+
+        self.assertEqual(DEFAULT_CATEGORIES, loaded.arxiv_categories)
+        self.assertEqual(DEFAULT_FEEDS, loaded.news_feed_urls)
+        self.assertEqual(60, loaded.arxiv_max_results)
+        self.assertEqual(24, loaded.lookback_hours)
+
+    def test_default_feeds_are_https(self):
+        config.validated_news_feed_urls(DEFAULT_FEEDS)
+
+    def test_explicit_settings_replace_the_defaults(self):
+        loaded = self.load({"ARXIV_CATEGORIES": "cs.RO",
+                            "NEWS_FEED_URLS": "https://example.test/feed"})
+
+        self.assertEqual(["cs.RO"], loaded.arxiv_categories)
+        self.assertEqual(["https://example.test/feed"],
+                         loaded.news_feed_urls)
+
+    def test_an_empty_feed_list_disables_news(self):
+        self.assertEqual([], self.load({"NEWS_FEED_URLS": ""}).news_feed_urls)
+
+    def test_env_example_matches_the_defaults(self):
+        path = os.path.join(config.BASE_DIR, ".env.example")
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+        values = dict(line.split("=", 1) for line in lines
+                      if line.startswith(("ARXIV_CATEGORIES=",
+                                          "NEWS_FEED_URLS=")))
+
+        self.assertEqual(",".join(DEFAULT_CATEGORIES),
+                         values["ARXIV_CATEGORIES"])
+        self.assertEqual(",".join(DEFAULT_FEEDS), values["NEWS_FEED_URLS"])
 
 
 if __name__ == "__main__":

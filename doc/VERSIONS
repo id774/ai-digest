@@ -3,7 +3,8 @@ ai-digest Repository Version History
 
 v1.3 (Release Date: TBD)
 ------------------------
-- Expand default arXiv categories and RSS feeds for broader AI coverage.
+- Broaden default arXiv categories and RSS feeds for AI coverage, which is an
+  incompatible change to what an unchanged run reads.
 - Balance API-backed candidates across papers and news within the 60-entry
   limit.
 

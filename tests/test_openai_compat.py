@@ -67,6 +67,9 @@
 #  - Standard library only (the openai package is stubbed, never imported)
 #
 #  Version History:
+#  v1.2 2026-11-01
+#       Cover the shared paper and news candidate selection in the prompt
+#       and in citation restoration.
 #  v1.1 2026-09-12
 #       Require the sole OpenAI-compatible report tool without naming a
 #       function choice.
@@ -75,6 +78,7 @@
 #
 ########################################################################
 
+import json
 import sys
 import types
 import unittest
@@ -163,6 +167,40 @@ class ExtractArgumentsTest(unittest.TestCase):
     def test_rejects_an_empty_choice_list(self):
         with self.assertRaisesRegex(RuntimeError, "no choice"):
             openai_compat._extract_arguments(SimpleNamespace(choices=[]))
+
+
+class CandidateSelectionTest(unittest.TestCase):
+
+    def test_prompt_and_citations_use_the_same_list(self):
+        def make(kind, count):
+            return [Entry(source_type=kind, title="%s %d" % (kind, i),
+                          url="https://example.test/%s/%d" % (kind, i),
+                          summary="S.", published="2026-08-02T00:00:00+00:00",
+                          origin="O") for i in range(count)]
+
+        entries = make("paper", 100) + make("news", 100)
+        arguments = json.dumps({"topics": [{
+            "category": "c", "title": "t", "bullets": ["a", "b"],
+            "source_indexes": [45, 0, 60]}]})
+        client = mock.Mock()
+        client.chat.completions.create.return_value = _response(arguments)
+        with mock.patch.object(openai_compat, "_build_client",
+                               return_value=client):
+            topics = openai_compat.summarize(
+                entries, api_key="k", model="m", max_topics=6)
+
+        prompt = client.chat.completions.create.call_args.kwargs[
+            "messages"][1]["content"]
+        numbered = [line for line in prompt.splitlines()
+                    if line.startswith("[")]
+        self.assertEqual(60, len(numbered))
+        self.assertEqual("[44] (論文) paper 44", numbered[44])
+        self.assertEqual("[45] (ニュース) news 0", numbered[45])
+        self.assertEqual("[59] (ニュース) news 14", numbered[59])
+        self.assertEqual(
+            [{"title": "news 0", "url": "https://example.test/news/0"},
+             {"title": "paper 0", "url": "https://example.test/paper/0"}],
+            topics[0].sources)
 
 
 class SummarizeTest(unittest.TestCase):
