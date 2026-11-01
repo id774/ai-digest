@@ -53,6 +53,15 @@ not settle which, these come in order:
 A decision this list does not settle is settled where it arises, and recorded
 here once it has been.
 
+Use `must`, `always`, and `never` only for invariants that admit no reasonable
+exception. Express preferences and situational decisions with `prefer`,
+`should`, or other qualified wording. Do not apply a rule literally where doing
+so would defeat the repository's stated purpose, intended behavior,
+compatibility, safety, or approved change scope. Where the applicable
+specifications and policy leave a legitimate choice open, an explicit
+maintainer decision governs that choice; general conventions do not override
+it.
+
 ### 1.2 Invariants
 These lines are not crossed by a setting, by an option or by an extension.
 
