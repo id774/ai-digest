@@ -25,6 +25,14 @@ describe changes, the change is not finished until they describe it.
 
 ---
 
+## 0. Governing Principle
+
+**Simplicity is robustness.**
+
+This principle governs the following implementation and maintenance rules. It
+does not permit dropping required behavior, security, compatibility, or
+validation; satisfy those obligations without unnecessary complexity.
+
 ## 1. General Policy
 
 ### 1.1 Design Philosophy
@@ -114,14 +122,9 @@ These lines are not crossed by a setting, by an option or by an extension.
 The settings decide which API a run is sent to and what it is billed for, so
 they are read strictly.
 
-- Do not choose an endpoint implicitly. What is required follows from
-  `SUMMARIZER_BACKEND`: `plain` needs none of the credential, the base URL or
-  the model; `anthropic-compatible` needs the credential, and falls back to
-  the Anthropic default endpoint and model when the base URL or the model is
-  left unset; `openai-compatible` needs the credential, the base URL and the
-  model, none of which it defaults. A setting required by the selected
-  backend and left unset stops the run instead of being filled in with a
-  default.
+- Follow the backend-specific settings contract documented in the README and
+  requirements. Never infer or invent an endpoint or a required setting; honor
+  only the defaults explicitly defined for the selected backend.
 - Do not accept an unknown backend. A value the code has no analyzer for is
   refused before a request, never read as one of the backends that does exist.
 - Do not infer what an endpoint supports from its model name or its URL.
@@ -676,9 +679,8 @@ Before a change is proposed, it answers these:
 ---
 
 ### 1.14 License
-- The repository is dual licensed under the GPL version 3 or the LGPL version 3,
-  at the user's option. The full texts live in `doc/LICENSE.md`, `doc/COPYING` and
-  `doc/COPYING.LESSER`.
+- Follow the applicable terms in `doc/LICENSE.md`, `doc/COPYING`, and
+  `doc/COPYING.LESSER`; those documents are the authority for licensing.
 - Every module header repeats the license line of the standard block, so that a
   file read on its own still states its terms.
 - Add a dependency only when its license is compatible with that choice.
