@@ -118,6 +118,9 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v2.3 2026-11-07
+#       Skip environment settings the command line replaces, an incompatible
+#       change to how a setting is resolved: a lower invalid value is ignored.
 #  v2.2 2026-09-23
 #       Incompatible: use host-local implicit dates and number-only --version;
 #       also preflight openai and trim SUMMARIZER_BASE_URL.
@@ -342,6 +345,13 @@ _BLANK_OVERRIDE_DEFAULTS: Dict[str, Callable[[], Any]] = {
 # SUMMARIZER_AUTH_TOKEN either.
 _TRIMMED_STRING_FIELDS = ("data_dir", "summarizer_base_url",
                          "summarizer_model", "user_agent")
+
+
+def overridden_fields(args: argparse.Namespace) -> List[str]:
+    """ Return the names of the config fields the command line gave. """
+    given = vars(args)
+    return [name for name in OVERRIDABLE_FIELDS
+            if given.get(name) is not None]
 
 
 def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
@@ -882,7 +892,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Each subcommand resolves only the settings it actually uses,
         # so an invalid setting outside its scope - a malformed batch
         # setting for 'list', say - can never stop it.
-        config = args.loader()
+        # A setting the command line replaces is not read from the
+        # environment or .env, so an invalid lower priority value
+        # cannot stop a run whose effective value is valid.
+        config = args.loader(overridden_fields(args))
     except RuntimeError as error:
         # A setting the project no longer reads is a configuration
         # problem, not a crash: it deserves the same one line every

@@ -63,6 +63,9 @@
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.5 2026-11-07
+#       Cover overrides winning over invalid lower priority settings, and
+#       the rejection of non-ASCII digits in an explicit date.
 #  v1.4 2026-09-23
 #       Cover scalar normalization and require version options to print only
 #       the package release version.
@@ -86,6 +89,7 @@ from dataclasses import replace
 from unittest import mock
 
 import cli
+import config as config_module
 from config import DEFAULT_USER_AGENT, Config
 
 
@@ -341,6 +345,7 @@ class MaxTopicsOptionTest(unittest.TestCase):
 VALID_DATE = "2024-02-29"
 IMPOSSIBLE_DATE = "2026-02-31"
 NON_CANONICAL_DATE = "2026-2-1"
+FULLWIDTH_DATE = "\uff12\uff10\uff12\uff16-11-07"
 
 
 class ReportDateOptionTest(unittest.TestCase):
@@ -378,6 +383,104 @@ class ReportDateOptionTest(unittest.TestCase):
 
     def test_render_rejects_a_non_canonical_date(self):
         self.assertEqual(2, refused(["render", NON_CANONICAL_DATE]))
+
+    def test_every_command_rejects_a_date_in_full_width_digits(self):
+        for argv in (["run", "--date", FULLWIDTH_DATE],
+                     ["demo", "--date", FULLWIDTH_DATE],
+                     ["render", FULLWIDTH_DATE]):
+            with self.subTest(argv=argv):
+                self.assertEqual(2, refused(argv))
+
+
+class OverridePrecedenceTest(unittest.TestCase):
+    """ A valid option wins without its lower priority value being read. """
+
+    def main(self, argv, environment, handler="command_run"):
+        """ Return (exit code, configuration the handler received). """
+        seen = []
+
+        def record(_args, configured):
+            seen.append(configured)
+            return 0
+
+        with mock.patch.dict(os.environ, environment, clear=True), \
+                mock.patch.object(config_module, "_dotenv_values",
+                                  return_value={}), \
+                mock.patch.object(cli, "is_usable_font_path",
+                                  return_value=True), \
+                mock.patch.object(cli, handler, side_effect=record):
+            code = cli.main(argv)
+        return code, (seen[0] if seen else None)
+
+    def test_run_option_wins_over_an_invalid_environment_value(self):
+        code, configured = self.main(
+            ["run", "--max-topics", "3", "--lookback-hours", "5",
+             "--font-path", "/x.ttf"],
+            {"MAX_TOPICS": "0", "LOOKBACK_HOURS": "abc",
+             "AI_DIGEST_FONT_PATH": "/no/such/font.ttf"})
+
+        self.assertEqual(0, code)
+        self.assertEqual((3, 5, "/x.ttf"), (
+            configured.max_topics, configured.lookback_hours,
+            configured.font_path))
+
+    def test_demo_option_wins_over_an_invalid_environment_value(self):
+        code, configured = self.main(
+            ["demo", "--max-topics", "3", "--font-path", "/x.ttf"],
+            {"MAX_TOPICS": "7", "AI_DIGEST_FONT_PATH": "/no/such/font.ttf"},
+            handler="command_demo")
+
+        self.assertEqual(0, code)
+        self.assertEqual(3, configured.max_topics)
+
+    def test_render_option_wins_over_an_invalid_environment_value(self):
+        code, configured = self.main(
+            ["render", VALID_DATE, "--font-path", "/x.ttf"],
+            {"AI_DIGEST_FONT_PATH": "/no/such/font.ttf",
+             "LOOKBACK_HOURS": "0"},
+            handler="command_render")
+
+        # LOOKBACK_HOURS is not replaced, so render still refuses it.
+        self.assertEqual(1, code)
+        self.assertIsNone(configured)
+
+        code, configured = self.main(
+            ["render", VALID_DATE, "--font-path", "/x.ttf"],
+            {"AI_DIGEST_FONT_PATH": "/no/such/font.ttf"},
+            handler="command_render")
+
+        self.assertEqual(0, code)
+        self.assertEqual("/x.ttf", configured.font_path)
+
+    def test_an_invalid_value_without_an_override_still_fails(self):
+        for argv, environment, handler in (
+                (["run"], {"MAX_TOPICS": "0"}, "command_run"),
+                (["run", "--lookback-hours", "5"], {"MAX_TOPICS": "0"},
+                 "command_run"),
+                (["demo"], {"MAX_TOPICS": "0"}, "command_demo")):
+            with self.subTest(argv=argv):
+                code, configured = self.main(argv, environment, handler)
+                self.assertEqual(1, code)
+                self.assertIsNone(configured)
+
+    def test_an_invalid_option_is_still_a_parser_error(self):
+        self.assertEqual(2, refused(["run", "--max-topics", "0"]))
+
+    def test_a_legacy_variable_is_refused_beside_an_override(self):
+        code, configured = self.main(
+            ["run", "--summarizer-model", "m"],
+            {"ANTHROPIC_MODEL": "old"})
+
+        self.assertEqual(1, code)
+        self.assertIsNone(configured)
+
+    def test_list_ignores_an_invalid_setting_outside_its_scope(self):
+        code, configured = self.main(
+            ["list"], {"MAX_TOPICS": "0", "LOOKBACK_HOURS": "abc"},
+            handler="command_list")
+
+        self.assertEqual(0, code)
+        self.assertIsNotNone(configured)
 
 
 class FontPathOptionTest(unittest.TestCase):

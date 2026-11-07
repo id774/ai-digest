@@ -27,6 +27,9 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.5 2026-11-07
+#       Keep only entries published within the look back window up to the
+#       collection time, so a future-dated entry is no longer collected.
 #  v1.4 2026-09-22
 #       Cap the read body at MAX_COLLECTOR_RESPONSE_BYTES, failing an
 #       oversized feed the same way an unreachable one fails.
@@ -64,6 +67,11 @@ TAG_PATTERN = re.compile(r"<[^>]+>")
 SUMMARY_LIMIT = 1200
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_now() -> datetime:
+    """ Return the collection reference time as an aware UTC datetime. """
+    return datetime.now(timezone.utc)
 
 
 def _plain_text(html: str) -> str:
@@ -105,7 +113,8 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
 
     Args:
         feed_urls: Feed URLs to read.
-        lookback_hours: Only articles newer than this age are kept.
+        lookback_hours: Only articles published within this many hours
+            up to now are kept; a future-dated article is dropped.
         timeout: HTTP timeout in seconds.
         user_agent: User-Agent header sent to the feed hosts.
 
@@ -115,7 +124,8 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
         once. The counters tell how many feeds failed and how many
         articles the readable ones offered.
     """
-    threshold = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    now = _utc_now()
+    threshold = now - timedelta(hours=lookback_hours)
     result = CollectionResult(sources_total=len(feed_urls))
     entries: List[Entry] = []
     seen_urls = set()
@@ -145,7 +155,7 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
         result.items_seen += len(parsed_feed.entries)
         for raw_entry in parsed_feed.entries:
             published = _entry_datetime(raw_entry)
-            if published < threshold:
+            if published > now or published < threshold:
                 # Feed order is not guaranteed, so keep scanning the
                 # remaining items instead of breaking out of the loop.
                 result.items_outside_window += 1

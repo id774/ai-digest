@@ -36,6 +36,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.7 2026-11-07
+#       Accept only ASCII digits in report dates, an incompatible change: a
+#       date written with other numerals no longer names a report.
 #  v1.6 2026-09-23
 #       Copy only report.json and its referenced topic images, resolved
 #       report-local, into a re-render staging directory, never the rest.
@@ -73,8 +76,10 @@ logger = logging.getLogger(__name__)
 # Report directories are named after their date and nothing else. The
 # pattern is anchored with \A and \Z rather than ^ and $, because $ also
 # matches in front of a trailing newline, which would let a date built
-# from a URL segment name a directory of its own.
-DATE_PATTERN = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
+# from a URL segment name a directory of its own. The digits are spelled
+# [0-9] because \d also matches the digits of other scripts, such as the
+# full width ones, which must not name an archive directory.
+DATE_PATTERN = re.compile(r"\A[0-9]{4}-[0-9]{2}-[0-9]{2}\Z")
 
 REPORT_FILENAME = "report.json"
 SUMMARY_FILENAME = "summary.png"

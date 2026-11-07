@@ -74,12 +74,17 @@
 #      second, rebound DNS answer for the pinned host is never reached.
 #    - Refuse a decompression-bomb-warning-range image the same as one
 #      past the error threshold, and keep an ordinary image usable.
+#    - Refuse a truncated PNG or JPEG whose header and size still read, try
+#      the next citation, and end in a generated card when none is usable.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow, requests, beautifulsoup4
 #
 #  Version History:
+#  v1.3 2026-11-07
+#       Cover refusal of an image whose header reads but whose body is
+#       incomplete, and the generated card that replaces it.
 #  v1.2 2026-09-23
 #       Cover canonical-hostname pinning, proxy bypass, a fetch-wide
 #       deadline, bomb-warning refusal, and arXiv host/path classification.
@@ -92,15 +97,19 @@
 
 import io
 import ipaddress
+import os
+import tempfile
 import time
 import unittest
 from unittest import mock
 
 from PIL import Image
 
-from ai_digest import transport
+import cli
+from ai_digest import Topic, transport
 from ai_digest.images import resolver
 from ai_digest.transport import HTTPSOnlyError
+from config import Config
 
 
 class _FakeRedirectResponse:
@@ -331,6 +340,90 @@ class DownloadImageTest(unittest.TestCase):
         content, extension = result
         self.assertEqual(buffer.getvalue(), content)
         self.assertEqual("png", extension)
+
+
+def _truncated_image(image_format):
+    """ Return an image whose header reads but whose body is cut short. """
+    buffer = io.BytesIO()
+    pixels = Image.effect_noise((300, 300), 80).convert("RGB")
+    pixels.save(buffer, format=image_format)
+    data = buffer.getvalue()
+    return data[:len(data) // 2]
+
+
+class IncompleteImageTest(unittest.TestCase):
+    """ An image is adopted only when it decodes completely. """
+
+    URL = "https://example.test/i.png"
+
+    def download(self, content):
+        with mock.patch.object(resolver, "_fetch",
+                               return_value=(content, self.URL)):
+            return resolver._download_image(self.URL, 5, "ai-digest")
+
+    def test_the_truncated_samples_still_have_a_readable_header(self):
+        for image_format in ("PNG", "JPEG"):
+            with Image.open(io.BytesIO(_truncated_image(image_format))) as i:
+                self.assertEqual((300, 300), i.size)
+
+    def test_a_truncated_png_yields_none(self):
+        self.assertIsNone(self.download(_truncated_image("PNG")))
+
+    def test_a_truncated_jpeg_yields_none(self):
+        self.assertIsNone(self.download(_truncated_image("JPEG")))
+
+    def test_a_complete_jpeg_is_still_usable(self):
+        buffer = io.BytesIO()
+        Image.new("RGB", (300, 300), color=(1, 2, 3)).save(
+            buffer, format="JPEG")
+
+        result = self.download(buffer.getvalue())
+
+        self.assertEqual((buffer.getvalue(), "jpg"), result)
+
+    def test_resolve_returns_none_for_a_truncated_image(self):
+        with mock.patch.object(resolver, "arxiv_figure_url",
+                               return_value=None), \
+                mock.patch.object(resolver, "open_graph_image_url",
+                                  return_value=self.URL), \
+                mock.patch.object(resolver, "_fetch",
+                                  return_value=(_truncated_image("PNG"),
+                                                self.URL)):
+            self.assertIsNone(resolver.resolve("https://example.test/a"))
+
+    def test_the_next_citation_is_tried_and_then_a_card_is_drawn(self):
+        good = io.BytesIO()
+        Image.new("RGB", (300, 300), color=(9, 9, 9)).save(
+            good, format="PNG")
+        truncated = _truncated_image("PNG")
+
+        def fetch(url, *_rest):
+            return ((truncated if "bad" in url else good.getvalue()),
+                    url)
+
+        def figure_url(url, *_rest):
+            return url.replace("/a/", "/img/")
+
+        topics = [
+            Topic(category="c", title="t", sources=[
+                {"url": "https://bad.test/a/1"},
+                {"url": "https://good.test/a/2"}]),
+            Topic(category="c", title="t", sources=[
+                {"url": "https://bad.test/a/3"}]),
+        ]
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(resolver, "arxiv_figure_url",
+                                  return_value=None), \
+                mock.patch.object(resolver, "open_graph_image_url",
+                                  side_effect=figure_url), \
+                mock.patch.object(resolver, "_fetch", side_effect=fetch):
+            cli.attach_images(topics, directory, Config(font_path=None))
+
+            self.assertEqual("good.test", topics[0].image_credit)
+            self.assertEqual("generated", topics[1].image_credit)
+            with Image.open(os.path.join(directory,
+                                         topics[1].image)) as card:
+                card.load()
 
 
 class PublicAddressJudgmentTest(unittest.TestCase):

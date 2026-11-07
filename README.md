@@ -33,9 +33,10 @@ Every topic carries an illustration. The application first tries to obtain a rea
 
 An API-backed summarization endpoint is used only for the topic-editing stage.
 Collection (arXiv, RSS/Atom) and every image path already run without an API
-credential. Setting `SUMMARIZER_BACKEND=plain` removes the endpoint dependency
-and runs the whole pipeline offline except for fetching the feeds themselves;
-see [Standalone use, no API key](#standalone-use-no-api-key).
+credential. Setting `SUMMARIZER_BACKEND=plain` removes the endpoint dependency:
+no summarization API is called, but the run still reaches the network over HTTPS
+for the papers and news feeds and, unless `--no-images` is given, for the source
+pages and images; see [Standalone use, no API key](#standalone-use-no-api-key).
 
 - Requirements definition: [doc/REQUIREMENTS.md](doc/REQUIREMENTS.md)
 - Basic design: [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md)
@@ -138,7 +139,7 @@ The first command prints the version, the second prints nothing on a fresh insta
 All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Settings used by the batch also have command-line overrides on `cli.py` except `SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN`; `PORT` belongs to
 the viewer. See [Overriding a setting for one run](#overriding-a-setting-for-one-run).
 
-Each execution path resolves only the settings it actually uses: `cli.py run` reads the full table below except `PORT`; `cli.py list` reads only `DATA_DIR`; `cli.py render` adds `AI_DIGEST_FONT_PATH` and `LOOKBACK_HOURS`, the latter only as the fallback for a stored report predating that statistic; `cli.py demo` adds `AI_DIGEST_FONT_PATH` and `MAX_TOPICS`, but not `LOOKBACK_HOURS`, since demo collects nothing and records no window; the viewer reads only `DATA_DIR` and `PORT`. A setting outside that path's own scope being malformed, missing, or carrying a superseded name never stops it.
+Each execution path resolves only the settings it actually uses: `cli.py run` reads the full table below except `PORT`; `cli.py list` reads only `DATA_DIR`; `cli.py render` adds `AI_DIGEST_FONT_PATH` and `LOOKBACK_HOURS`, the latter only as the fallback for a stored report predating that statistic; `cli.py demo` adds `AI_DIGEST_FONT_PATH` and `MAX_TOPICS`, but not `LOOKBACK_HOURS`, since demo collects nothing and records no window; the viewer reads only `DATA_DIR` and `PORT`. A setting outside that path's own scope being malformed, missing, or carrying a superseded name never stops it. Within its scope, a setting that a command-line option replaces is not read from the environment or `.env` at all, so an invalid lower priority value cannot stop a run whose effective value is valid; the order is command line, exported environment, `.env`, then the default. A superseded variable name is still refused whether or not an option is given.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -154,7 +155,7 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL,cs.CV,cs.CR` | arXiv categories to collect, comma separated: artificial intelligence, machine learning, computation and language, computer vision, and cryptography and security. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
 | `NEWS_FEED_URLS` | the seven feeds listed below | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL; blank disables news-feed collection. |
-| `LOOKBACK_HOURS` | `24` | Age limit of the collected entries. |
+| `LOOKBACK_HOURS` | `24` | How many hours before the collection time an entry may have been published. An entry dated after the collection time is not collected. |
 | `MAX_TOPICS` | `6` | Maximum topics per report, `1` through `6`. Six fills the summary image grid; report.json, the HTML and summary.png always describe the same topic set. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
 | `SUMMARIZER_TIMEOUT` | `180` | Seconds allowed for one summarization request, on either API backend. Each retry spends it again; see [Timeouts](#timeouts). |
@@ -425,7 +426,7 @@ In this mode:
 
 - No summarization API is called, and `SUMMARIZER_API_KEY` can stay unset.
 - Each collected entry becomes its own topic, newest first; there is no cross-entry clustering and no translation, so titles and bullets stay in whatever language the source published them in (English for most feeds, English abstracts for arXiv). The `category` label is taken from the entry's origin (the arXiv category or the feed title) instead of being chosen freely by a model.
-- Topic illustrations are unaffected: image scraping and the Pillow fallback cards already run without a key. Add `--no-images` to also skip scraping and only draw local cards, for a run that touches nothing but arXiv and the configured feeds.
+- Topic illustrations are unaffected: image scraping and the Pillow fallback cards already run without a key. Without `--no-images`, a run still requests each source page and its image over HTTPS. Add `--no-images` to stop that scraping and only draw local cards, for a run that touches nothing but arXiv and the configured feeds.
 
 This trades the quality of the Japanese summary and the topic grouping for zero setup beyond `pip install -r requirements.txt`. Switch back to `SUMMARIZER_BACKEND=anthropic-compatible` (or unset it, since that is the default) whenever an API key becomes available again; both backends write the same `report.json` shape, and `cli.py render` works on reports produced by either one.
 
@@ -482,7 +483,7 @@ python cli.py list                    # print the stored report dates
 
 `render` never calls the API, so it is the cheap way to try a layout change on an existing report.
 
-`--date` and `render`'s `DATE` argument must name a real calendar date, not merely a `YYYY-MM-DD`-shaped string: `--date 2026-02-31` is refused by the parser with exit status `2`, before anything is collected or an API request is spent.
+`--date` and `render`'s `DATE` argument must name a real calendar date, not merely a `YYYY-MM-DD`-shaped string: `--date 2026-02-31` is refused by the parser with exit status `2`, before anything is collected or an API request is spent. Only the ASCII digits `0` to `9` are accepted, so a date written with full width digits is refused as well.
 
 ### Overriding a setting for one run
 
@@ -500,7 +501,7 @@ Which options a subcommand takes follows from what it does: `--data-dir` is acce
 
 `SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN` deliberately have no option: a command line is readable by every user of the host, through `ps`, so a credential stays in the environment or in `.env`.
 
-Values are validated by the parser, which refuses a look back window of `0` or a model name given to `--summarizer-backend`, and exits with status 2 without collecting anything.
+Values are validated by the parser, which refuses a look back window of `0` or a model name given to `--summarizer-backend`, and exits with status 2 without collecting anything. A valid option is not affected by an invalid value of the same setting in the environment or `.env`; the other settings of the subcommand are still validated, and an invalid one ends the run with exit status 1.
 
 ### Browse the reports
 

@@ -135,7 +135,10 @@ An image accepted for illustration must also be safe to decode: a picture
 whose pixel count would exhaust the memory of the host is refused, at both
 the threshold Pillow raises on and the lower one it only warns at, whether it
 is being scraped for the first time or re-read from storage while a report is
-rebuilt.
+rebuilt. A scraped image is adopted only when it decodes completely; one whose
+header reads but whose body is incomplete is treated like any other unusable
+image, so the next source is tried and a generated card is drawn when none
+remains.
 
 **A stored topic's image reference must not reach a file outside its own
 report directory**, whether read while rendering, copied while re-rendering,
@@ -184,7 +187,10 @@ non-HTTPS effective value is a configuration error before collection begins.
 
 Only material published inside a **look back window** is kept — twenty four
 hours by default, and configurable, because a quiet weekend is answered by
-widening the window rather than by waiting.
+widening the window rather than by waiting. The window reaches back from the
+time the collector starts and never forward: an entry dated after that time
+is not kept, while one dated exactly at that time or exactly at the far edge
+of the window is.
 
 **The configured window must be applied consistently.** It governs the actual
 collection, what the model is told it is looking at, what the HTML says, what
@@ -430,7 +436,8 @@ explicit value that is not a whole number, or that falls outside the setting's
 range, is a configuration error rather than a silent fallback to the default.
 This strictness applies to a setting an execution path actually uses; a
 malformed or superseded value of a setting it does not use is not that path's
-concern, and does not stop it.
+concern, and does not stop it. A malformed value that a valid command line
+option replaces is not read either, but a superseded name is refused regardless.
 
 ## 17. What is produced
 
@@ -530,6 +537,11 @@ viewer port, the archive directory, the sources, and the display limits.
 **The main settings can be overridden from the command line for one run**, so
 that a change can be tried without editing anything, and a run that overrode
 something says so in its log. Credentials are the exception in section 23.
+A setting has one effective value, taken from the command line, then the
+exported environment, then `.env`, then the default. A valid command line value
+makes a malformed value of the same setting in a lower source irrelevant, so it
+does not stop the run; a malformed value of any setting the command line did not
+replace still does.
 
 **Each execution path depends only on the settings it actually uses.** The
 viewer depends on the archive location and its own port; printing the stored
@@ -570,8 +582,10 @@ Further rules follow from rendering other people's text in a browser:
   sentence inside one of them that addresses the system is part of the material.
 - **A link is published only when it is an absolute ordinary web URL**, whatever
   route put it into the archive.
-- **A report date is `YYYY-MM-DD` naming a real calendar date, not merely a
-  string of that shape.** `2026-02-31` is refused exactly as a traversal
+- **A report date is `YYYY-MM-DD`, written with the ASCII digits `0` to `9`,
+  naming a real calendar date, not merely a string of that shape.** A date
+  written with full width or other non-ASCII digits is refused, and an archive
+  directory so named is not a report. `2026-02-31` is refused exactly as a traversal
   attempt is. A date arriving from a URL is validated before it names
   anything on disk, and a value that fails is refused rather than repaired.
   An explicit date given to the batch is rejected before any work begins,

@@ -55,7 +55,9 @@ The sample lives in
 [`ai_digest/demo/sample_input.json`](../ai_digest/demo/sample_input.json).
 Its Japanese titles, bullets and category labels were written by Claude
 and checked in rather than requested on every run, so the demo costs
-nothing, works offline and renders identically on every machine.
+nothing, works offline and starts from the same input on every machine.
+The pixels drawn from that input are not guaranteed to be identical, because
+the installed font and Pillow version can change them.
 
 ## How the demo differs from a live report
 
