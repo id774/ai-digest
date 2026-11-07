@@ -219,8 +219,11 @@ URL, so that the timeout and the User-Agent apply to every source. Markup is
 stripped from summaries and their length is capped, because a feed summary is
 sometimes the whole article and only its beginning is useful for judging it.
 
-Both drop an item whose link is not an ordinary absolute web URL, so an unsafe
-scheme never enters the archive in the first place.
+Both drop an item whose link is not an ordinary absolute web URL that names a
+host, so an unsafe scheme never enters the archive in the first place.
+`is_safe_url()` also refuses an empty host, a netloc holding only a port or
+user information, and an invalid port; `safe_url()` applies the same test to a
+link already stored, so it is shown as no link.
 
 ### Time normalization
 
@@ -592,7 +595,17 @@ The following properties of this module carry weight:
   re-render staging copy, and `app.py`'s `/reports/<date>/assets/<file>` route
   all resolve a stored asset through this one function, so an unsafe
   reference degrades to no image or a 404 instead of reaching the file
-  system on the caller's behalf.
+  system on the caller's behalf. `summary_image_path()` resolves
+  `summary.png` through it too, so `/reports/<date>/image` cannot serve a
+  symlink leading outside the report. The pages apply the same test before
+  rendering: `build.with_local_images()` hands the shared template a copy of
+  the topics from which an unsafe image is removed, for the standalone HTML and
+  the viewer alike, and the stored topics and `report.json` stay as they were.
+- **A stored report above six topics is unreadable.** `load_report()` returns
+  `None` for it, as for any corrupt report, because the summary image draws six
+  cards at most; the viewer answers 404 and `render` exits 1 without touching
+  the stored files. Nothing is cut down to six. `list_dates()` still counts a
+  date by its shape and its `report.json`, not by what the file holds.
 
 Listing returns only directories that are named like a date, hold a report,
 *and* name a calendar date that actually exists, newest first.

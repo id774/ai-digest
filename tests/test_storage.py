@@ -51,6 +51,12 @@
 #    - Reject a date written with full width or other non-ASCII digits,
 #      answer a lookup with None, skip such a directory when listing, and
 #      let the viewer answer 404 while an ASCII report is still served.
+#    - Refuse a stored report above six topics in load_report() and the
+#      viewer, accept six, and keep the file and the listing unchanged.
+#    - Serve summary.png with 200 only from its report directory, and answer
+#      404 for a missing file, an outside symlink and an invalid date.
+#    - Omit a topic image outside its report directory from the viewer
+#      page, keeping a local one and the other topics.
 #    - Return None for syntactically valid JSON with an invalid structure.
 #    - Return None when a stored topic's field types are ones the renderer
 #      cannot consume - a non-string category, title, image or
@@ -83,8 +89,8 @@
 #
 #  Version History:
 #  v1.4 2026-11-07
-#       Cover rejection of dates written with non-ASCII digits, in
-#       storage lookups, the archive listing and the viewer.
+#       Cover rejection of non-ASCII digit dates, stored reports above six
+#       topics, and topic or summary images outside their report directory.
 #  v1.3 2026-09-23
 #       Cover the whitelist re-render copy and report_local_asset_path()
 #       refusing a traversal, an absolute path, or an outside symlink.
@@ -184,6 +190,20 @@ NON_ASCII_DIGIT_DATES = (
 )
 
 
+def _load_viewer(directory):
+    """ Import app.py with DATA_DIR pointing at directory. """
+    import importlib
+    import sys
+
+    import config as config_module
+
+    with mock.patch.dict(os.environ, {"DATA_DIR": directory}, clear=True), \
+            mock.patch.object(config_module, "load_dotenv", None):
+        if "app" in sys.modules:
+            return importlib.reload(sys.modules["app"])
+        return importlib.import_module("app")
+
+
 class AsciiDigitDateTest(unittest.TestCase):
     """ Only ASCII digits name a report, wherever the date arrives from. """
 
@@ -213,18 +233,8 @@ class AsciiDigitDateTest(unittest.TestCase):
             self.assertEqual(["2026-11-06"], list_dates(directory))
 
     def test_the_viewer_answers_404_for_it_and_serves_an_ascii_report(self):
-        import importlib
-        import sys
-
-        import config as config_module
-
         with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.dict(os.environ, {"DATA_DIR": directory},
-                                 clear=True), \
-                    mock.patch.object(config_module, "load_dotenv", None):
-                viewer = (importlib.reload(sys.modules["app"])
-                          if "app" in sys.modules
-                          else importlib.import_module("app"))
+            viewer = _load_viewer(directory)
             self.make_report(directory, "2026-11-07")
             client = viewer.app.test_client()
 
@@ -236,6 +246,125 @@ class AsciiDigitDateTest(unittest.TestCase):
                     self.assertEqual(
                         404, client.get(
                             "/reports/" + date + "/image").status_code)
+
+
+class ReportBoundaryTest(unittest.TestCase):
+    """ Stored topics and images are checked where they are read. """
+
+    DATE = "2026-11-07"
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.data = os.path.join(self.temp.name, "data")
+        self.outside = os.path.join(self.temp.name, "outside.png")
+        with open(self.outside, "wb") as handle:
+            handle.write(b"OUTSIDE-BYTES")
+        self.viewer = _load_viewer(self.data)
+        self.client = self.viewer.app.test_client()
+
+    def topics(self, count, image=None):
+        return [Topic(category="c", title="見出し{0}".format(i),
+                      bullets=["a", "b"],
+                      sources=[{"title": "s", "url": "https://x.test/"}],
+                      image=image if i == 0 else None)
+                for i in range(count)]
+
+    def store(self, topics):
+        save_report(self.data, self.DATE, topics, {})
+        return report_dir(self.data, self.DATE)
+
+    def symlink(self, name, target=None):
+        try:
+            os.symlink(target or self.outside,
+                       os.path.join(report_dir(self.data, self.DATE), name))
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks are not supported here")
+
+    def test_six_topics_load_and_seven_are_refused(self):
+        self.store(self.topics(6))
+        self.assertEqual(6, len(load_report(self.data, self.DATE)["topics"]))
+        self.assertEqual(200, self.client.get(
+            "/reports/" + self.DATE).status_code)
+
+        directory = self.store(self.topics(7))
+        path = os.path.join(directory, "report.json")
+        with open(path, "rb") as handle:
+            before = handle.read()
+
+        with self.assertLogs(storage.logger, "WARNING"):
+            self.assertIsNone(load_report(self.data, self.DATE))
+        self.assertEqual(404, self.client.get(
+            "/reports/" + self.DATE).status_code)
+        with open(path, "rb") as handle:
+            self.assertEqual(before, handle.read())
+        self.assertEqual([self.DATE], list_dates(self.data))
+
+    def test_an_empty_stored_report_still_loads(self):
+        self.store([])
+
+        self.assertEqual([], load_report(self.data, self.DATE)["topics"])
+
+    def test_summary_image_is_served_only_from_its_directory(self):
+        directory = self.store(self.topics(1))
+        url = "/reports/" + self.DATE + "/image"
+        self.assertEqual(404, self.client.get(url).status_code)  # missing
+
+        with open(os.path.join(directory, "summary.png"), "wb") as handle:
+            handle.write(b"LOCAL-PNG")
+        with self.client.get(url) as response:
+            self.assertEqual((200, b"LOCAL-PNG"),
+                             (response.status_code, response.data))
+
+        os.remove(os.path.join(directory, "summary.png"))
+        self.symlink("summary.png")
+        response = self.client.get(url)
+        self.assertEqual(404, response.status_code)
+        self.assertNotIn(b"OUTSIDE-BYTES", response.data)
+        self.assertIsNone(summary_image_path(self.data, self.DATE))
+
+    def test_a_symlink_that_stays_inside_the_directory_is_served(self):
+        directory = self.store(self.topics(1))
+        with open(os.path.join(directory, "real.png"), "wb") as handle:
+            handle.write(b"INSIDE")
+        self.symlink("summary.png", os.path.join(directory, "real.png"))
+
+        with self.client.get("/reports/" + self.DATE + "/image") as response:
+            self.assertEqual((200, b"INSIDE"),
+                             (response.status_code, response.data))
+
+    def test_an_invalid_date_has_no_summary_image(self):
+        for date in ("2026-02-31", "..", "%2e%2e", NON_ASCII_DIGIT_DATES[0]):
+            with self.subTest(date=date):
+                self.assertEqual(404, self.client.get(
+                    "/reports/" + date + "/image").status_code)
+
+    def test_the_viewer_omits_only_an_unsafe_topic_image(self):
+        directory = self.store(self.topics(1, image="topic-1.png"))
+        with open(os.path.join(directory, "topic-1.png"), "wb") as handle:
+            handle.write(b"LOCAL")
+        page = self.client.get("/reports/" + self.DATE).get_data(as_text=True)
+        self.assertIn("/assets/topic-1.png", page)
+
+        self.symlink("link.png")
+        for bad in ("https://evil.test/x.png", "/etc/passwd", "../x.png",
+                    "sub/x.png", "missing.png", "link.png"):
+            with self.subTest(image=bad):
+                topics = self.topics(2, image=bad)
+                topics[1].image = "topic-1.png"
+                path = os.path.join(directory, "report.json")
+                save_report(self.data, self.DATE, topics, {})
+                with open(path, "rb") as handle:
+                    before = handle.read()
+
+                page = self.client.get(
+                    "/reports/" + self.DATE).get_data(as_text=True)
+
+                self.assertEqual(1, page.count('class="thumb"'))
+                self.assertIn("/assets/topic-1.png", page)
+                self.assertIn("見出し0", page)
+                with open(path, "rb") as handle:
+                    self.assertEqual(before, handle.read())
 
 
 class RoundTripTest(unittest.TestCase):

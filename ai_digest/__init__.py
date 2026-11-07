@@ -31,6 +31,9 @@
 #  - Python Version: 3.9 or later
 #
 #  Version History:
+#  v1.3 2026-11-07
+#       Refuse a link with no host or an invalid port, an incompatible
+#       change to which source links are published.
 #  v1.2 2026-08-03
 #       Add CollectionResult, which carries the per source outcome of a
 #       collector next to its entries.
@@ -74,18 +77,24 @@ def is_safe_url(url: str) -> bool:
     """
     Return True when a URL may be published as a link.
 
-    Only absolute http and https URLs pass. Everything else is refused,
-    including relative references, since a link stored in a report is
-    rendered both by the viewer and by the standalone HTML, where the
-    document it is opened from is not a reliable base.
+    Only absolute http and https URLs that name a host pass, with an
+    explicit port, if any, that is a valid port number. Everything else
+    is refused, including relative references, since a link stored in a
+    report is rendered both by the viewer and by the standalone HTML,
+    where the document it is opened from is not a reliable base. A
+    netloc that holds only a port or only user information names no
+    host, so it is refused as well.
     """
     if not url:
         return False
     try:
         parsed = urlparse(url.strip())
-    except ValueError:  # malformed IPv6 literals and the like
+        # Reading .port is what validates it; it raises on a bad value.
+        parsed.port
+    except ValueError:  # malformed IPv6 literals, invalid ports and the like
         return False
-    return parsed.scheme.lower() in SAFE_URL_SCHEMES and bool(parsed.netloc)
+    return (parsed.scheme.lower() in SAFE_URL_SCHEMES
+            and bool(parsed.hostname))
 
 
 def safe_url(url: str) -> str:

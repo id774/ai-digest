@@ -33,12 +33,12 @@
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
-#  - Standard library only
+#  - See requirements.txt (config.py supplies the topic limit)
 #
 #  Version History:
 #  v1.7 2026-11-07
-#       Accept only ASCII digits in report dates, an incompatible change: a
-#       date written with other numerals no longer names a report.
+#       Reject non-ASCII digit dates, reports above six topics and summary
+#       images outside their directory, all incompatible changes to what is read.
 #  v1.6 2026-09-23
 #       Copy only report.json and its referenced topic images, resolved
 #       report-local, into a re-render staging directory, never the rest.
@@ -70,6 +70,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional
 
 from ai_digest import Topic
+from config import MAX_REPORT_TOPICS
 
 logger = logging.getLogger(__name__)
 
@@ -446,6 +447,13 @@ def load_report(data_dir: str, date: str) -> Optional[Dict[str, Any]]:
         return None
     if not all(_is_valid_topic_payload(item) for item in topics):
         return None
+    if len(topics) > MAX_REPORT_TOPICS:
+        # The summary image draws at most this many cards, so a longer
+        # report could never be shown consistently; it is refused whole
+        # rather than cut down to fit.
+        logger.warning("report %s holds %d topics, above the limit of %d",
+                       date, len(topics), MAX_REPORT_TOPICS)
+        return None
     try:
         loaded_topics = [Topic.from_dict(item) for item in topics]
     except (AttributeError, TypeError, ValueError):
@@ -470,9 +478,15 @@ def list_dates(data_dir: str) -> List[str]:
 
 
 def summary_image_path(data_dir: str, date: str) -> Optional[str]:
-    """ Return the composite image path, or None when absent. """
+    """
+    Return the composite image path, or None when it is not served.
+
+    The image is a report-local asset like any other: it must be a file
+    directly inside the report directory, and a symlink that leads
+    outside that directory is refused the same way a missing file is.
+    """
     try:
-        path = os.path.join(report_dir(data_dir, date), SUMMARY_FILENAME)
+        directory = report_dir(data_dir, date)
     except ValueError:
         return None
-    return path if os.path.isfile(path) else None
+    return report_local_asset_path(directory, SUMMARY_FILENAME)

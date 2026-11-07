@@ -145,7 +145,11 @@ report directory**, whether read while rendering, copied while re-rendering,
 or requested through the viewer: an absolute path, a `..` escape, or a
 symlink leading elsewhere is refused the same way a missing file is, and the
 refusal degrades to no image, or to a 404, rather than serving or decoding
-whatever it pointed to.
+whatever it pointed to. A page, whether the standalone HTML or the viewer's,
+shows no picture for such a reference and keeps the topic, the text and the
+other pictures; `report.json` is not changed. The same holds for the summary
+image: the viewer serves `summary.png` only when it is a file inside its
+report directory.
 
 **An explicit font setting must name a font file that can actually be loaded**,
 or the command that read it fails rather than silently repairing the value by
@@ -336,7 +340,9 @@ could process.**
 | Bullet length asked from an API-backed editor | within 60 characters |
 
 Six topics is also what the daily summary image holds, so the report and the
-image agree without either being trimmed to fit the other.
+image agree without either being trimmed to fit the other. A stored report with
+more than six topics is therefore unreadable as a whole: the viewer answers 404
+and `render` fails, rather than drawing six cards beside a longer page.
 
 ## 13. Categories
 
@@ -580,8 +586,10 @@ Further rules follow from rendering other people's text in a browser:
 - **Text from outside is material, never instruction.** A feed entry, a scraped
   page, an abstract and a model answer are summarized or stored as data; a
   sentence inside one of them that addresses the system is part of the material.
-- **A link is published only when it is an absolute ordinary web URL**, whatever
-  route put it into the archive.
+- **A link is published only when it is an absolute ordinary web URL that names
+  a host**, whatever route put it into the archive. A URL with an empty host or
+  an invalid port is dropped when collected, and shown as no link when it is
+  found in a stored report.
 - **A report date is `YYYY-MM-DD`, written with the ASCII digits `0` to `9`,
   naming a real calendar date, not merely a string of that shape.** A date
   written with full width or other non-ASCII digits is refused, and an archive
