@@ -42,6 +42,9 @@
 #  - Flask 3.x
 #
 #  Version History:
+#  v1.4 2026-11-07
+#       Omit a topic image that is not inside its report directory and serve
+#       the summary image only from there, so such references are not shown.
 #  v1.3 2026-09-23
 #       Serve a report asset only when it resolves directly inside its
 #       report directory, symlinks included, not merely past a path check.
@@ -60,6 +63,7 @@ from flask import Flask, abort, render_template, send_from_directory
 
 from ai_digest import category_color, safe_url
 from ai_digest.render import STATIC_DIR, TEMPLATE_DIR
+from ai_digest.render.build import with_local_images
 from ai_digest.storage import (is_valid_date, list_dates, load_report,
                                report_dir, report_local_asset_path,
                                summary_image_path)
@@ -89,8 +93,10 @@ def report(date: str):
     stored = load_report(config.data_dir, date)
     if stored is None:
         abort(404)
+    topics = with_local_images(report_dir(config.data_dir, date),
+                               stored["topics"])
     return render_template("report.html", date=stored["date"],
-                           topics=stored["topics"], stats=stored["stats"])
+                           topics=topics, stats=stored["stats"])
 
 
 @app.route("/reports/<date>/image")

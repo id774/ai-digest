@@ -25,6 +25,9 @@
 #  - Jinja2 (installed together with Flask)
 #
 #  Version History:
+#  v1.2 2026-11-07
+#       Show a topic image only when it is a file inside its report directory,
+#       an incompatible change to which stored image paths are displayed.
 #  v1.1 2026-08-02
 #       Register the safe_url filter used by the source links.
 #  v1.0 2026-07-25
@@ -35,12 +38,14 @@
 import logging
 import os
 import shutil
+from dataclasses import replace
 from typing import Any, Dict, List
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ai_digest import Topic, category_color, safe_url
 from ai_digest.render import STATIC_DIR, TEMPLATE_DIR
+from ai_digest.storage import report_local_asset_path
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +66,28 @@ def create_environment() -> Environment:
     environment.globals["category_color"] = category_color
     environment.filters["safe_url"] = safe_url
     return environment
+
+
+def with_local_images(directory: str, topics: List[Topic]) -> List[Topic]:
+    """
+    Return the topics with every image that is not report-local removed.
+
+    A stored topic image comes from report.json and is not trusted: it
+    is kept only when report_local_asset_path() resolves it to a file
+    directly inside the report directory. Any other topic is returned
+    with no image, so the page omits that picture and keeps the rest.
+    The given topics, and the stored report, are left unchanged.
+
+    Args:
+        directory: Directory of the report the topics belong to.
+        topics: Topics as loaded from the stored report.
+    """
+    return [
+        topic if not topic.image
+        or report_local_asset_path(directory, topic.image)
+        else replace(topic, image=None)
+        for topic in topics
+    ]
 
 
 def render_report(date: str, topics: List[Topic], stats: Dict[str, Any],
@@ -91,7 +118,8 @@ def write_report_html(report_dir: str, date: str, topics: List[Topic],
     Returns:
         The path of the written HTML file.
     """
-    html = render_report(date, topics, stats, standalone=True)
+    html = render_report(date, with_local_images(report_dir, topics), stats,
+                         standalone=True)
     output_path = os.path.join(report_dir, "index.html")
     with open(output_path, "w", encoding="utf-8") as handle:
         handle.write(html)

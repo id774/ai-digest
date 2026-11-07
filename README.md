@@ -481,7 +481,7 @@ python cli.py render 2026-07-25       # rebuild HTML and PNG from stored JSON
 python cli.py list                    # print the stored report dates
 ```
 
-`render` never calls the API, so it is the cheap way to try a layout change on an existing report.
+`render` never calls the API, so it is the cheap way to try a layout change on an existing report. A stored report holding more than six topics is refused as corrupt: `render` exits with status `1` and leaves the report as it was, and the viewer answers 404 for it. A topic image that does not resolve to a file inside the report directory is left out of the page, while the rest of the topic is kept.
 
 `--date` and `render`'s `DATE` argument must name a real calendar date, not merely a `YYYY-MM-DD`-shaped string: `--date 2026-02-31` is refused by the parser with exit status `2`, before anything is collected or an API request is spent. Only the ASCII digits `0` to `9` are accepted, so a date written with full width digits is refused as well.
 
@@ -519,7 +519,7 @@ can reach it. The routes are:
 |---|---|
 | `/` | List of the stored report dates |
 | `/reports/<date>` | Report of one day |
-| `/reports/<date>/image` | Composite summary PNG of that day |
+| `/reports/<date>/image` | Composite summary PNG of that day; answered with 404 unless `summary.png` is a file inside that report directory |
 | `/reports/<date>/assets/<file>` | One file from that report directory; report pages use it for topic illustrations |
 | `/healthz` | Plain text liveness response |
 

@@ -30,6 +30,10 @@
 #    - Accept http and https, whatever the case of the scheme.
 #    - Reject every other scheme, and a relative or protocol relative path.
 #    - Reject a scheme given without a host.
+#    - Reject an empty host, a netloc of only a port or user information,
+#      and an invalid port, while keeping a valid port and an http link.
+#    - Drop such an entry in both collectors and continue with the rest.
+#    - Render a stored link of that kind as "#", keeping a valid one.
 #    - Replace an unsafe URL with "#" and leave a safe one alone.
 #    - Keep a normal link in the rendered report.
 #    - Neutralize a script link stored in a report.
@@ -44,6 +48,9 @@
 #  - Flask (through app.py, exercised by ViewerHeaderTest)
 #
 #  Version History:
+#  v1.2 2026-11-07
+#       Cover refusal of a link with no host or an invalid port, in the
+#       guard, the collectors and a stored report.
 #  v1.1 2026-09-22
 #       Cover the standalone header/footer fix and the viewer's archive link.
 #  v1.0 2026-08-05
@@ -55,11 +62,23 @@ import importlib
 import os
 import sys
 import unittest
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest import mock
 
 import config
 from ai_digest import Topic, is_safe_url, safe_url
+from ai_digest.collectors import arxiv, news_rss
 from ai_digest.render import build
+
+HOSTLESS_OR_BAD_PORT_URLS = (
+    "https://:8080/x",
+    "https://user:pass@/x",
+    "https://example.org:notaport/x",
+    "https://example.org:99999/x",
+    "http:///no-host",
+    "https://@/x",
+)
 
 UNSAFE_URLS = (
     "javascript:alert(1)",
@@ -89,6 +108,19 @@ class SafeUrlTest(unittest.TestCase):
     def test_rejects_a_scheme_without_a_host(self):
         self.assertFalse(is_safe_url("http:///no-host"))
 
+    def test_rejects_an_empty_host_or_an_invalid_port(self):
+        for url in HOSTLESS_OR_BAD_PORT_URLS:
+            with self.subTest(url=url):
+                self.assertFalse(is_safe_url(url))
+                self.assertEqual("#", safe_url(url))
+
+    def test_keeps_a_valid_port_and_userinfo_with_a_host(self):
+        for url in ("https://example.org:8080/x", "http://example.org:80/x",
+                    "https://user:pass@example.org/x",
+                    "https://[2001:db8::1]:8443/x"):
+            with self.subTest(url=url):
+                self.assertTrue(is_safe_url(url))
+
     def test_filter_replaces_an_unsafe_url(self):
         self.assertEqual("#", safe_url("javascript:alert(1)"))
         self.assertEqual("https://example.test/a",
@@ -112,6 +144,19 @@ class RenderedLinkTest(unittest.TestCase):
 
         self.assertIn('href="https://example.test/article"', html)
 
+    def test_keeps_a_link_with_a_valid_port(self):
+        html = self.render("https://example.test:8443/article")
+
+        self.assertIn('href="https://example.test:8443/article"', html)
+
+    def test_neutralizes_a_hostless_link_stored_in_a_report(self):
+        for url in HOSTLESS_OR_BAD_PORT_URLS:
+            with self.subTest(url=url):
+                html = self.render(url)
+
+                self.assertIn('href="#"', html)
+                self.assertNotIn("notaport", html)
+
     def test_neutralizes_a_script_link_stored_in_a_report(self):
         # Reports written before the collectors filtered links, or
         # edited by hand, must not produce a clickable javascript: URL.
@@ -119,6 +164,41 @@ class RenderedLinkTest(unittest.TestCase):
 
         self.assertNotIn("javascript:", html)
         self.assertIn('href="#"', html)
+
+
+class CollectorUrlFilterTest(unittest.TestCase):
+    """ An entry whose link names no host is dropped, the rest kept. """
+
+    GOOD = "https://example.test/good"
+
+    def raw_entries(self):
+        now = datetime.now(timezone.utc).timetuple()
+        return [SimpleNamespace(link=url, title="T", summary="S",
+                                published_parsed=now)
+                for url in HOSTLESS_OR_BAD_PORT_URLS + (self.GOOD,)]
+
+    def test_news_drops_them_and_keeps_the_valid_entry(self):
+        parsed = SimpleNamespace(feed=SimpleNamespace(title="Feed"),
+                                 entries=self.raw_entries())
+        with mock.patch.object(news_rss, "https_get"), \
+                mock.patch.object(news_rss, "read_capped_content",
+                                  return_value=b""), \
+                mock.patch.object(news_rss.feedparser, "parse",
+                                  return_value=parsed):
+            with self.assertLogs(news_rss.logger, "WARNING"):
+                result = news_rss.collect(["https://feed.test/rss"], 24)
+
+        self.assertEqual([self.GOOD], [e.url for e in result.entries])
+        self.assertEqual(0, result.sources_failed)
+
+    def test_arxiv_drops_them_and_keeps_the_valid_entry(self):
+        with mock.patch.object(arxiv, "_fetch_category",
+                               return_value=(self.raw_entries(), "")):
+            with self.assertLogs(arxiv.logger, "WARNING"):
+                result = arxiv.collect(["cs.AI"], 10, 24)
+
+        self.assertEqual([self.GOOD], [e.url for e in result.entries])
+        self.assertEqual(0, result.sources_failed)
 
 
 def _sample_topic():
