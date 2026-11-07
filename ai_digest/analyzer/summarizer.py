@@ -36,6 +36,9 @@
 #  - anthropic
 #
 #  Version History:
+#  v1.8 2026-11-07
+#       Reject a text JSON fallback response that stopped at max_tokens,
+#       as a tool call cut off by the token limit already is.
 #  v1.7 2026-11-01
 #       Choose API-backed candidates as 45 papers and 15 news within 60,
 #       an incompatible change from taking the first 60 entries.
@@ -307,7 +310,9 @@ def _extract_tool_input(message: Any,
                     )
             return tool_input
 
-    if text_json_fallback:
+    # A text block cut off by max_tokens can still parse as an object,
+    # so an incomplete response is never read as the report.
+    if text_json_fallback and stop_reason != "max_tokens":
         payload = _text_json_report(message)
         if payload is not None:
             logger.warning("no tool call; read the report from a text block "

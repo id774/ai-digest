@@ -48,6 +48,9 @@
 #      impossible calendar date after another - a non-leap Feb 29, Feb 31,
 #      April 31, month 13, month 0, day 0 - from is_valid_date(),
 #      report_dir(), a lookup and list_dates() alike.
+#    - Reject a date written with full width or other non-ASCII digits,
+#      answer a lookup with None, skip such a directory when listing, and
+#      let the viewer answer 404 while an ASCII report is still served.
 #    - Return None for syntactically valid JSON with an invalid structure.
 #    - Return None when a stored topic's field types are ones the renderer
 #      cannot consume - a non-string category, title, image or
@@ -79,6 +82,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.4 2026-11-07
+#       Cover rejection of dates written with non-ASCII digits, in
+#       storage lookups, the archive listing and the viewer.
 #  v1.3 2026-09-23
 #       Cover the whitelist re-render copy and report_local_asset_path()
 #       refusing a traversal, an absolute path, or an outside symlink.
@@ -169,6 +175,67 @@ class DateValidationTest(unittest.TestCase):
     def test_lookups_return_none_for_an_impossible_calendar_date(self):
         self.assertIsNone(load_report("/tmp/archive", "2026-02-31"))
         self.assertIsNone(summary_image_path("/tmp/archive", "2026-02-31"))
+
+
+# The first is 2026-11-07 in full width digits, the second in Arabic-Indic.
+NON_ASCII_DIGIT_DATES = (
+    "\uff12\uff10\uff12\uff16-\uff11\uff11-\uff10\uff17",
+    "\u0662\u0660\u0662\u0666-\u0661\u0661-\u0660\u0667",
+)
+
+
+class AsciiDigitDateTest(unittest.TestCase):
+    """ Only ASCII digits name a report, wherever the date arrives from. """
+
+    def make_report(self, directory, date):
+        os.makedirs(os.path.join(directory, date))
+        topic = Topic(category="c", title="t", bullets=["a", "b"],
+                      sources=[{"title": "s", "url": "https://x.test/"}])
+        write_report_json(os.path.join(directory, date), date, [topic])
+
+    def test_a_non_ascii_digit_date_is_not_valid(self):
+        for date in NON_ASCII_DIGIT_DATES:
+            with self.subTest(date=date):
+                self.assertFalse(is_valid_date(date))
+                with self.assertRaises(ValueError):
+                    report_dir("/tmp/archive", date)
+                self.assertIsNone(load_report("/tmp/archive", date))
+
+    def test_a_leap_day_is_still_valid_in_ascii(self):
+        self.assertTrue(is_valid_date("2024-02-29"))
+        self.assertFalse(is_valid_date("2026-02-29"))
+
+    def test_listing_skips_a_non_ascii_directory_and_keeps_ascii_ones(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.make_report(directory, NON_ASCII_DIGIT_DATES[0])
+            self.make_report(directory, "2026-11-06")
+
+            self.assertEqual(["2026-11-06"], list_dates(directory))
+
+    def test_the_viewer_answers_404_for_it_and_serves_an_ascii_report(self):
+        import importlib
+        import sys
+
+        import config as config_module
+
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"DATA_DIR": directory},
+                                 clear=True), \
+                    mock.patch.object(config_module, "load_dotenv", None):
+                viewer = (importlib.reload(sys.modules["app"])
+                          if "app" in sys.modules
+                          else importlib.import_module("app"))
+            self.make_report(directory, "2026-11-07")
+            client = viewer.app.test_client()
+
+            self.assertEqual(200, client.get("/reports/2026-11-07").status_code)
+            for date in NON_ASCII_DIGIT_DATES:
+                with self.subTest(date=date):
+                    self.assertEqual(
+                        404, client.get("/reports/" + date).status_code)
+                    self.assertEqual(
+                        404, client.get(
+                            "/reports/" + date + "/image").status_code)
 
 
 class RoundTripTest(unittest.TestCase):

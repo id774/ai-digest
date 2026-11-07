@@ -51,6 +51,8 @@
 #      side or both, and a fence followed by trailing prose.
 #    - Let a real tool call win over a text block.
 #    - Report a truncated answer as truncated under the fallback.
+#    - Refuse a whole-text JSON report that stopped at max_tokens, keep
+#      the thinking-only diagnostic, and accept it after a normal stop.
 #    - Pass a retry budget of zero through to the SDK.
 #    - Keep the SDK default when no retry budget is given.
 #    - Default the fallback to disabled and the retry budget to two.
@@ -66,6 +68,9 @@
 #  - Standard library only (the anthropic package is stubbed, never imported)
 #
 #  Version History:
+#  v1.2 2026-11-07
+#       Cover refusal of a complete-looking text JSON report that stopped
+#       at max_tokens, keeping the thinking-only diagnostic.
 #  v1.1 2026-09-12
 #       Cover refusal of report JSON embedded in surrounding prose.
 #  v1.0 2026-08-05
@@ -197,6 +202,27 @@ class TextJsonFallbackTest(unittest.TestCase):
     def test_truncated_answer_is_still_reported_as_truncated(self):
         with self.assertRaisesRegex(RuntimeError, "max_tokens"):
             self.extract([_tool_use()], True, stop_reason="max_tokens")
+
+    def test_a_text_report_cut_off_by_max_tokens_is_refused(self):
+        report = _text('{"topics": [{"title": "a"}]}')
+
+        with self.assertRaisesRegex(RuntimeError, "max_tokens"):
+            self.extract([report], True, stop_reason="max_tokens")
+
+    def test_a_cut_off_text_report_is_not_read_even_after_thinking(self):
+        blocks = [SimpleNamespace(type="thinking"),
+                  _text('{"topics": [{"title": "a"}]}')]
+
+        with self.assertRaisesRegex(RuntimeError, "in thinking"):
+            self.extract(blocks, True, stop_reason="max_tokens")
+
+    def test_a_text_report_is_still_read_after_a_normal_stop(self):
+        report = _text('{"topics": [{"title": "a"}]}')
+
+        for stop_reason in ("end_turn", "stop_sequence"):
+            with self.assertLogs(summarizer.logger, "WARNING"):
+                payload = self.extract([report], True, stop_reason)
+            self.assertEqual([{"title": "a"}], payload["topics"])
 
 
 class MaxRetriesTest(unittest.TestCase):

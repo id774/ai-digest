@@ -38,6 +38,8 @@
 #  Test Cases:
 #    - Read a feed timestamp as UTC in both collectors.
 #    - Keep an entry inside the window under a non UTC host timezone.
+#    - Keep entries at the collection time and at the lower bound, and drop
+#      future-dated and older ones, in arXiv and news collection.
 #    - Keep an http link offered by a news feed.
 #    - Drop a script link from a news feed, with a warning.
 #    - Drop only the unsafe entry of a news feed.
@@ -72,6 +74,9 @@
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.4 2026-11-07
+#       Cover the upper bound of the look back window at the collection
+#       time, for arXiv and for news feeds alike.
 #  v1.3 2026-09-22
 #       Cover the collector response body cap and that trust_env (proxy
 #       use) stays the untouched default.
@@ -523,6 +528,114 @@ class TransportFailureMappingTest(unittest.TestCase):
         self.assertEqual(2, result.sources_total)
         self.assertEqual(1, result.sources_failed)
         self.assertEqual(1, len(result.entries))
+
+
+REFERENCE_TIME = datetime(2026, 11, 7, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _entry_at(link, moment):
+    return SimpleNamespace(link=link, title="Title", summary="Summary.",
+                           published_parsed=moment.timetuple())
+
+
+class WindowUpperBoundTest(unittest.TestCase):
+    """ An entry is kept only within T - LOOKBACK_HOURS and T inclusive. """
+
+    HOURS = 24
+
+    def entries(self):
+        lower = REFERENCE_TIME - timedelta(hours=self.HOURS)
+        return [
+            _entry_at("https://example.test/future",
+                      REFERENCE_TIME + timedelta(seconds=1)),
+            _entry_at("https://example.test/now", REFERENCE_TIME),
+            _entry_at("https://example.test/inside",
+                      REFERENCE_TIME - timedelta(hours=1)),
+            _entry_at("https://example.test/lower", lower),
+            _entry_at("https://example.test/past",
+                      lower - timedelta(seconds=1)),
+        ]
+
+    def collect_news(self):
+        parsed = SimpleNamespace(entries=self.entries(),
+                                 feed=SimpleNamespace(title="Feed"))
+        with mock.patch.object(news_rss, "_utc_now",
+                               return_value=REFERENCE_TIME), \
+                mock.patch.object(news_rss, "https_get"), \
+                mock.patch.object(news_rss, "read_capped_content",
+                                  return_value=b""), \
+                mock.patch.object(news_rss.feedparser, "parse",
+                                  return_value=parsed):
+            return news_rss.collect(["https://feed.test/rss"], self.HOURS)
+
+    def collect_arxiv(self):
+        with mock.patch.object(arxiv, "_utc_now",
+                               return_value=REFERENCE_TIME), \
+                mock.patch.object(arxiv, "_fetch_category",
+                                  return_value=(self.entries(), "")):
+            return arxiv.collect(["cs.AI"], 10, self.HOURS)
+
+    def check(self, result):
+        self.assertEqual(
+            ["https://example.test/now", "https://example.test/inside",
+             "https://example.test/lower"],
+            [entry.url for entry in result.entries])
+        self.assertEqual(5, result.items_seen)
+        self.assertEqual(2, result.items_outside_window)
+        self.assertEqual(0, result.sources_failed)
+
+    def test_news_keeps_the_window_bounds_and_drops_the_future(self):
+        self.check(self.collect_news())
+
+    def test_arxiv_keeps_the_window_bounds_and_drops_the_future(self):
+        self.check(self.collect_arxiv())
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "requires time.tzset")
+    def test_the_bounds_do_not_depend_on_the_host_timezone(self):
+        saved = os.environ.get("TZ")
+        os.environ["TZ"] = "Pacific/Auckland"
+        time.tzset()
+        try:
+            self.check(self.collect_news())
+            self.check(self.collect_arxiv())
+        finally:
+            if saved is None:
+                del os.environ["TZ"]
+            else:
+                os.environ["TZ"] = saved
+            time.tzset()
+
+    def test_a_failed_source_does_not_stop_the_other_one_from_filtering(self):
+        error = news_rss.requests.ConnectionError("unreachable")
+        parsed = SimpleNamespace(entries=self.entries(),
+                                 feed=SimpleNamespace(title="Feed"))
+        with mock.patch.object(news_rss, "_utc_now",
+                               return_value=REFERENCE_TIME), \
+                mock.patch.object(news_rss, "https_get",
+                                  side_effect=[error, mock.MagicMock()]), \
+                mock.patch.object(news_rss, "read_capped_content",
+                                  return_value=b""), \
+                mock.patch.object(news_rss.feedparser, "parse",
+                                  return_value=parsed):
+            with self.assertLogs(news_rss.logger, "WARNING"):
+                result = news_rss.collect(
+                    ["https://down.test/rss", "https://feed.test/rss"],
+                    self.HOURS)
+
+        self.assertEqual(1, result.sources_failed)
+        self.assertEqual(3, len(result.entries))
+
+    def test_everything_in_the_future_is_an_empty_window(self):
+        future = [_entry_at("https://example.test/f",
+                            REFERENCE_TIME + timedelta(hours=2))]
+        with mock.patch.object(arxiv, "_utc_now",
+                               return_value=REFERENCE_TIME), \
+                mock.patch.object(arxiv, "_fetch_category",
+                                  return_value=(future, "")):
+            result = arxiv.collect(["cs.AI"], 10, self.HOURS)
+
+        self.assertEqual([], result.entries)
+        self.assertEqual(1, result.items_outside_window)
 
 
 class CollectionOutcomeTest(unittest.TestCase):

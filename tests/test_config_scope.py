@@ -49,6 +49,8 @@
 #    - Let 'render', 'demo' and 'run' ignore what is out of their own
 #      scope, and still reject their own invalid setting, unusable font
 #      path and (for 'run') legacy endpoint variable alike.
+#    - Skip a setting the command line replaces, whatever its exported or
+#      .env value, while still refusing one left alone and a legacy name.
 #    - Import app.py surviving a batch-only setting error, and failing
 #      on an invalid PORT.
 #    - Keep a summarizer credential out of the viewer's Config and out
@@ -61,6 +63,8 @@
 #  - See requirements.txt (the app.py case imports Flask; font cases use Pillow)
 #
 #  Version History:
+#  v1.2 2026-11-07
+#       Cover skipping the settings an override replaces, per scope.
 #  v1.1 2026-09-23
 #       Cover demo's scope excluding LOOKBACK_HOURS, which it never
 #       resolves or reads.
@@ -300,6 +304,62 @@ class RunIsolationTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "AI_DIGEST_FONT_PATH"):
             load_with(config.load_run_config,
                      {"AI_DIGEST_FONT_PATH": "/no/such/font.ttf"})
+
+
+class OverriddenSettingsTest(unittest.TestCase):
+    """ A replaced setting is not read, however invalid its lower value. """
+
+    BAD = {"MAX_TOPICS": "0", "LOOKBACK_HOURS": "abc",
+           "AI_DIGEST_FONT_PATH": "/no/such/font.ttf"}
+
+    def load(self, loader, overridden, environment=None, dotenv=None):
+        environment = dict(self.BAD if environment is None else environment)
+        return load_with_dotenv(lambda: loader(overridden), environment,
+                                dotenv or {})
+
+    def test_run_skips_every_replaced_setting(self):
+        loaded = self.load(config.load_run_config,
+                           ["max_topics", "lookback_hours", "font_path"])
+
+        self.assertEqual(6, loaded.max_topics)
+        self.assertEqual(24, loaded.lookback_hours)
+
+    def test_demo_skips_replaced_max_topics_and_font(self):
+        loaded = self.load(config.load_demo_config,
+                           ["max_topics", "font_path"])
+
+        self.assertEqual(6, loaded.max_topics)
+
+    def test_render_skips_replaced_lookback_and_font(self):
+        loaded = self.load(config.load_render_config,
+                           ["lookback_hours", "font_path"])
+
+        self.assertEqual(24, loaded.lookback_hours)
+
+    def test_an_invalid_dotenv_value_is_skipped_too(self):
+        loaded = self.load(config.load_run_config,
+                           ["max_topics", "lookback_hours", "font_path"],
+                           environment={}, dotenv=self.BAD)
+
+        self.assertEqual(6, loaded.max_topics)
+
+    def test_a_setting_left_alone_is_still_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "LOOKBACK_HOURS"):
+            self.load(config.load_run_config, ["max_topics", "font_path"])
+        with self.assertRaisesRegex(RuntimeError, "MAX_TOPICS"):
+            self.load(config.load_demo_config, ["font_path"])
+        with self.assertRaisesRegex(RuntimeError, "AI_DIGEST_FONT_PATH"):
+            self.load(config.load_render_config, ["lookback_hours"])
+
+    def test_a_replaced_setting_does_not_excuse_a_legacy_name(self):
+        with self.assertRaisesRegex(RuntimeError, "ANTHROPIC_MODEL"):
+            self.load(config.load_run_config, ["summarizer_model"],
+                      environment={"ANTHROPIC_MODEL": "x"})
+
+    def test_list_ignores_the_unrelated_invalid_settings(self):
+        loaded = self.load(config.load_list_config, [])
+
+        self.assertEqual(6, loaded.max_topics)
 
 
 class ViewerImportIsolationTest(unittest.TestCase):

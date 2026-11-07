@@ -38,6 +38,7 @@
 #      impossible date, entries that is not a non-empty list, a
 #      non-object entry, a blank title, a non-http(s) url, an unknown
 #      source_type, and a non-string optional field.
+#    - Reject a sample date written with full width digits.
 #    - Accept an entry missing every optional field, relying on
 #      Entry.from_dict()'s own defaults.
 #
@@ -46,6 +47,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.2 2026-11-07
+#       Cover rejection of a sample date written with non-ASCII digits.
 #  v1.1 2026-09-23
 #       Cover structural and type validation of a custom sample.
 #  v1.0 2026-08-05
@@ -171,6 +174,12 @@ class CustomSampleTest(unittest.TestCase):
     def test_rejects_an_impossible_date(self):
         with self.assertRaises(ValueError):
             self.build({"date": "2026-02-31",
+                       "entries": [self.paper_entry()],
+                       "build_report": {"topics": []}})
+
+    def test_rejects_a_date_in_full_width_digits(self):
+        with self.assertRaises(ValueError):
+            self.build({"date": "\uff12\uff10\uff12\uff16-11-07",
                        "entries": [self.paper_entry()],
                        "build_report": {"topics": []}})
 

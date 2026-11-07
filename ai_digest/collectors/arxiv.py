@@ -30,6 +30,9 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.6 2026-11-07
+#       Keep only entries published within the look back window up to the
+#       collection time, so a future-dated entry is no longer collected.
 #  v1.5 2026-09-22
 #       Cap the read body at MAX_COLLECTOR_RESPONSE_BYTES, failing an
 #       oversized category the same way an unreachable one fails.
@@ -71,6 +74,11 @@ REQUEST_INTERVAL = 3.0
 RATE_LIMIT_RETRY_DELAYS = (30.0, 60.0)
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_now() -> datetime:
+    """ Return the collection reference time as an aware UTC datetime. """
+    return datetime.now(timezone.utc)
 
 
 def _normalize_text(text: str) -> str:
@@ -164,7 +172,8 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
     Args:
         categories: arXiv category identifiers such as 'cs.AI'.
         max_results: Maximum entries requested per category.
-        lookback_hours: Only papers newer than this age are kept.
+        lookback_hours: Only papers published within this many hours up
+            to now are kept; a future-dated paper is dropped.
         timeout: HTTP timeout in seconds.
         user_agent: User-Agent header sent to arXiv.
 
@@ -174,7 +183,8 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
         requested categories appear once. The counters tell how many
         categories failed and how many papers the readable ones offered.
     """
-    threshold = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    now = _utc_now()
+    threshold = now - timedelta(hours=lookback_hours)
     result = CollectionResult(sources_total=len(categories))
     entries: List[Entry] = []
     seen_urls = set()
@@ -191,6 +201,11 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
         result.items_seen += len(raw_entries)
         for position, raw_entry in enumerate(raw_entries):
             published = _entry_datetime(raw_entry)
+            if published > now:
+                # A future date is outside the window as well; later
+                # entries may still be in it, so keep scanning.
+                result.items_outside_window += 1
+                continue
             if published < threshold:
                 # Entries are sorted newest first, so everything that
                 # follows in this category is older as well.

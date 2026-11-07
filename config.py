@@ -147,6 +147,9 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v2.3 2026-11-07
+#       Skip settings the command line replaces, an incompatible change to how
+#       a setting is resolved: a malformed lower value is no longer refused.
 #  v2.2 2026-11-01
 #       Default to five arXiv categories and seven news feeds, an
 #       incompatible change to the sources a run reads without any setting.
@@ -187,7 +190,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Collection, Dict, List, Optional
 
 from PIL import ImageFont
 
@@ -731,56 +734,73 @@ def _resolve_data_dir(env: Dict[str, str]) -> str:
     return os.path.abspath(data_dir)
 
 
-def _resolve_batch_settings(env: Dict[str, str]) -> Dict[str, Any]:
+def _resolve_fields(builders: Dict[str, Callable[[], Any]],
+                    overridden: Collection[str]) -> Dict[str, Any]:
+    """
+    Resolve each field except those a higher priority source replaced.
+
+    A field the command line replaces is never read from the
+    environment or .env, so a malformed lower value cannot stop a run
+    whose effective value is valid. A field that is not replaced is
+    resolved, and refused when malformed, exactly as before.
+    """
+    return {name: build() for name, build in builders.items()
+            if name not in overridden}
+
+
+def _resolve_batch_settings(env: Dict[str, str],
+                            overridden: Collection[str] = ()
+                            ) -> Dict[str, Any]:
     """
     Resolve every setting 'run' depends on, other than PORT.
 
     Shared by load_run_config() and the compatibility load_config():
     both build the same batch configuration, and the caller decides
     whether PORT, which only the viewer reads, is part of the result.
+    Fields named in overridden are left out, as _resolve_fields() says.
     """
-    return dict(
-        summarizer_api_key=_blank_to_none(_setting(env, "SUMMARIZER_API_KEY")),
-        summarizer_auth_token=_blank_to_none(
-            _setting(env, "SUMMARIZER_AUTH_TOKEN")
-        ),
-        summarizer_base_url=_blank_to_none(
-            (_setting(env, "SUMMARIZER_BASE_URL") or "").strip()
-        ),
-        summarizer_model=(_setting(env, "SUMMARIZER_MODEL") or "").strip(),
-        summarizer_thinking_mode=_env_token(
-            env, "SUMMARIZER_THINKING_MODE", "default"
-        ),
-        summarizer_tool_choice_mode=_env_token(
-            env, "SUMMARIZER_TOOL_CHOICE_MODE", "forced"
-        ),
-        summarizer_text_json_fallback=_env_token(
-            env, "SUMMARIZER_TEXT_JSON_FALLBACK", "disabled"
-        ),
-        summarizer_max_retries=_env_int(env, "SUMMARIZER_MAX_RETRIES", 2, 0),
-        max_output_tokens=_env_int(env, "MAX_OUTPUT_TOKENS", 8000, 1),
-        summarizer_timeout=_env_int(env, "SUMMARIZER_TIMEOUT", 180, 1),
-        summarizer_backend=_env_token(
-            env, "SUMMARIZER_BACKEND", "anthropic-compatible"
-        ),
-        arxiv_categories=split_csv(
-            _setting(env, "ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)
-        ),
-        arxiv_max_results=_env_int(env, "ARXIV_MAX_RESULTS", 60, 1),
-        news_feed_urls=split_csv(
-            _setting(env, "NEWS_FEED_URLS", DEFAULT_NEWS_FEED_URLS)
-        ),
-        lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
-        max_topics=_env_int(env, "MAX_TOPICS", 6, 1, MAX_REPORT_TOPICS),
-        font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
-        data_dir=_resolve_data_dir(env),
-        http_timeout=_env_int(env, "HTTP_TIMEOUT", 60, 1),
-        user_agent=(_setting(env, "USER_AGENT") or "").strip()
-                  or DEFAULT_USER_AGENT,
-    )
+    return _resolve_fields({
+        "summarizer_api_key": lambda: _blank_to_none(
+            _setting(env, "SUMMARIZER_API_KEY")),
+        "summarizer_auth_token": lambda: _blank_to_none(
+            _setting(env, "SUMMARIZER_AUTH_TOKEN")),
+        "summarizer_base_url": lambda: _blank_to_none(
+            (_setting(env, "SUMMARIZER_BASE_URL") or "").strip()),
+        "summarizer_model": lambda: (
+            _setting(env, "SUMMARIZER_MODEL") or "").strip(),
+        "summarizer_thinking_mode": lambda: _env_token(
+            env, "SUMMARIZER_THINKING_MODE", "default"),
+        "summarizer_tool_choice_mode": lambda: _env_token(
+            env, "SUMMARIZER_TOOL_CHOICE_MODE", "forced"),
+        "summarizer_text_json_fallback": lambda: _env_token(
+            env, "SUMMARIZER_TEXT_JSON_FALLBACK", "disabled"),
+        "summarizer_max_retries": lambda: _env_int(
+            env, "SUMMARIZER_MAX_RETRIES", 2, 0),
+        "max_output_tokens": lambda: _env_int(
+            env, "MAX_OUTPUT_TOKENS", 8000, 1),
+        "summarizer_timeout": lambda: _env_int(
+            env, "SUMMARIZER_TIMEOUT", 180, 1),
+        "summarizer_backend": lambda: _env_token(
+            env, "SUMMARIZER_BACKEND", "anthropic-compatible"),
+        "arxiv_categories": lambda: split_csv(
+            _setting(env, "ARXIV_CATEGORIES", DEFAULT_ARXIV_CATEGORIES)),
+        "arxiv_max_results": lambda: _env_int(
+            env, "ARXIV_MAX_RESULTS", 60, 1),
+        "news_feed_urls": lambda: split_csv(
+            _setting(env, "NEWS_FEED_URLS", DEFAULT_NEWS_FEED_URLS)),
+        "lookback_hours": lambda: _env_int(env, "LOOKBACK_HOURS", 24, 1),
+        "max_topics": lambda: _env_int(
+            env, "MAX_TOPICS", 6, 1, MAX_REPORT_TOPICS),
+        "font_path": lambda: resolve_font_path(
+            _setting(env, "AI_DIGEST_FONT_PATH")),
+        "data_dir": lambda: _resolve_data_dir(env),
+        "http_timeout": lambda: _env_int(env, "HTTP_TIMEOUT", 60, 1),
+        "user_agent": lambda: (_setting(env, "USER_AGENT") or "").strip()
+                              or DEFAULT_USER_AGENT,
+    }, overridden)
 
 
-def load_run_config() -> Config:
+def load_run_config(overridden: Collection[str] = ()) -> Config:
     """
     Build the configuration 'run' needs: every batch and endpoint
     setting, other than PORT.
@@ -789,10 +809,15 @@ def load_run_config() -> Config:
     invalid PORT must not be able to stop a batch run. A superseded
     endpoint setting stops the load here, because 'run' is the one
     execution path that would otherwise read the setting it replaced.
+
+    overridden names the fields the command line replaces. They are
+    not read from the environment or .env, because a higher priority
+    value makes a malformed lower one irrelevant; the refusal of a
+    superseded setting name is independent of them and still applies.
     """
     env = _dotenv_values()
     _refuse_legacy_variables(env)
-    return Config(**_resolve_batch_settings(env))
+    return Config(**_resolve_batch_settings(env, overridden))
 
 
 def load_viewer_config() -> Config:
@@ -812,27 +837,31 @@ def load_viewer_config() -> Config:
                  port=_env_int(env, "PORT", 3000, 1))
 
 
-def load_list_config() -> Config:
+def load_list_config(overridden: Collection[str] = ()) -> Config:
     """ Build the configuration 'list' needs: DATA_DIR alone. """
     env = _dotenv_values()
-    return Config(data_dir=_resolve_data_dir(env))
+    return Config(**_resolve_fields(
+        {"data_dir": lambda: _resolve_data_dir(env)}, overridden))
 
 
-def load_render_config() -> Config:
+def load_render_config(overridden: Collection[str] = ()) -> Config:
     """
     Build the configuration 'render' needs: DATA_DIR,
     AI_DIGEST_FONT_PATH, and LOOKBACK_HOURS, the last only as the
     fallback for a stored report predating that statistic.
+
+    Fields named in overridden are not read, as load_run_config() says.
     """
     env = _dotenv_values()
-    return Config(
-        data_dir=_resolve_data_dir(env),
-        font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
-        lookback_hours=_env_int(env, "LOOKBACK_HOURS", 24, 1),
-    )
+    return Config(**_resolve_fields({
+        "data_dir": lambda: _resolve_data_dir(env),
+        "font_path": lambda: resolve_font_path(
+            _setting(env, "AI_DIGEST_FONT_PATH")),
+        "lookback_hours": lambda: _env_int(env, "LOOKBACK_HOURS", 24, 1),
+    }, overridden))
 
 
-def load_demo_config() -> Config:
+def load_demo_config(overridden: Collection[str] = ()) -> Config:
     """
     Build the configuration 'demo' needs: DATA_DIR,
     AI_DIGEST_FONT_PATH and MAX_TOPICS.
@@ -841,14 +870,17 @@ def load_demo_config() -> Config:
     no window (command_demo()'s stats carry no lookback_hours, and the
     summary image shows a fixed sample label instead), so a malformed
     LOOKBACK_HOURS must not be able to stop a demo run that never reads
-    it either way.
+    it either way. Fields named in overridden are not read, as
+    load_run_config() says.
     """
     env = _dotenv_values()
-    return Config(
-        data_dir=_resolve_data_dir(env),
-        font_path=resolve_font_path(_setting(env, "AI_DIGEST_FONT_PATH")),
-        max_topics=_env_int(env, "MAX_TOPICS", 6, 1, MAX_REPORT_TOPICS),
-    )
+    return Config(**_resolve_fields({
+        "data_dir": lambda: _resolve_data_dir(env),
+        "font_path": lambda: resolve_font_path(
+            _setting(env, "AI_DIGEST_FONT_PATH")),
+        "max_topics": lambda: _env_int(
+            env, "MAX_TOPICS", 6, 1, MAX_REPORT_TOPICS),
+    }, overridden))
 
 
 def load_config() -> Config:

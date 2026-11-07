@@ -28,6 +28,9 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
+#  v1.5 2026-11-07
+#       Refuse a downloaded image that cannot be fully decoded, so an
+#       incomplete picture falls back to another source or a generated card.
 #  v1.4 2026-09-23
 #       Pin under the canonical hostname, bypass proxy for, and time-bound
 #       scraping; refuse decompression bombs; classify arXiv by host/path.
@@ -324,8 +327,13 @@ def _download_image(url: str, timeout: int,
             with Image.open(io.BytesIO(content)) as image:
                 image_format = (image.format or "").lower()
                 width, height = image.size
+                # Decode every pixel: a readable header does not prove
+                # the body is complete, and a cut-off image must be
+                # refused here rather than stored and failing later.
+                image.load()
     except (UnidentifiedImageError, Image.DecompressionBombError,
-            Image.DecompressionBombWarning, OSError) as error:
+            Image.DecompressionBombWarning, OSError, SyntaxError,
+            ValueError) as error:
         # A picture whose pixel count would exhaust the memory of the
         # host compresses to far less than MAX_IMAGE_BYTES, so the byte
         # limit does not catch it and Pillow refuses it here. That error

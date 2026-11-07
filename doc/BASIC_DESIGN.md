@@ -225,9 +225,13 @@ scheme never enters the archive in the first place.
 ### Time normalization
 
 Parsed publication timestamps are read as **UTC**, which is what the feed parser
-returns, and compared against a UTC cut-off derived from the configured window.
-Neither collector consults the host's local time zone, so the window is the same
-number of hours on every host.
+returns, and compared against a UTC window derived from the configured one.
+Each collector takes one collection reference time `T` when it starts and keeps
+an entry only when `T - LOOKBACK_HOURS <= published <= T`: an entry dated after
+`T` is outside the window, and both edges are inside it. An entry rejected for
+being in the future is counted with the others outside the window and does not
+stop the scan of the rest of its source. Neither collector consults the host's
+local time zone, so the window is the same number of hours on every host.
 
 The same setting travels onward — into the prompt, the HTML, the summary image
 and the stored statistics — so the window that was applied and the window that
@@ -336,7 +340,10 @@ it, so the following compatibility behaviours are named settings rather than inf
 The defaults leave the request unchanged from what the reference implementation
 expects. The text fallback stays off until a raw response has shown that an
 endpoint really answers that way, and a run that takes it logs a warning naming
-the setting that allowed it.
+the setting that allowed it. The fallback reads only a response that ended
+normally: a text block cut off by `max_tokens` is refused even when it happens
+to parse, exactly as a `build_report` call cut off there is, because an answer
+that reached the budget is not known to be complete.
 
 These three settings are compatibility controls for the `anthropic-compatible`
 backend only. The `openai-compatible` backend has no compatibility setting of
@@ -496,6 +503,11 @@ wrapping helpers the summary image reuses. It is where the missing-CJK-font
 warning is emitted once; without such a font the HTML stays correct and only the
 images lose their text.
 
+A downloaded image is adopted only when Pillow decodes all of it, not merely
+its header: a truncated picture is refused inside the resolver like any other
+unusable one, so the next citation is tried and the card is drawn when none
+remains, and one such image never fails the batch.
+
 Every topic ends this stage with an image file name and a credit recording
 whether the image came from a source or the local fallback.
 
@@ -549,7 +561,9 @@ The following properties of this module carry weight:
   never reaches the file system as part of one.
 - **A report date must be a real calendar date, not merely a string shaped
   like one.** `is_valid_date()` checks the anchored `YYYY-MM-DD` pattern
-  first, for the path-safe canonical form, and only then parses the result
+  first, written with the ASCII digits `0` to `9` only, so that full width and
+  other non-ASCII digits never name an archive directory, for the path-safe
+  canonical form, and only then parses the result
   for calendar validity with the standard library, so `2026-02-31` is
   refused even though it matches the pattern. It is the single source of
   truth every path computation, lookup and listing in this module builds
@@ -814,6 +828,14 @@ options sit above both and apply to one invocation:
 ```text
    command line option  >  exported environment variable  >  .env  >  default
 ```
+
+A setting has one effective value, and only that value is validated. The
+command line is parsed first, and its overridden settings are passed to the
+scoped loader, which does not read them from the environment or `.env`; a
+malformed lower value of such a setting therefore cannot stop a run, while a
+malformed value of a setting that no option replaced still does. A superseded
+variable name is refused regardless, because that is a separate rule about
+presence rather than about the value.
 
 ### Execution scope
 
