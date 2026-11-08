@@ -9,9 +9,10 @@ v1.3 (Release Date: TBD)
   limit.
 - Apply validated CLI overrides before checking lower-priority settings, an
   incompatible change to how a setting is resolved.
-- Exclude future-dated entries and require ASCII digits in report dates, which
-  is an incompatible change for dates written with other numerals.
-- Fall back to generated cards when a downloaded image is incomplete.
+- Exclude future-dated or unrepresentable feed timestamps and require ASCII
+  digits in report dates, incompatible changes to accepted entries and dates.
+- Try other images or generated cards when downloads are incomplete or
+  scraped image URLs are malformed.
 - Reject Anthropic text JSON fallback responses stopped by the token limit.
 - Reject citations with missing hosts or invalid ports, an incompatible
   change to which source links are published.
@@ -19,6 +20,8 @@ v1.3 (Release Date: TBD)
   an incompatible change to which image paths can be shown or served.
 - Reject stored reports above six topics, an incompatible change to which
   archived reports are readable, so HTML and summary images agree.
+- Reject credential-bearing NEWS_FEED_URLS before collection, an incompatible
+  change that prevents their credentials from reaching logs or reports.
 
 v1.2.3 (2026-09-23)
 -------------------

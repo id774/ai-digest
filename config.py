@@ -147,6 +147,9 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v2.4 2026-11-08
+#       Reject a NEWS_FEED_URLS item that embeds credentials, an incompatible
+#       change that keeps them out of requests, logs and reports.
 #  v2.3 2026-11-07
 #       Skip settings the command line replaces, an incompatible change to how
 #       a setting is resolved: a malformed lower value is no longer refused.
@@ -191,6 +194,7 @@
 import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Collection, Dict, List, Optional
+from urllib.parse import urlparse
 
 from PIL import ImageFont
 
@@ -316,13 +320,24 @@ def validated_news_feed_urls(urls: List[str]) -> List[str]:
 
     NEWS_FEED_URLS is a retrieval target, not a citation, so every item
     must be requestable over HTTPS; a non-HTTPS item is a configuration
-    error rather than a URL silently repaired or skipped.
+    error rather than a URL silently repaired or skipped. An item that
+    embeds userinfo (user:password@host, even an empty one) is refused as
+    well, and a message never quotes an item that contains an '@', so a
+    credential cannot reach an error, a log or a report.
     """
-    for url in urls:
+    for position, url in enumerate(urls, 1):
+        shown = "item {0}".format(position)
+        if "@" not in url:
+            shown = "{0} '{1}'".format(shown, url)
         if not is_https_url(url):
             raise RuntimeError(
-                "NEWS_FEED_URLS contains '{0}'; expected an absolute "
-                "HTTPS URL.".format(url)
+                "NEWS_FEED_URLS {0} is not an absolute HTTPS URL.".format(
+                    shown)
+            )
+        if "@" in urlparse(url).netloc:
+            raise RuntimeError(
+                "NEWS_FEED_URLS {0} must not embed credentials (userinfo) "
+                "in the URL.".format(shown)
             )
     return urls
 

@@ -82,6 +82,9 @@
 #  - Pillow, requests, beautifulsoup4
 #
 #  Version History:
+#  v1.4 2026-11-08
+#       Cover scraped image links that urljoin() cannot resolve, so another
+#       candidate or a generated card is used.
 #  v1.3 2026-11-07
 #       Cover refusal of an image whose header reads but whose body is
 #       incomplete, and the generated card that replaces it.
@@ -762,6 +765,81 @@ class ArxivFigureUrlTest(unittest.TestCase):
                     "https://ar5iv.labs.arxiv.org/html/{0}".format(
                         expected_id),
                     fetcher.call_args.args[0])
+
+
+BAD_LINK = "https://[broken"
+
+
+class MalformedImageLinkTest(unittest.TestCase):
+    """ An unresolvable scraped image link is an unusable candidate. """
+
+    def page(self, html, final_url="https://news.example/a"):
+        return mock.patch.object(
+            resolver, "_fetch", return_value=(html.encode(), final_url))
+
+    def test_a_malformed_og_image_is_not_a_candidate(self):
+        html = '<meta property="og:image" content="{0}">'.format(BAD_LINK)
+        with self.page(html):
+            self.assertIsNone(
+                resolver.open_graph_image_url("https://news.example/a", 5,
+                                              "ai-digest"))
+
+    def test_a_malformed_og_image_falls_back_to_twitter_image(self):
+        html = ('<meta property="og:image" content="{0}">'
+                '<meta name="twitter:image" content="/img/x.png">'
+                ).format(BAD_LINK)
+        with self.page(html):
+            self.assertEqual(
+                "https://news.example/img/x.png",
+                resolver.open_graph_image_url("https://news.example/a", 5,
+                                              "ai-digest"))
+
+    def test_a_malformed_figure_is_skipped_for_the_next_one(self):
+        html = ('<figure><img src="{0}"></figure>'
+                '<figure><img src="x1.png"></figure>').format(BAD_LINK)
+        with self.page(html, "https://ar5iv.labs.arxiv.org/html/2601.00001"):
+            self.assertEqual(
+                "https://ar5iv.labs.arxiv.org/html/x1.png",
+                resolver.arxiv_figure_url(
+                    "https://arxiv.org/abs/2601.00001", 5, "ai-digest"))
+
+    def test_a_malformed_figure_alone_yields_no_candidate(self):
+        html = '<figure><img src="{0}"></figure>'.format(BAD_LINK)
+        with self.page(html):
+            self.assertIsNone(resolver.arxiv_figure_url(
+                "https://arxiv.org/abs/2601.00001", 5, "ai-digest"))
+
+    def test_resolve_returns_none_without_raising(self):
+        html = '<meta property="og:image" content="{0}">'.format(BAD_LINK)
+        with self.page(html):
+            self.assertIsNone(resolver.resolve("https://news.example/a"))
+
+    def test_the_diagnostic_does_not_log_page_credentials(self):
+        secret = "hunter2-not-real"
+        page = "https://reader:{0}@news.example/a".format(secret)
+        html = '<meta property="og:image" content="{0}">'.format(BAD_LINK)
+        with self.page(html, page), self.assertLogs(
+                resolver.logger, "INFO") as logs:
+            resolver.open_graph_image_url(page, 5, "ai-digest")
+
+        self.assertTrue(logs.output)
+        self.assertNotIn(secret, " ".join(logs.output))
+
+    def test_a_valid_absolute_https_link_is_unchanged(self):
+        html = '<meta property="og:image" content="https://cdn.example/i.jpg">'
+        with self.page(html):
+            self.assertEqual(
+                "https://cdn.example/i.jpg",
+                resolver.open_graph_image_url("https://news.example/a", 5,
+                                              "ai-digest"))
+
+    def test_an_unrelated_error_is_not_swallowed(self):
+        html = '<meta property="og:image" content="/i.jpg">'
+        with self.page(html), mock.patch.object(
+                resolver, "urljoin", side_effect=RuntimeError("bug")):
+            with self.assertRaises(RuntimeError):
+                resolver.open_graph_image_url("https://news.example/a", 5,
+                                              "ai-digest")
 
 
 if __name__ == "__main__":

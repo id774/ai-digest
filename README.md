@@ -154,7 +154,7 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `SUMMARIZER_TEXT_JSON_FALLBACK` | `disabled` | Read by `anthropic-compatible`. `enabled` also accepts a report written as JSON text when no tool call came back; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL,cs.CV,cs.CR` | arXiv categories to collect, comma separated: artificial intelligence, machine learning, computation and language, computer vision, and cryptography and security. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
-| `NEWS_FEED_URLS` | the seven feeds listed below | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL; blank disables news-feed collection. |
+| `NEWS_FEED_URLS` | the seven feeds listed below | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL without embedded credentials (`user:password@`), which are refused before collection without being printed; blank disables news-feed collection. |
 | `LOOKBACK_HOURS` | `24` | How many hours before the collection time an entry may have been published. An entry dated after the collection time is not collected. |
 | `MAX_TOPICS` | `6` | Maximum topics per report, `1` through `6`. Six fills the summary image grid; report.json, the HTML and summary.png always describe the same topic set. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
