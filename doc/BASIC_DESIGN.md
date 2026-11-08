@@ -236,8 +236,8 @@ being in the future is counted with the others outside the window and does not
 stop the scan of the rest of its source. An entry whose parsed time a
 `datetime` cannot represent, such as year 0 or 10000, is dropped alone with a
 warning naming no URL: it neither fails its source nor counts as outside the
-window. Neither collector consults the host's
-local time zone, so the window is the same number of hours on every host.
+window. Neither collector consults the host's local time zone, so the window is
+the same number of hours on every host.
 
 The same setting travels onward — into the prompt, the HTML, the summary image
 and the stored statistics — so the window that was applied and the window that
@@ -422,9 +422,6 @@ An answer carrying no usable topic at all is a failed run, not an empty report.
 Per topic, the sources are tried in order until one yields an image; otherwise a
 card is drawn.
 
-A scraped image link that cannot be resolved to a URL is only an unusable
-candidate, and the next candidate or the card is used.
-
 The resolver reads the figure of a paper from its HTML rendering, or the image an
 article declares for social sharing. A source is recognized as an arXiv paper by
 its parsed hostname - `arxiv.org` or a subdomain of it - and the start of its
@@ -444,6 +441,9 @@ warning filter other code relies on. `render`'s composer applies the identical
 guard when it re-pastes a stored topic illustration to redraw the summary
 image, so a file that passed the resolver's own cap once cannot be made to
 decode as a decompression bomb just because it is already on disk.
+
+A scraped image link that cannot be resolved to a URL is only an unusable
+candidate, and the next candidate or the card is used.
 
 The resolver reaches a page or an image through the same shared HTTPS
 transport boundary as section 6's collectors, `https_get()`'s `target_pin`
