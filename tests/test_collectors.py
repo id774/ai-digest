@@ -74,9 +74,10 @@
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
-#  v1.4 2026-11-07
+#  v1.4 2026-11-08
 #       Cover the upper bound of the look back window at the collection
-#       time, for arXiv and for news feeds alike.
+#       time, and entries whose time cannot be represented or whose feed URL
+#       embeds credentials, for arXiv and for news feeds alike.
 #  v1.3 2026-09-22
 #       Cover the collector response body cap and that trust_env (proxy
 #       use) stays the untouched default.
@@ -636,6 +637,148 @@ class WindowUpperBoundTest(unittest.TestCase):
 
         self.assertEqual([], result.entries)
         self.assertEqual(1, result.items_outside_window)
+
+
+class _Tuple:
+    """ A struct_time stand in whose year can be forced out of range. """
+
+    @staticmethod
+    def with_year(year):
+        moment = (REFERENCE_TIME - timedelta(hours=1)).timetuple()
+        return (year,) + tuple(moment)[1:]
+
+
+class UnrepresentableTimeTest(unittest.TestCase):
+    """ One entry with an impossible time must not affect the others. """
+
+    def entries(self, years):
+        entries = [SimpleNamespace(
+            link="https://example.test/bad{0}".format(year), title="T",
+            summary="S", published_parsed=_Tuple.with_year(year))
+            for year in years]
+        entries.append(_entry_at("https://example.test/good",
+                                 REFERENCE_TIME - timedelta(hours=1)))
+        return entries
+
+    def collect_news(self, entries):
+        parsed = SimpleNamespace(entries=entries,
+                                 feed=SimpleNamespace(title="Feed"))
+        with mock.patch.object(news_rss, "_utc_now",
+                               return_value=REFERENCE_TIME), \
+                mock.patch.object(news_rss, "https_get"), \
+                mock.patch.object(news_rss, "read_capped_content",
+                                  return_value=b""), \
+                mock.patch.object(news_rss.feedparser, "parse",
+                                  return_value=parsed):
+            with self.assertLogs(news_rss.logger, "WARNING") as logs:
+                result = news_rss.collect(["https://feed.test/rss"], 24)
+        return result, logs.output
+
+    def collect_arxiv(self, entries):
+        with mock.patch.object(arxiv, "_utc_now",
+                               return_value=REFERENCE_TIME), \
+                mock.patch.object(arxiv, "_fetch_category",
+                                  return_value=(entries, "")):
+            with self.assertLogs(arxiv.logger, "WARNING") as logs:
+                # Guarantees at least one record, so the block never fails
+                # on a pass that, correctly, has nothing to warn about.
+                arxiv.logger.warning("collection started")
+                result = arxiv.collect(["cs.AI"], 10, 24)
+        return result, [line for line in logs.output
+                        if "collection started" not in line]
+
+    def test_year_zero_and_year_10000_are_dropped_alone(self):
+        for name, collect in (("news", self.collect_news),
+                              ("arxiv", self.collect_arxiv)):
+            with self.subTest(source=name):
+                result, output = collect(self.entries([0, 10000]))
+
+                self.assertEqual(["https://example.test/good"],
+                                 [entry.url for entry in result.entries])
+                self.assertEqual(0, result.sources_failed)
+                self.assertEqual(3, result.items_seen)
+                self.assertEqual(0, result.items_outside_window)
+                self.assertEqual(2, len(output))
+                self.assertFalse(any("example.test" in line
+                                     for line in output))
+
+    def test_an_unrepresentable_entry_after_an_old_one_is_not_counted(self):
+        old = _entry_at("https://example.test/old",
+                        REFERENCE_TIME - timedelta(hours=48))
+        bad = SimpleNamespace(link="https://example.test/bad", title="T",
+                              summary="S",
+                              published_parsed=_Tuple.with_year(0))
+        result, _ = self.collect_arxiv([old, bad])
+
+        self.assertEqual([], result.entries)
+        self.assertEqual(1, result.items_outside_window)
+
+    def test_a_valid_time_is_read_unchanged(self):
+        moment = datetime(2026, 11, 7, 11, 0, tzinfo=timezone.utc)
+        raw_entry = SimpleNamespace(published_parsed=moment.timetuple())
+        for module in (arxiv, news_rss):
+            self.assertEqual(moment, module._entry_datetime(raw_entry))
+
+    def test_the_helper_raises_value_error_for_the_two_years(self):
+        for module in (arxiv, news_rss):
+            for year in (0, 10000):
+                raw_entry = SimpleNamespace(
+                    published_parsed=_Tuple.with_year(year))
+                with self.assertRaises(ValueError):
+                    module._entry_datetime(raw_entry)
+
+
+class FeedCredentialTest(unittest.TestCase):
+    """ A credential-bearing feed URL is never requested or reported. """
+
+    SECRET = "hunter2-not-real"
+
+    def collect(self, url, parsed=None):
+        with mock.patch.object(news_rss, "https_get") as getter:
+            if parsed is not None:
+                getter.return_value = _FakeHttpsResponse(b"<rss/>")
+            with mock.patch.object(news_rss.feedparser, "parse",
+                                   return_value=parsed), \
+                    self.assertLogs(news_rss.logger, "WARNING") as logs:
+                result = news_rss.collect([url], 24)
+        return result, getter, logs.output
+
+    def test_a_credential_url_is_refused_without_a_request(self):
+        for url in ("https://reader:{0}@feeds.example.org/rss".format(
+                        self.SECRET),
+                    "https://{0}@feeds.example.org/rss".format(self.SECRET),
+                    "https://@feeds.example.org/rss",
+                    "http://reader:{0}@feeds.example.org/rss".format(
+                        self.SECRET),
+                    "https://reader:{0}@[broken/rss".format(self.SECRET)):
+            with self.subTest(url=url):
+                result, getter, output = self.collect(url)
+
+                getter.assert_not_called()
+                self.assertEqual(1, result.sources_failed)
+                text = " ".join(result.failures + output)
+                self.assertNotIn(self.SECRET, text)
+                self.assertNotIn("reader", text)
+                if "[broken" not in url:
+                    self.assertIn("feeds.example.org", text)
+
+    def test_the_origin_of_an_untitled_feed_has_no_userinfo(self):
+        self.assertEqual("feeds.example.org", news_rss._feed_origin(
+            SimpleNamespace(feed=SimpleNamespace()),
+            "https://reader:{0}@feeds.example.org/rss".format(self.SECRET)))
+
+    def test_a_plain_https_feed_is_still_collected(self):
+        parsed = SimpleNamespace(
+            feed=SimpleNamespace(),
+            entries=[_feed_entry("https://example.test/a")])
+        with mock.patch.object(news_rss, "https_get",
+                               return_value=_FakeHttpsResponse(b"<rss/>")), \
+                mock.patch.object(news_rss.feedparser, "parse",
+                                  return_value=parsed):
+            result = news_rss.collect(["https://feeds.example.org/rss"], 24)
+
+        self.assertEqual(0, result.sources_failed)
+        self.assertEqual("feeds.example.org", result.entries[0].origin)
 
 
 class CollectionOutcomeTest(unittest.TestCase):

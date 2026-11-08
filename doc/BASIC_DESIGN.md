@@ -233,7 +233,10 @@ Each collector takes one collection reference time `T` when it starts and keeps
 an entry only when `T - LOOKBACK_HOURS <= published <= T`: an entry dated after
 `T` is outside the window, and both edges are inside it. An entry rejected for
 being in the future is counted with the others outside the window and does not
-stop the scan of the rest of its source. Neither collector consults the host's
+stop the scan of the rest of its source. An entry whose parsed time a
+`datetime` cannot represent, such as year 0 or 10000, is dropped alone with a
+warning naming no URL: it neither fails its source nor counts as outside the
+window. Neither collector consults the host's
 local time zone, so the window is the same number of hours on every host.
 
 The same setting travels onward — into the prompt, the HTML, the summary image
@@ -418,6 +421,9 @@ An answer carrying no usable topic at all is a failed run, not an empty report.
 
 Per topic, the sources are tried in order until one yields an image; otherwise a
 card is drawn.
+
+A scraped image link that cannot be resolved to a URL is only an unusable
+candidate, and the next candidate or the card is used.
 
 The resolver reads the figure of a paper from its HTML rendering, or the image an
 article declares for social sharing. A source is recognized as an arXiv paper by
@@ -791,7 +797,8 @@ The bundled sample replaces exactly the stages that need outbound access —
 collection, topic editing, and illustration — and nothing downstream. Its
 payload is the tool call arguments a live endpoint would have returned, so it
 goes through the same validation, and it is data rather than a recording of
-one response, so a demo run costs nothing and renders identically everywhere.
+one response, so a demo run costs nothing and always uses the same input.
+Fonts and Pillow differ between hosts, so identical pixels are not guaranteed.
 `--data-dir` directs the output somewhere other than the real archive.
 [`DEMO.md`](DEMO.md) states what it replaces and how it differs from a
 collected report.
@@ -934,6 +941,9 @@ things.
   is called on the effective value `run` is about to collect from, so an
   invalid lower-priority environment or `.env` value never blocks a valid
   `--news-feed-urls` override for that invocation.
+  A `NEWS_FEED_URLS` item embedding userinfo is refused the same way, by
+  position and without quoting the item; a collector handed one anyway
+  neither requests it nor reports its userinfo.
 - **Resolves the font, strictly, with `is_usable_font_path()` as the single
   usability check** — a file that exists *and* that Pillow can load as a
   scalable font — shared by every route a font path reaches this module by.

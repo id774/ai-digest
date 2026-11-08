@@ -27,9 +27,9 @@
 #  - feedparser, requests
 #
 #  Version History:
-#  v1.5 2026-11-07
+#  v1.5 2026-11-08
 #       Keep only entries published within the look back window up to the
-#       collection time, so a future-dated entry is no longer collected.
+#       collection time, and drop one whose time cannot be represented.
 #  v1.4 2026-09-22
 #       Cap the read body at MAX_COLLECTOR_RESPONSE_BYTES, failing an
 #       oversized feed the same way an unreachable one fails.
@@ -89,13 +89,21 @@ def _entry_datetime(raw_entry) -> datetime:
     narrows or widens the look back window. Feeds that omit both
     published and updated timestamps are treated as epoch old, which
     makes the age filter drop them.
+
+    Raises:
+        ValueError: The parsed time is outside the range a datetime can
+            represent, such as year 0 or year 10000.
     """
     parsed = getattr(raw_entry, "published_parsed", None)
     if parsed is None:
         parsed = getattr(raw_entry, "updated_parsed", None)
     if parsed is None:
         return datetime.fromtimestamp(0, tz=timezone.utc)
-    return datetime.fromtimestamp(calendar.timegm(parsed), tz=timezone.utc)
+    try:
+        return datetime.fromtimestamp(calendar.timegm(parsed),
+                                      tz=timezone.utc)
+    except (ValueError, OverflowError, OSError) as error:
+        raise ValueError("unrepresentable publication time: {0}".format(error))
 
 
 def _feed_origin(parsed_feed, url: str) -> str:
@@ -103,7 +111,25 @@ def _feed_origin(parsed_feed, url: str) -> str:
     title = getattr(parsed_feed.feed, "title", "")
     if title:
         return " ".join(title.split())
-    return urlparse(url).netloc
+    return _host(url)
+
+
+def _host(url: str) -> str:
+    """ Return the netloc of url without any userinfo, or '' if unparsable. """
+    try:
+        return urlparse(url).netloc.rpartition("@")[2]
+    except ValueError:
+        return ""
+
+
+def _has_userinfo(url: str) -> bool:
+    """ Return True when url embeds userinfo, even an empty one. """
+    try:
+        return "@" in urlparse(url).netloc
+    except ValueError:
+        # An unparsable URL cannot be told apart from one with userinfo,
+        # and the failure that follows would quote it, so treat it as one.
+        return "@" in url
 
 
 def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
@@ -131,6 +157,14 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
     seen_urls = set()
 
     for url in feed_urls:
+        if _has_userinfo(url):
+            # Never send, log or report a URL carrying credentials.
+            shown = "{0} (credentials in URL)".format(_host(url) or "feed")
+            logger.warning("feed refused for %s", shown)
+            result.sources_failed += 1
+            result.failures.append("{0}: credentials in URL are not "
+                                   "allowed".format(shown))
+            continue
         try:
             with https_get(url, timeout, user_agent, stream=True) as response:
                 response.raise_for_status()
@@ -154,7 +188,12 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
         origin = _feed_origin(parsed_feed, url)
         result.items_seen += len(parsed_feed.entries)
         for raw_entry in parsed_feed.entries:
-            published = _entry_datetime(raw_entry)
+            try:
+                published = _entry_datetime(raw_entry)
+            except ValueError:
+                logger.warning("dropping entry with unrepresentable "
+                               "publication time from %s", origin)
+                continue
             if published > now or published < threshold:
                 # Feed order is not guaranteed, so keep scanning the
                 # remaining items instead of breaking out of the loop.

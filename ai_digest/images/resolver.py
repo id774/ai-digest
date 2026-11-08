@@ -28,6 +28,9 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
+#  v1.6 2026-11-08
+#       Treat a scraped image link that cannot be resolved to a URL as an
+#       unusable candidate, so another source or a card is used instead.
 #  v1.5 2026-11-07
 #       Refuse a downloaded image that cannot be fully decoded, so an
 #       incomplete picture falls back to another source or a generated card.
@@ -372,6 +375,24 @@ def _arxiv_paper_id(url: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def _join_link(base: str, link: str) -> Optional[str]:
+    """
+    Resolve a scraped link against its page, or None when it is malformed.
+
+    The link comes from a third party page, and a value such as an
+    unterminated IPv6 literal makes urljoin() or urlparse() raise
+    ValueError. That only makes this one candidate unusable.
+    """
+    try:
+        joined = urljoin(base, link)
+        urlparse(joined)
+    except ValueError:
+        # The page URL may itself carry userinfo, so it is not logged.
+        logger.info("malformed image link ignored")
+        return None
+    return joined
+
+
 def arxiv_figure_url(url: str, timeout: int, user_agent: str) -> Optional[str]:
     """
     Return the URL of the first figure of an arXiv paper.
@@ -392,7 +413,9 @@ def arxiv_figure_url(url: str, timeout: int, user_agent: str) -> Optional[str]:
     for figure in soup.find_all("figure"):
         image = figure.find("img")
         if image is not None and image.get("src"):
-            return urljoin(final_url, image["src"])
+            joined = _join_link(final_url, image["src"])
+            if joined is not None:
+                return joined
     return None
 
 
@@ -413,7 +436,9 @@ def open_graph_image_url(url: str, timeout: int,
                             ("name", "twitter:image")):
         tag = soup.find("meta", attrs={attribute: name})
         if tag is not None and tag.get("content"):
-            return urljoin(final_url, tag["content"])
+            joined = _join_link(final_url, tag["content"])
+            if joined is not None:
+                return joined
     return None
 
 

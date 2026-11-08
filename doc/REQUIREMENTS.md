@@ -187,7 +187,8 @@ Both defaults can be replaced by configuration, and an empty feed list turns
 news collection off. Which feeds are allowed is not restricted to the defaults.
 
 Every non-empty NEWS_FEED_URLS item is an absolute HTTPS URL. A malformed or
-non-HTTPS effective value is a configuration error before collection begins.
+non-HTTPS effective value, or one embedding credentials (userinfo), is a
+configuration error before collection begins, and the error never quotes them.
 
 Only material published inside a **look back window** is kept — twenty four
 hours by default, and configurable, because a quiet weekend is answered by
@@ -366,7 +367,7 @@ Every topic carries an image, and there is no state in which one does not.
 
 An image is taken from the paper or the article when a usable one can be
 obtained. When it cannot — unreachable, resolving to a non-public address,
-malformed, too large, too small, not decodable — **a card is drawn locally
+malformed or unresolvable as a URL, too large, too small, not decodable — **a card is drawn locally
 from the headline and the category instead.**
 
 **The condition of an external site or image is never a condition of the run
@@ -476,7 +477,10 @@ The batch runs unattended, so how it fails is part of what it is.
 
 - some sources could not be read — unreachable, a TLS failure, or an HTTP
   downgrade refused before a plaintext request — but others yielded valid items,
-- some external images could not be obtained,
+- some external images could not be obtained, including one whose scraped link
+  cannot be resolved to a URL,
+- some entries carried a publication time that cannot be represented and were
+  dropped without counting their source as failed,
 - some individual topics returned by an API-backed model were malformed.
 
 **Fail** — nothing worth storing was produced:
@@ -576,7 +580,7 @@ indefinitely for an API.**
   local ignored file.
 - A file holding a credential has restricted permissions.
 - A credential is never committed, never logged at any level, and never quoted
-  in an error message. Its absence is reported as absence.
+  in an error message, and that includes credentials embedded in a feed URL. Its absence is reported as absence.
 - **Where the viewer is exposed, access control belongs to the layer in front of
   it** — TLS, authentication, an address restriction, a VPN — as the environment
   requires. The application provides none of its own.

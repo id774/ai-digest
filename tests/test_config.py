@@ -99,6 +99,9 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.7 2026-11-08
+#       Cover refusal of NEWS_FEED_URLS items that embed credentials, from the
+#       environment, .env and the command line, without quoting them.
 #  v1.6 2026-11-01
 #       Cover the five default arXiv categories and seven default feeds, and
 #       their match with .env.example.
@@ -717,6 +720,75 @@ class NewsFeedUrlsTest(unittest.TestCase):
     def test_a_hostless_https_url_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "NEWS_FEED_URLS"):
             config.validated_news_feed_urls(["https:///feed"])
+
+    SECRET = "hunter2-not-real"
+
+    def credential_urls(self):
+        return [
+            "https://reader:{0}@feeds.example.org/rss".format(self.SECRET),
+            "https://{0}@feeds.example.org/rss".format(self.SECRET),
+            "https://@feeds.example.org/rss",
+            "http://reader:{0}@feeds.example.org/rss".format(self.SECRET),
+        ]
+
+    def test_a_credential_url_is_rejected_without_quoting_it(self):
+        for url in self.credential_urls():
+            with self.subTest(url=url):
+                with self.assertRaises(RuntimeError) as caught:
+                    config.validated_news_feed_urls(
+                        ["https://ok.example.test/feed", url])
+                message = str(caught.exception)
+                self.assertIn("NEWS_FEED_URLS item 2", message)
+                self.assertNotIn(self.SECRET, message)
+                self.assertNotIn("reader", message)
+                self.assertNotIn("feeds.example.org", message)
+
+    def test_an_environment_value_is_rejected_before_collecting(self):
+        loaded = self.load({
+            "NEWS_FEED_URLS": "https://ok.example.test/feed," +
+            self.credential_urls()[0]})
+
+        with self.assertRaises(RuntimeError) as caught:
+            loaded.validate_news_feed_urls()
+        self.assertNotIn(self.SECRET, str(caught.exception))
+
+    def test_a_dotenv_value_is_rejected_before_collecting(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(config, "_dotenv_values", return_value={
+                    "NEWS_FEED_URLS": self.credential_urls()[1]}):
+            loaded = config.load_config()
+
+        with self.assertRaises(RuntimeError) as caught:
+            loaded.validate_news_feed_urls()
+        self.assertNotIn(self.SECRET, str(caught.exception))
+
+    def test_a_command_line_value_is_rejected_without_the_secret(self):
+        import argparse
+
+        import cli
+        with self.assertRaises(argparse.ArgumentTypeError) as caught:
+            cli.news_feed_urls_option(self.credential_urls()[0])
+        self.assertNotIn(self.SECRET, str(caught.exception))
+
+    def test_run_fails_before_collecting_and_logs_no_secret(self):
+        import cli
+        from ai_digest import CollectionResult
+        configured = config.Config(
+            summarizer_backend="plain",
+            news_feed_urls=[self.credential_urls()[0]])
+
+        with mock.patch.object(cli, "collect_entries",
+                               return_value=CollectionResult()) as collect, \
+                self.assertLogs(cli.logger, "ERROR") as logs:
+            status = cli.command_run(cli.parse_args(["run"]), configured)
+
+        self.assertEqual(1, status)
+        collect.assert_not_called()
+        self.assertNotIn(self.SECRET, " ".join(logs.output))
+
+    def test_a_credential_free_url_with_an_at_sign_in_the_path_passes(self):
+        url = "https://example.test/feed/@news"
+        self.assertEqual([url], config.validated_news_feed_urls([url]))
 
     def test_a_mixed_list_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "NEWS_FEED_URLS"):

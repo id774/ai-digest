@@ -30,9 +30,9 @@
 #  - feedparser, requests
 #
 #  Version History:
-#  v1.6 2026-11-07
+#  v1.6 2026-11-08
 #       Keep only entries published within the look back window up to the
-#       collection time, so a future-dated entry is no longer collected.
+#       collection time, and drop one whose time cannot be represented.
 #  v1.5 2026-09-22
 #       Cap the read body at MAX_COLLECTOR_RESPONSE_BYTES, failing an
 #       oversized category the same way an unreachable one fails.
@@ -96,13 +96,33 @@ def _entry_datetime(raw_entry) -> datetime:
     narrows or widens the look back window. Entries without a usable
     timestamp are reported as the epoch so that the age filter discards
     them.
+
+    Raises:
+        ValueError: The parsed time is outside the range a datetime can
+            represent, such as year 0 or year 10000.
     """
     parsed = getattr(raw_entry, "published_parsed", None)
     if parsed is None:
         parsed = getattr(raw_entry, "updated_parsed", None)
     if parsed is None:
         return datetime.fromtimestamp(0, tz=timezone.utc)
-    return datetime.fromtimestamp(calendar.timegm(parsed), tz=timezone.utc)
+    try:
+        return datetime.fromtimestamp(calendar.timegm(parsed),
+                                      tz=timezone.utc)
+    except (ValueError, OverflowError, OSError) as error:
+        raise ValueError("unrepresentable publication time: {0}".format(error))
+
+
+def _count_dated(raw_entries) -> int:
+    """ Count entries whose publication time can be represented. """
+    count = 0
+    for raw_entry in raw_entries:
+        try:
+            _entry_datetime(raw_entry)
+        except ValueError:
+            continue
+        count += 1
+    return count
 
 
 def _fetch_category(category: str, max_results: int, timeout: int,
@@ -200,7 +220,12 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
             continue
         result.items_seen += len(raw_entries)
         for position, raw_entry in enumerate(raw_entries):
-            published = _entry_datetime(raw_entry)
+            try:
+                published = _entry_datetime(raw_entry)
+            except ValueError:
+                logger.warning("dropping paper with unrepresentable "
+                               "publication time from arXiv %s", category)
+                continue
             if published > now:
                 # A future date is outside the window as well; later
                 # entries may still be in it, so keep scanning.
@@ -209,7 +234,8 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
             if published < threshold:
                 # Entries are sorted newest first, so everything that
                 # follows in this category is older as well.
-                result.items_outside_window += len(raw_entries) - position
+                result.items_outside_window += _count_dated(
+                    raw_entries[position:])
                 break
             url = getattr(raw_entry, "link", "")
             if not url or url in seen_urls:

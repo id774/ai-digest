@@ -20,7 +20,8 @@
 #  caller stores and renders the result as usual.
 #
 #  The sample is data, not a recording of one API response, so a demo
-#  run costs nothing, needs no key and renders identically everywhere.
+#  run costs nothing, needs no key and always starts from the same input.
+#  Fonts and Pillow differ between hosts, so the image pixels may differ.
 #  See doc/DEMO.md for how it differs from a live report.
 #
 #  Author: id774 (More info: https://id774.net)
