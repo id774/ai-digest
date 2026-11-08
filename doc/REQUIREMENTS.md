@@ -188,7 +188,8 @@ news collection off. Which feeds are allowed is not restricted to the defaults.
 
 Every non-empty NEWS_FEED_URLS item is an absolute HTTPS URL. A malformed or
 non-HTTPS effective value, or one embedding credentials (userinfo), is a
-configuration error before collection begins, and the error never quotes them.
+configuration error before collection begins, and the error never quotes an
+item that contains credentials.
 
 Only material published inside a **look back window** is kept — twenty four
 hours by default, and configurable, because a quiet weekend is answered by
@@ -367,8 +368,8 @@ Every topic carries an image, and there is no state in which one does not.
 
 An image is taken from the paper or the article when a usable one can be
 obtained. When it cannot — unreachable, resolving to a non-public address,
-malformed or unresolvable as a URL, too large, too small, not decodable — **a card is drawn locally
-from the headline and the category instead.**
+malformed or unresolvable as a URL, too large, too small, not decodable — **a
+card is drawn locally from the headline and the category instead.**
 
 **The condition of an external site or image is never a condition of the run
 succeeding.** A publisher changing its markup degrades the look of a report,
@@ -580,7 +581,8 @@ indefinitely for an API.**
   local ignored file.
 - A file holding a credential has restricted permissions.
 - A credential is never committed, never logged at any level, and never quoted
-  in an error message, and that includes credentials embedded in a feed URL. Its absence is reported as absence.
+  in an error message, and that includes credentials embedded in a feed URL.
+  Its absence is reported as absence.
 - **Where the viewer is exposed, access control belongs to the layer in front of
   it** — TLS, authentication, an address restriction, a VPN — as the environment
   requires. The application provides none of its own.
