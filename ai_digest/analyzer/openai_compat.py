@@ -213,8 +213,8 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
-        timeout: Seconds allowed for one request. Each retry spends it
-            again, so the worst case wait is timeout x (max_retries+1).
+        timeout: Seconds allowed for each attempt. Retry waits come on
+            top, so timeout x (max_retries+1) is not an exact upper bound.
         lookback_hours: Age limit the collectors applied, named in the
             prompt so that it matches the material actually sent.
 

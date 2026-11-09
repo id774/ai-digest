@@ -11,8 +11,8 @@ v1.3 (Release Date: TBD)
   incompatible change to how a setting is resolved.
 - Exclude future-dated or unrepresentable feed timestamps and require ASCII
   digits in report dates, incompatible changes to accepted entries and dates.
-- Try other images or generated cards when downloads are incomplete or
-  scraped image URLs are malformed.
+- Keep image retrieval best effort for incomplete downloads and malformed URLs,
+  and enforce the request deadline through public-target DNS validation.
 - Reject Anthropic text JSON fallback responses stopped by the token limit.
 - Reject citations with missing hosts or invalid ports, an incompatible
   change to which source links are published.

@@ -265,16 +265,13 @@ which is why `SUMMARIZER_BACKEND=plain` removes the cost entirely.
 
 ### Timeouts
 
-`SUMMARIZER_TIMEOUT` (default 180 seconds) bounds one summarization request, and
-each retry spends it again:
-
-```text
-worst case wait = SUMMARIZER_TIMEOUT x (SUMMARIZER_MAX_RETRIES + 1)
-```
-
-Compute the worst-case wait from the formula above and keep it comfortably
-below the interval between cron runs, so that a hung run has ended before the
-next one starts.
+`SUMMARIZER_TIMEOUT` (default 180 seconds) is the timeout the SDK applies to
+each summarization attempt, and `SUMMARIZER_MAX_RETRIES` limits the retries.
+Their product is not an exact upper bound on the elapsed time, because the SDK
+also waits between attempts (backoff, jitter, a server-requested delay such as
+`Retry-After`) and other stages of a run take time of their own. Keep the
+interval between cron runs comfortably longer than that product, so that a
+hung run has ended before the next one starts.
 `HTTP_TIMEOUT` (default 60 seconds) is a separate limit and applies to the
 collectors and the scraper, whose requests are many and short.
 
