@@ -28,6 +28,8 @@
 #  - requests
 #
 #  Version History:
+#  v1.2 2026-11-09
+#       Bound the preflight lookup of target_pin by the fetch-wide deadline.
 #  v1.1 2026-09-23
 #       Add target_pin, trust_env and a hard, DNS-inclusive fetch-wide
 #       deadline; validate HTTPS URLs and pin by canonical hostname.
@@ -269,7 +271,10 @@ def https_get(url: str, timeout: int, user_agent: str,
         stream: Whether the response body is streamed rather than read.
         target_pin: Optional context manager factory wrapping the actual
             request for the initial target and for every redirect
-            target, after the HTTPS check passes. Entering it may raise
+            target, after the HTTPS check passes. It is entered inside
+            the hop's hard_deadline(), so a blocking preflight such as
+            a DNS lookup spends the same fetch-wide budget. Entering it
+            may raise
             to refuse a target this function's own HTTPS check would
             accept, and may also pin how the wrapped request resolves
             its host, so validating a URL string and connecting to the
@@ -320,7 +325,9 @@ def https_get(url: str, timeout: int, user_agent: str,
                     "fetch deadline of {0}s elapsed before requesting "
                     "{1}".format(timeout, current_url)
                 )
-            with pin(current_url), hard_deadline(remaining):
+            # hard_deadline() is entered first so that it also bounds
+            # target_pin's own blocking preflight, such as a DNS lookup.
+            with hard_deadline(remaining), pin(current_url):
                 response = session.get(
                     current_url,
                     timeout=remaining,

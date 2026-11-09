@@ -374,15 +374,14 @@ waited for is the writing rather than the network. A day's worth of entries
 condensed into `MAX_TOPICS` topics is the same work whether the feeds were busy
 or quiet, and raising `MAX_OUTPUT_TOKENS` lengthens it.
 
-Retries widen the window, because the SDK spends the timeout again on each one:
-
-```text
-worst case wait = SUMMARIZER_TIMEOUT x (SUMMARIZER_MAX_RETRIES + 1)
-```
-
-Compute the worst-case wait from the formula above and keep it well inside the
-interval between two cron runs, so that a hung run has ended before the next
-one starts. Neither
+`SUMMARIZER_TIMEOUT` is the timeout the SDK applies to each attempt, and
+`SUMMARIZER_MAX_RETRIES` limits how many retries follow a failed attempt.
+Together they do not give an exact upper bound on the elapsed time: the SDK
+also waits between attempts, with backoff, jitter or a server-requested delay
+such as `Retry-After`, and the other stages of a run take time of their own.
+Treat the product of the two settings as a floor rather than a ceiling,
+and keep the cron interval comfortably longer, so that a hung run has ended
+before the next one starts. Neither
 setting may be zero or negative; `cli.py run` refuses such a value before it
 collects anything, rather than letting the SDK reject it after a whole
 collection has been spent.

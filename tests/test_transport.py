@@ -47,6 +47,8 @@
 #    - Run target_pin on the initial target before any request, and on
 #      every redirect hop before it is followed, stopping the chain when
 #      it refuses one.
+#    - Bound a blocking target_pin preflight by the fetch deadline, sending
+#      no request once it elapses and still unwinding the pin.
 #    - Return a streamed body within the limit, accept one at exactly the
 #      limit, and give up once it is exceeded without buffering an endless
 #      one in full first.
@@ -56,6 +58,8 @@
 #  - requests
 #
 #  Version History:
+#  v1.2 2026-11-09
+#       Cover the fetch-wide deadline bounding a blocking target_pin.
 #  v1.1 2026-09-23
 #       Cover target_pin, trust_env, a hard DNS-inclusive fetch-wide
 #       deadline, canonical hostname resolution, and stricter HTTPS URLs.
@@ -543,6 +547,36 @@ class FetchDeadlineTest(unittest.TestCase):
 
         self.assertEqual(1, session.get.call_count)
         self.assertTrue(first.closed)
+
+    def test_the_deadline_also_bounds_a_blocking_target_pin(self):
+        """
+        A target_pin that blocks, as a DNS preflight can, has to be cut
+        off by the fetch deadline: no request is sent after it, and the
+        pin's own cleanup still runs.
+        """
+        session = _fake_session(FakeResponse(200))
+        state = {"cleaned_up": False}
+
+        @contextlib.contextmanager
+        def slow_pin(_url):
+            try:
+                time.sleep(2)
+                yield
+            finally:
+                state["cleaned_up"] = True
+
+        previous_handler = signal.getsignal(signal.SIGALRM)
+        with mock.patch.object(transport.requests, "Session",
+                               return_value=session):
+            with self.assertRaises(transport.FetchTimeoutError):
+                with transport.https_get("https://example.test/a", 0.05,
+                                         "ua", target_pin=slow_pin):
+                    pass
+
+        session.get.assert_not_called()
+        self.assertTrue(state["cleaned_up"])
+        session.__exit__.assert_called_once()
+        self.assertIs(previous_handler, signal.getsignal(signal.SIGALRM))
 
     def test_the_yielded_response_carries_the_deadline(self):
         response = FakeResponse(200)
