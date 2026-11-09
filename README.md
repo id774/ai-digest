@@ -158,7 +158,7 @@ Each execution path resolves only the settings it actually uses: `cli.py run` re
 | `LOOKBACK_HOURS` | `24` | How many hours before the collection time an entry may have been published. An entry dated after the collection time is not collected. |
 | `MAX_TOPICS` | `6` | Maximum topics per report, `1` through `6`. Six fills the summary image grid; report.json, the HTML and summary.png always describe the same topic set. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
-| `SUMMARIZER_TIMEOUT` | `180` | Seconds allowed for one summarization request, on either API backend. Each retry spends it again; see [Timeouts](#timeouts). |
+| `SUMMARIZER_TIMEOUT` | `180` | SDK HTTP timeout setting in seconds for each summarization attempt on either API backend; it is not a whole-attempt wall-clock deadline. See [Timeouts](#timeouts). |
 | `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. Blank probes automatically; an explicit value must be a font Pillow can load, or the command fails; see [Japanese font](#japanese-font). |
 | `DATA_DIR` | `data/reports` | Directory holding the generated reports. |
 | `HTTP_TIMEOUT` | `60` | Timeout in seconds of every collector and scraper request. The summarization request uses `SUMMARIZER_TIMEOUT`. |
@@ -357,12 +357,12 @@ The command line options moved the same way: `--anthropic-model` and
 
 ### Timeouts
 
-Two limits bound the outgoing requests, and they measure different things:
+Two timeout settings govern outgoing requests, and they measure different things:
 
 | Setting | Default | Bounds |
 |---|---|---|
 | `HTTP_TIMEOUT` | 60s | One collector or scraper request: an arXiv page, a feed, an article, an image |
-| `SUMMARIZER_TIMEOUT` | 180s | One summarization request, on either API backend |
+| `SUMMARIZER_TIMEOUT` | 180s | SDK HTTP timeout for each summarization attempt, not a total wall-clock deadline |
 
 `HTTP_TIMEOUT` is a hard wall-clock deadline for the whole fetch, DNS
 resolution included, not a per-socket-operation allowance that a slow trickle
@@ -374,18 +374,21 @@ waited for is the writing rather than the network. A day's worth of entries
 condensed into `MAX_TOPICS` topics is the same work whether the feeds were busy
 or quiet, and raising `MAX_OUTPUT_TOKENS` lengthens it.
 
-`SUMMARIZER_TIMEOUT` is the timeout the SDK applies to each attempt, and
-`SUMMARIZER_MAX_RETRIES` limits how many retries follow a failed attempt.
-Their product guarantees neither a lower nor an upper bound on the elapsed
-time. A run whose first attempt succeeds takes far less, while the SDK also
-waits between attempts, with backoff, jitter or a server-requested delay such
-as `Retry-After`, and the other stages of a run take time of their own. A cron
-interval longer than the product therefore does not by itself guarantee that
-the previous run has ended, so leave a generous margin and do not rely on the
-interval alone to keep two runs from overlapping. Neither
-setting may be zero or negative; `cli.py run` refuses such a value before it
-collects anything, rather than letting the SDK reject it after a whole
-collection has been spent.
+`SUMMARIZER_TIMEOUT` is the SDK HTTP timeout setting for each summarization
+attempt, not a hard wall-clock deadline for a complete attempt. Its read
+timeout limits the wait for each incoming chunk, so an intermittently
+responding server can keep an attempt running longer than that setting.
+`SUMMARIZER_MAX_RETRIES` is the number of retries after the initial attempt;
+`0` disables retries. At most `SUMMARIZER_MAX_RETRIES + 1` attempts are made.
+`SUMMARIZER_TIMEOUT * (SUMMARIZER_MAX_RETRIES + 1)` is the sum of the nominal
+timeout settings for that maximum number of attempts, not a guaranteed lower
+or upper bound on elapsed time. Attempts can finish early, and SDK backoff,
+jitter or server-requested delays such as `Retry-After` add waiting time.
+Other stages of the run take time too. A cron interval longer than this
+expression does not guarantee that the previous run has finished, so do not
+rely on the interval alone to prevent overlapping runs. `HTTP_TIMEOUT` and
+`SUMMARIZER_TIMEOUT` must be positive; `SUMMARIZER_MAX_RETRIES` must be zero
+or greater. `cli.py run` validates these settings before collection.
 
 ### Japanese font
 

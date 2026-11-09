@@ -28,6 +28,8 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
+#  v1.7 2026-11-09
+#       Restore the original DNS resolver when pin installation is interrupted.
 #  v1.6 2026-11-08
 #       Treat a scraped image link that cannot be resolved to a URL as an
 #       unusable candidate, so another source or a card is used instead.
@@ -237,9 +239,9 @@ def validate_and_pin_public_target(url: str) -> Iterator[None]:
             )
 
     real_getaddrinfo = socket.getaddrinfo
-    socket.getaddrinfo = _pinned_getaddrinfo(hostname, addresses,
-                                             real_getaddrinfo)
     try:
+        socket.getaddrinfo = _pinned_getaddrinfo(hostname, addresses,
+                                                 real_getaddrinfo)
         yield
     finally:
         socket.getaddrinfo = real_getaddrinfo

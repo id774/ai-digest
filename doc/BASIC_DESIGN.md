@@ -965,18 +965,19 @@ run by name.
 
 ### Request budgets
 
-Two timeouts, because they measure different things: `HTTP_TIMEOUT` bounds one
-collector or scraper request, and `SUMMARIZER_TIMEOUT` bounds one summarization
-request. The second is the longer because the answer is not streamed — what is
-being waited for is the writing rather than the network.
-`SUMMARIZER_TIMEOUT` is the SDK's timeout for each attempt and
-`SUMMARIZER_MAX_RETRIES` limits the retries, but their product is not an exact
-upper bound on the elapsed time: the SDK also waits between attempts (backoff,
-jitter, a server-requested delay such as `Retry-After`), and other stages of
-a run take time of their own.
-
-Neither may be zero or negative, and `run` refuses such a value before
-collecting. The full table of settings and defaults is in the README.
+Two timeout settings serve different purposes. `HTTP_TIMEOUT` bounds the
+whole collector or scraper fetch, including DNS resolution, by a hard
+wall-clock deadline. `SUMMARIZER_TIMEOUT` is passed to the SDK as the HTTP
+timeout setting for each summarization attempt. It is not a hard deadline
+for the elapsed time of the attempt: an HTTP read timeout measures the wait
+between incoming chunks, and retries add separate attempts and delays.
+`SUMMARIZER_MAX_RETRIES` is the nonnegative retry count after the initial
+attempt, so the maximum attempt count is `SUMMARIZER_MAX_RETRIES + 1`.
+Multiplying that count by `SUMMARIZER_TIMEOUT` yields neither a lower nor
+an upper bound on actual elapsed time. `HTTP_TIMEOUT` and
+`SUMMARIZER_TIMEOUT` must be positive, while `SUMMARIZER_MAX_RETRIES`
+may be zero. Invalid values are rejected before collection. The full
+settings table and defaults are in the README.
 
 ## 17. Failure isolation and exit status
 

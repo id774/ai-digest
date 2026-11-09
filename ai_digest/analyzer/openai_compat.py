@@ -110,9 +110,9 @@ def _build_client(api_key: str, base_url: Optional[str],
     """
     Build the OpenAI client, importing the package on demand.
 
-    timeout bounds one request. The SDK default is measured in minutes,
-    which is no bound at all for an unattended run, and each retry
-    spends the timeout again.
+    timeout is the SDK HTTP timeout setting for each attempt, not a hard
+    wall-clock deadline for the whole attempt. The SDK also waits
+    between retries.
 
     base_url is required: this boundary is the last point before the
     SDK is asked to build a client, and a missing or blank value is
@@ -213,8 +213,8 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
-        timeout: Seconds allowed for each attempt. Retry waits come on
-            top, so timeout x (max_retries+1) is not an exact upper bound.
+        timeout: SDK HTTP timeout setting for each attempt; not a hard
+            wall-clock limit. Retries and their delays add elapsed time.
         lookback_hours: Age limit the collectors applied, named in the
             prompt so that it matches the material actually sent.
 

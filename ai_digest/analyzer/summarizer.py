@@ -112,11 +112,10 @@ SUMMARY_CHARS = 700
 # answering draws on the same budget and may need more of it.
 MAX_OUTPUT_TOKENS = 8000
 
-# Default seconds allowed for one summarization request. It is not the
-# network but the writing that is being waited for: nothing is
-# streamed, so the client sees the answer only once the last token of
-# MAX_OUTPUT_TOKENS exists. SUMMARIZER_TIMEOUT in the environment
-# overrides it, and it matches the value in config.py.
+# Default SDK HTTP timeout in seconds per summarization attempt, not a
+# whole-attempt wall-clock deadline. A response that keeps receiving
+# chunks may exceed this duration. SUMMARIZER_TIMEOUT in the environment
+# overrides it, and the default matches config.py.
 DEFAULT_TIMEOUT = 180
 
 # Look back window named in the prompt when the caller does not say
@@ -431,12 +430,9 @@ def _build_client(api_key: Optional[str], auth_token: Optional[str],
     settings needs: the SDK otherwise retries some errors on its own
     and two runs are no longer one request each.
 
-    timeout is passed through the same way, and the caller is expected
-    to give one: the SDK default is measured in minutes, and a nightly
-    run that hangs on an endpoint which never answers is still hanging
-    when the next one starts. The timeout applies to each attempt, and
-    the SDK also waits between retries, so timeout x (max_retries + 1)
-    is not an exact upper bound on the elapsed time.
+    timeout is passed to the SDK as the HTTP timeout setting for each
+    attempt. It does not enforce a wall-clock limit over a complete
+    attempt, and retry delays add to the total elapsed time.
     """
     import anthropic
 
@@ -538,8 +534,8 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         max_retries: Retries the SDK may spend on one request. None
             keeps the SDK default; 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
-        timeout: Seconds allowed for each attempt. Retry waits come on
-            top, so timeout x (max_retries+1) is not an exact upper bound.
+        timeout: SDK HTTP timeout setting for each attempt; not a hard
+            wall-clock limit. Retries and their delays add elapsed time.
         lookback_hours: Age limit the collectors applied, named in the
             prompt so that it matches the material actually sent.
 

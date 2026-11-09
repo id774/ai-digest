@@ -72,6 +72,8 @@
 #      resolution to the address it validated, restores the real resolver
 #      on exit, and leaves a lookup for any other host untouched, so a
 #      second, rebound DNS answer for the pinned host is never reached.
+#    - Restore the original resolver when a timeout interrupts DNS pin
+#      installation immediately after the assignment.
 #    - Refuse a decompression-bomb-warning-range image the same as one
 #      past the error threshold, and keep an ordinary image usable.
 #    - Refuse a truncated PNG or JPEG whose header and size still read, try
@@ -82,6 +84,8 @@
 #  - Pillow, requests, beautifulsoup4
 #
 #  Version History:
+#  v1.5 2026-11-09
+#       Verify DNS resolver restoration after interrupted pin installation.
 #  v1.4 2026-11-08
 #       Cover scraped image links that urljoin() cannot resolve, so another
 #       candidate or a generated card is used.
@@ -548,6 +552,42 @@ class ValidatePublicTargetTest(unittest.TestCase):
                 self.assertIsNot(patched_during_test,
                                  resolver.socket.getaddrinfo)
             self.assertIs(patched_during_test, resolver.socket.getaddrinfo)
+
+    def test_restores_getaddrinfo_when_pin_installation_is_interrupted(self):
+        original = mock.Mock(name="original_getaddrinfo")
+        assigned = []
+
+        class InterruptingSocket:
+            # Raises right after the first assignment has been stored,
+            # as a deadline signal could between two statements.
+            def __init__(self):
+                self._getaddrinfo = original
+
+            @property
+            def getaddrinfo(self):
+                return self._getaddrinfo
+
+            @getaddrinfo.setter
+            def getaddrinfo(self, value):
+                self._getaddrinfo = value
+                assigned.append(value)
+                if len(assigned) == 1:
+                    raise transport.FetchTimeoutError("simulated deadline")
+
+        control = InterruptingSocket()
+        public = [ipaddress.ip_address("93.184.216.34")]
+
+        with mock.patch.object(resolver, "_resolve_addresses",
+                               return_value=public):
+            with mock.patch.object(resolver, "socket", control):
+                with self.assertRaises(transport.FetchTimeoutError):
+                    with resolver.validate_and_pin_public_target(
+                            "https://example.test/x"):
+                        pass
+
+        self.assertIs(original, control.getaddrinfo)
+        self.assertGreaterEqual(len(assigned), 2)
+        self.assertIs(original, assigned[-1])
 
     def test_pins_the_connection_against_a_rebinding_second_lookup(self):
         # Simulates DNS rebinding: the name server answers the
