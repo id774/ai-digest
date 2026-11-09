@@ -376,12 +376,13 @@ or quiet, and raising `MAX_OUTPUT_TOKENS` lengthens it.
 
 `SUMMARIZER_TIMEOUT` is the timeout the SDK applies to each attempt, and
 `SUMMARIZER_MAX_RETRIES` limits how many retries follow a failed attempt.
-Together they do not give an exact upper bound on the elapsed time: the SDK
-also waits between attempts, with backoff, jitter or a server-requested delay
-such as `Retry-After`, and the other stages of a run take time of their own.
-Treat the product of the two settings as a floor rather than a ceiling,
-and keep the cron interval comfortably longer, so that a hung run has ended
-before the next one starts. Neither
+Their product guarantees neither a lower nor an upper bound on the elapsed
+time. A run whose first attempt succeeds takes far less, while the SDK also
+waits between attempts, with backoff, jitter or a server-requested delay such
+as `Retry-After`, and the other stages of a run take time of their own. A cron
+interval longer than the product therefore does not by itself guarantee that
+the previous run has ended, so leave a generous margin and do not rely on the
+interval alone to keep two runs from overlapping. Neither
 setting may be zero or negative; `cli.py run` refuses such a value before it
 collects anything, rather than letting the SDK reject it after a whole
 collection has been spent.
