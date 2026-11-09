@@ -12,7 +12,7 @@ v1.3 (Release Date: TBD)
 - Exclude future-dated or unrepresentable feed timestamps and require ASCII
   digits in report dates, incompatible changes to accepted entries and dates.
 - Keep image retrieval best effort for incomplete downloads and malformed URLs,
-  and enforce the request deadline through public-target DNS validation.
+  and bound public-target DNS validation with safe pin restoration.
 - Reject Anthropic text JSON fallback responses stopped by the token limit.
 - Reject citations with missing hosts or invalid ports, an incompatible
   change to which source links are published.

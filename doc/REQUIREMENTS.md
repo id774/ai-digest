@@ -564,10 +564,13 @@ path that never reads it.
 
 Collector and scraper requests use a network-request limit, while an API-backed
 summarization request uses a longer summarization limit, because that wait covers
-the writing as well as the network. Retries multiply the summarization limit,
-and the product must stay well inside the interval between scheduled runs, so a
-hung run has ended before the next one starts. **A daily job must never wait
-indefinitely for an API.**
+the writing as well as the network. The summarization limit is the SDK's HTTP
+timeout setting for each attempt, not a wall-clock deadline for a whole attempt,
+and retries add further attempts and delays. The product of that limit and the
+maximum number of attempts is therefore neither a lower nor an upper bound on
+the elapsed time, and a scheduled interval longer than it does not guarantee
+that the previous run has ended. **Every API request carries an explicit timeout
+setting instead of the SDK default.**
 
 ## 23. Security
 

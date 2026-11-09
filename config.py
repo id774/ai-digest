@@ -127,11 +127,9 @@
 #      budget, so an endpoint whose thinking cannot be turned off may
 #      need more; raising it buys no tool call on its own.
 #  - SUMMARIZER_TIMEOUT
-#      Timeout, in seconds, of one summarization request, on either API
-#      backend. Defaults to 180. It is separate from HTTP_TIMEOUT
-#      because the two measure different things: a feed answers in
-#      moments, while an answer of MAX_OUTPUT_TOKENS is written from
-#      end to end before the client sees any of it.
+#      SDK HTTP timeout setting in seconds for each summarization
+#      attempt, not a whole-attempt wall-clock deadline. Defaults to
+#      180. HTTP_TIMEOUT separately bounds an entire collection fetch.
 #  - AI_DIGEST_FONT_PATH
 #      Path of a CJK capable TrueType font used for image generation.
 #      Unset or blank probes the usual CJK locations; a nonblank value
@@ -635,7 +633,7 @@ class Config:
 
     def validate_retry_budget(self) -> None:
         """
-        Raise when SUMMARIZER_MAX_RETRIES cannot bound a request.
+        Raise when SUMMARIZER_MAX_RETRIES is negative.
 
         Both API backends hand this to their SDK, and a negative value
         is rejected there after everything is collected.
@@ -700,13 +698,11 @@ class Config:
 
     def validate_summarizer_timeout(self) -> None:
         """
-        Raise when SUMMARIZER_TIMEOUT cannot bound a request.
+        Refuse a nonpositive SDK summarization timeout setting.
 
-        A run that starts with a timeout of zero or less would either be
-        refused by the SDK after everything is collected, or fall back
-        on a default measured in minutes. An unattended run must not
-        hang until the next one starts, so the value is checked before
-        the first source is read.
+        The value is validated before collection, not delegated to the
+        SDK after source retrieval. It is an HTTP timeout setting per
+        attempt, not a hard wall-clock deadline for an entire run.
         """
         if self.summarizer_timeout < 1:
             raise RuntimeError(
