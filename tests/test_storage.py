@@ -58,11 +58,11 @@
 #    - Omit a topic image outside its report directory from the viewer
 #      page, keeping a local one and the other topics.
 #    - Return None for syntactically valid JSON with an invalid structure.
-#    - Return None when a stored topic's field types are ones the renderer
-#      cannot consume - a non-string category, title, image or
-#      image_credit. Non-list bullets or a non-string bullet. Non-list
-#      sources, a non-dict source, or a source with a non-string title
-#      or url. And an image that is neither a string nor null.
+#    - Return None when a stored topic contains an invalid field type.
+#      Category, title, and image_credit must be strings.
+#      Bullets must be a list of strings.
+#      Sources must be a list of dictionaries with string titles and URLs.
+#      Image must be a string or null.
 #    - Rebuild a topic from a minimal stored dict missing every optional
 #      field, relying on Topic.from_dict()'s own defaults.
 #    - Return None when the stored date does not match its directory.

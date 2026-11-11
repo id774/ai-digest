@@ -239,10 +239,10 @@ deduplicated entries by publication time.
 
 Every numeric setting above shares one rule: unset or blank uses the default
 shown. An explicit value that is not a whole number, or that is out of range,
-is refused instead of silently falling back to the default. `SUMMARIZER_MAX_RETRIES`
-accepts `0` and above. `MAX_TOPICS` accepts `1` through `6`. Every other
-numeric setting requires `1` or above. The command-line option of the same
-setting enforces the same range.
+is refused instead of silently falling back to the default.
+`SUMMARIZER_MAX_RETRIES` accepts `0` and above. `MAX_TOPICS` accepts `1`
+through `6`. Every other numeric setting requires `1` or above. The
+command-line option of the same setting enforces the same range.
 
 Source retrieval is HTTPS-only. Feed and scraper redirects are followed only
 while their resolved targets remain HTTPS. An HTTP downgrade is refused before
@@ -424,7 +424,8 @@ The command line options moved the same way: `--anthropic-model` and
 
 ### Timeouts
 
-Two timeout settings govern outgoing requests, and they measure different things:
+Two timeout settings govern outgoing requests,
+and they measure different things:
 
 | Setting | Default | Bounds |
 |---|---|---|
@@ -714,15 +715,16 @@ Every failure names its cause at `ERROR` level and ends the run:
 | `the model returned no usable topic` | The answer arrived and validated into nothing. `--verbose` dumps the whole response body |
 | `no stored report for DATE` | `render` was given a date the archive does not hold |
 
-A degraded source is a `WARNING`, not a failure. An unreachable feed, a page
-that does not scrape and an image that is refused each fall back and the run
-continues: `continuing with 11 of 12 sources; 1 failed (...)` is a report that was
-still written.
+A degraded source produces a `WARNING`, not a failed run. An unreachable feed,
+a page that cannot be scraped, and a refused image each allow the run to
+continue through the existing fallback behavior. For example,
+`continuing with 11 of 12 sources; 1 failed (...)` describes a run that still
+wrote a report.
 
-The viewer answers `404` for an address it does not serve, for a date that is
-not a date, and for a date the archive does not hold. All three are the same
-answer on purpose: whether a report exists is not something an unauthenticated
-request needs distinguished for it.
+The viewer returns `404` for an unknown route, an invalid date, or a date
+with no stored report. These cases deliberately have the same response,
+because unauthenticated requests do not need to distinguish whether a
+report exists.
 
 ### The shape of a log line
 
@@ -733,7 +735,8 @@ format:
 %(asctime)s %(levelname)s %(name)s: %(message)s
 ```
 
-so a failure reproduced by hand reads exactly like the one written to the log file:
+A failure reproduced manually therefore has the same log format as a
+scheduled run.
 
 ```text
 2026-08-05 06:30:14,882 INFO ai_digest.collectors.arxiv: collected 24 arXiv papers from 3 of 3 categories (150 papers offered, look back 24 hours)

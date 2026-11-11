@@ -22,10 +22,10 @@
 #  The viewer never calls the Claude API, so this script needs no API
 #  key of its own whatever produced the archive it renders.
 #
-#  It is a documentation tool and is not part of the application;
-#  nothing under ai_digest/ imports it, and Playwright is deliberately
-#  absent from requirements.txt because the application does not need a
-#  browser at run time. Install it separately:
+#  This documentation tool is not part of the application.
+#  Nothing under ai_digest/ imports it. Playwright is deliberately absent
+#  from requirements.txt because the application does not need a browser
+#  at run time. Install it separately:
 #
 #      pip install playwright && playwright install chromium
 #
@@ -49,8 +49,8 @@
 #  - --port PORT
 #      Loopback port the viewer is started on. Defaults to 5099.
 #  - --scale N
-#      Device pixel ratio of the capture. Defaults to 1, which keeps the
-#      files small enough to live in the repository; 2 gives a HiDPI
+#      Device pixel ratio of the capture. Defaults to 1, keeping the files
+#      small enough to live in the repository. A value of 2 gives a HiDPI
 #      capture at roughly four times the size.
 #  - --browser PATH
 #      Chromium executable, when the one bundled with Playwright is not
@@ -194,10 +194,9 @@ def main(argv=None):
         stream=sys.stderr,
     )
     args = parse_args(argv)
-    # This tool only ever reads DATA_DIR, the same single setting
-    # 'cli.py list' resolves; a malformed batch-only or endpoint
-    # setting sitting in the operator's .env must not stop a purely
-    # read-only documentation tool from running.
+    # This tool only reads DATA_DIR, the same setting resolved by
+    # 'cli.py list'. A malformed batch-only or endpoint setting in
+    # the operator's .env must not stop this read-only tool.
     config = load_list_config()
     data_dir = os.path.abspath(args.data_dir or config.data_dir)
 
