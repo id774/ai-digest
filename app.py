@@ -17,7 +17,8 @@
 #      /                          list of the stored report dates
 #      /reports/<date>            report of one day, rendered from JSON
 #      /reports/<date>/image      composite summary PNG of that day
-#      /reports/<date>/assets/<f> file from that report directory. Templates use it for topic illustrations
+#      /reports/<date>/assets/<f> file from that report directory
+#                                 for topic illustrations
 #      /healthz                   liveness probe for process managers
 #
 #  Author: id774 (More info: https://id774.net)

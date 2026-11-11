@@ -35,7 +35,8 @@ work the reader would otherwise repeat every day:
 
 - visiting each source in turn,
 - deciding which items are the same story,
-- translating and editing English titles and abstracts when an API-backed topic editor is selected,
+- translating and editing English titles and abstracts when an API-backed
+  topic editor is selected,
 - choosing which of them matter,
 - and keeping track of where each one came from.
 
@@ -116,12 +117,12 @@ reach the host's own internal network. A public IPv6 literal written in URL
 brackets is checked and pinned by its unbracketed connection address.
 Non-global IPv6 literals are refused before connection. Checking the address
 a hostname resolves to is not enough on its own, since a name server can
-answer a preflight lookup and the connection's own lookup differently. **The address
-actually connected to must be one of the addresses checked**, not a fresh
-answer a name server gives in between, or the check protects nothing. **This
-must hold for a non-ASCII hostname too**, judged and pinned under the same
-canonical form the connection layer actually resolves, not the raw string a
-URL happens to spell it with, or a Unicode target's real connection would
+answer a preflight lookup and the connection's own lookup differently.
+**The address actually connected to must be one of the addresses checked**, not
+a fresh answer a name server gives in between, or the check protects nothing.
+**This must hold for a non-ASCII hostname too**, judged and pinned under the
+same canonical form the connection layer actually resolves, not the raw string
+a URL happens to spell it with, or a Unicode target's real connection would
 never be checked at all. **An environment proxy must not be able to undo
 this check**: the resolver's own requests bypass a configured proxy so that
 the address checked is the address a connection actually reaches, rather
@@ -275,8 +276,8 @@ purpose.
 - **Obvious duplication is removed mechanically, before any model is
   involved**: the same URL, or titles that differ only in how they are written.
 - **Duplication that requires understanding** — different titles covering the
-  same research or event — is handled by API-backed topic editing, which compares
-  meaning. `plain` intentionally performs no semantic grouping.
+  same research or event — is handled by API-backed topic editing, which
+  compares meaning. `plain` intentionally performs no semantic grouping.
 
 Separating them buys four things: less material sent to an endpoint, a smaller
 bill, less distortion of the importance judgement by the same story appearing
@@ -497,7 +498,8 @@ The batch runs unattended, so how it fails is part of what it is.
 
 - no valid item was collected from any source,
 - no usable topic survived topic editing,
-- an API-backed answer could not be interpreted when an API-backed backend was selected,
+- an API-backed answer could not be interpreted when an API-backed backend
+  was selected,
 - storing the report failed,
 - a required artifact could not be generated.
 
@@ -522,9 +524,9 @@ Each run records how many items were collected, how many remained after
 deduplication, how many topics were produced, the model label used for the run
 (`plain` when no model is used), and when it was generated.
 
-**Full auditability is not a goal.** Why each candidate was accepted or rejected,
-and how the model reached its ranking, are not reconstructed or stored. The
-record exists to show the scale of a run and what it finished with.
+**Full auditability is not a goal.** Why each candidate was accepted or
+rejected, and how the model reached its ranking, are not reconstructed or
+stored. The record exists to show the scale of a run and what it finished with.
 
 ## 21. Non-goals
 
@@ -549,10 +551,11 @@ a vendor is also the one other tools read from the environment on their own, so
 a value exported for something else could decide where a digest was sent and
 what it was billed to.
 
-The settings cover at least: the backend, the credential, the endpoint base URL,
-the model, the retry count, the summarization timeout, the protocol compatibility
-options, the look back window, the output token limit, the HTTP timeout, the
-viewer port, the archive directory, the sources, and the display limits.
+The settings cover at least: the backend, the credential, the endpoint
+base URL, the model, the retry count, the summarization timeout, the
+protocol compatibility options, the look back window, the output token
+limit, the HTTP timeout, the viewer port, the archive directory, the
+sources, and the display limits.
 
 **The main settings can be overridden from the command line for one run**, so
 that a change can be tried without editing anything, and a run that overrode
@@ -566,20 +569,20 @@ replace still does.
 **Each execution path depends only on the settings it actually uses.** The
 viewer depends on the archive location and its own port. Printing the stored
 dates depends on the archive location alone. Rebuilding a stored report or the
-bundled sample depends on what they draw with. Only the full collect-and-summarize
-run depends on the endpoint settings. A setting outside that dependency being
-malformed, missing, or carrying a superseded name must not stop an execution
-path that never reads it.
+bundled sample depends on what they draw with. Only the full
+collect-and-summarize run depends on the endpoint settings. A setting outside
+that dependency being malformed, missing, or carrying a superseded name must
+not stop an execution path that never reads it.
 
 Collector and scraper requests use a network-request limit, while an API-backed
-summarization request uses a longer summarization limit, because that wait covers
-the writing as well as the network. The summarization limit is the SDK's HTTP
-timeout setting for each attempt, not a wall-clock deadline for a whole attempt,
-and retries add further attempts and delays. The product of that limit and the
-maximum number of attempts is therefore neither a lower nor an upper bound on
-the elapsed time, and a scheduled interval longer than it does not guarantee
-that the previous run has ended. **Every API request carries an explicit timeout
-setting instead of the SDK default.**
+summarization request uses a longer summarization limit, because that wait
+covers the writing as well as the network. The summarization limit is the
+SDK's HTTP timeout setting for each attempt, not a wall-clock deadline for a
+whole attempt, and retries add further attempts and delays. The product of
+that limit and the maximum number of attempts is therefore neither a lower nor
+an upper bound on the elapsed time, and a scheduled interval longer than it
+does not guarantee that the previous run has ended. **Every API request
+carries an explicit timeout setting instead of the SDK default.**
 
 ## 23. Security
 
@@ -616,8 +619,8 @@ Further rules follow from rendering other people's text in a browser:
 - **A report date is `YYYY-MM-DD`, written with the ASCII digits `0` to `9`,
   naming a real calendar date, not merely a string of that shape.** A date
   written with full width or other non-ASCII digits is refused, and an archive
-  directory so named is not a report. `2026-02-31` is refused exactly as a traversal
-  attempt is. A date arriving from a URL is validated before it names
+  directory so named is not a report. `2026-02-31` is refused exactly as a
+  traversal attempt is. A date arriving from a URL is validated before it names
   anything on disk, and a value that fails is refused rather than repaired.
   An explicit date given to the batch is rejected before any work begins,
   not once collection or an API request is already underway.
@@ -679,8 +682,8 @@ like is not a property of where its material came from.**
 15. A run with no source setting collects from the five default arXiv categories
     and the seven default feeds, and a source that fails alone does not stop it.
 16. With enough of both kinds collected, an API-backed editor is sent 45 papers
-    and 15 news articles. With fewer of one kind, the unused places go to the
-    other. And the plain backend ignores this allocation.
+    and 15 news articles. When fewer of one kind are available, the unused
+    places go to the other. The `plain` backend ignores this allocation.
 17. A link, request target, redirect or image URL that carries URL credentials
     (userinfo) is neither collected, requested nor published, and no log line
     or error message quotes it.

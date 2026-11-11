@@ -19,9 +19,10 @@ change is measured against.
 
 The following decisions shape everything below.
 
-- **Separate batch and viewer, one shared directory.** The batch writes, the viewer reads. The
-  viewer cannot call an endpoint because it does not import the code that would,
-  which is a stronger guarantee than a rule saying it must not.
+- **Separate batch and viewer, one shared directory.** The batch writes,
+  the viewer reads. The viewer cannot call an endpoint because it does not
+  import the code that would, which is a stronger guarantee than a rule
+  saying it must not.
 - **The archive is plain files.** One directory per day, JSON and PNG. Anything
   that can read a file can read the archive.
 - **`Entry` and `Topic` are the whole internal interface.** Everything below the
@@ -148,10 +149,11 @@ came from. API-backed backends produce Japanese topic text. `plain` preserves
 the source language.
 
 `CollectionResult` carries the *outcome* of a collection pass beside its
-entries — how many sources were asked, how many failed, how many items they offered, how
-many fell outside the window, and one reason line per failure. That is what lets
-the batch tell an unreachable network from a quiet weekend without guessing, and
-two passes merge into one outcome so the pipeline sees a single result.
+entries — how many sources were asked, how many failed, how many items they
+offered, how many fell outside the window, and one reason line per failure.
+That is what lets the batch tell an unreachable network from a quiet weekend
+without guessing, and two passes merge into one outcome so the pipeline
+sees a single result.
 
 ## 6. Collection
 
@@ -310,13 +312,13 @@ by publication time, up to `MAX_TOPICS`.
 
 ## 9. The model backends
 
-`summarizer.py` owns the material shared by the API-backed routes: the system prompt, the
-prompt builder, the `build_report` tool schema, and the validation. The
-OpenAI-compatible module reuses those shared definitions and translates the tool definition into
-the other protocol's function-tool form, reads the answer from the tool call
-arguments, and validates identically — so **a report does not differ by the
-route it took.** Its SDK is imported inside the call, because only that backend
-needs it.
+`summarizer.py` owns the material shared by the API-backed routes: the system
+prompt, the prompt builder, the `build_report` tool schema, and the validation.
+The OpenAI-compatible module reuses those shared definitions and translates the
+tool definition into the other protocol's function-tool form, reads the answer
+from the tool call arguments, and validates identically — so
+**a report does not differ by the route it took.** Its SDK is imported inside
+the call, because only that backend needs it.
 
 The OpenAI-compatible backend translates `BUILD_REPORT_TOOL` into one function
 tool, offers that tool alone, and requires a tool call with
@@ -342,8 +344,9 @@ model cannot see.
 
 ### Compatibility settings
 
-Endpoints that speak a protocol do not all behave like the vendor that defined
-it, so the following compatibility behaviours are named settings rather than inferred:
+Endpoints that speak a protocol do not all behave like the vendor that
+defined it, so the following compatibility behaviours are named settings
+rather than inferred:
 
 | Setting | Shapes |
 |---|---|
@@ -437,18 +440,18 @@ path, `/abs/<id>` or `/pdf/<id>`, not by searching the whole URL for that text
 as a substring: an unrelated host that merely carries `arxiv.org/abs/...`
 somewhere in its own path or query, a redirector or a tracking link, must not
 be misread as an arXiv citation and pointed at the wrong ar5iv rendering.
-The resolver enforces a page-byte cap, an
-image-byte cap, and a minimum image side **while reading** rather than after
-buffering, so oversized or unusable material is rejected before it is fully
-retained, and a decoder refusing an image is an ordinary "no image" rather than
-the end of a run. Pillow's own decompression bomb guard is two thresholds, not
-one: past the higher one it raises, and past the lower one it only warns. The
-resolver turns that warning into the same refusal as the error, scoped to the
-one decode with `warnings.catch_warnings()`, never by changing the process-wide
-warning filter other code relies on. `render`'s composer applies the identical
-guard when it re-pastes a stored topic illustration to redraw the summary
-image, so a file that passed the resolver's own cap once cannot be made to
-decode as a decompression bomb just because it is already on disk.
+The resolver enforces a page-byte cap, an image-byte cap, and a minimum image
+side **while reading** rather than after buffering, so oversized or unusable
+material is rejected before it is fully retained, and a decoder refusing an
+image is an ordinary "no image" rather than the end of a run. Pillow's own
+decompression bomb guard is two thresholds, not one: past the higher one it
+raises, and past the lower one it only warns. The resolver turns that warning
+into the same refusal as the error, scoped to the one decode with
+`warnings.catch_warnings()`, never by changing the process-wide warning filter
+other code relies on. `render`'s composer applies the identical guard when it
+re-pastes a stored topic illustration to redraw the summary image, so a file
+that passed the resolver's own cap once cannot be made to decode as a
+decompression bomb just because it is already on disk.
 
 A scraped image link that cannot be resolved to a URL is only an unusable
 candidate, and the next candidate or the card is used. An image URL with
@@ -484,14 +487,15 @@ An HTTP article citation is never fetched for illustration, an HTTP image
 candidate is never downloaded, and every one of these refusals degrades to
 the normal fallback card rather than the run.
 
-The hostname validated, resolved and pinned is the one `canonical_connect_hostname()`
-derives, not the raw string a URL happens to spell it with: requests IDNA-encodes
-a non-ASCII host through the same `urllib3.util.parse_url()` before it ever
-reaches `socket.getaddrinfo()`, so pinning the original Unicode string would
-leave the real connection's own lookup, for the encoded form, unpinned and
-free to answer a rebound address instead. Resolving, validating and pinning
-under that identical canonical form is what keeps a Unicode scraping target
-covered by the same guarantee as an ASCII one.
+The hostname validated, resolved and pinned is the one
+`canonical_connect_hostname()` derives, not the raw string a URL happens to
+spell it with: requests IDNA-encodes a non-ASCII host through the same
+`urllib3.util.parse_url()` before it ever reaches `socket.getaddrinfo()`, so
+pinning the original Unicode string would leave the real connection's own
+lookup, for the encoded form, unpinned and free to answer a rebound address
+instead. Resolving, validating and pinning under that identical canonical
+form is what keeps a Unicode scraping target covered by the same guarantee
+as an ASCII one.
 For an IPv6 literal URL, the brackets are URL syntax only:
 canonical_connect_hostname() returns the unbracketed address that the
 connection layer actually passes to getaddrinfo(), so public literals are
@@ -609,18 +613,18 @@ The following properties of this module carry weight:
 - **A stored asset is resolved through `report_local_asset_path()` alone.**
   A topic's `image` field is untrusted by the time a consumer opens it —
   read from `report.json` on disk, or named in a URL path segment — so an
-  absolute path, a `..` escape, a name carrying a path separator, or a
-  symlink resolving outside the report directory is refused the same way a
-  missing file is. `compose_image.py`'s card renderer, `copy_existing_report()`'s
-  re-render staging copy, and `app.py`'s `/reports/<date>/assets/<file>` route
-  all resolve a stored asset through this one function, so an unsafe
-  reference degrades to no image or a 404 instead of reaching the file
-  system on the caller's behalf. `summary_image_path()` resolves
-  `summary.png` through it too, so `/reports/<date>/image` cannot serve a
-  symlink leading outside the report. The pages apply the same test before
-  rendering: `build.with_local_images()` hands the shared template a copy of
-  the topics from which an unsafe image is removed, for the standalone HTML and
-  the viewer alike, and the stored topics and `report.json` stay as they were.
+  absolute path, a `..` escape, a name carrying a path separator, or a symlink
+  resolving outside the report directory is refused the same way a missing file
+  is. `compose_image.py`'s card renderer, `copy_existing_report()`'s re-render
+  staging copy, and `app.py`'s `/reports/<date>/assets/<file>` route all
+  resolve a stored asset through this one function, so an unsafe reference
+  degrades to no image or a 404 instead of reaching the file system on the
+  caller's behalf. `summary_image_path()` resolves `summary.png` through it
+  too, so `/reports/<date>/image` cannot serve a symlink leading outside the
+  report. The pages apply the same test before rendering:
+  `build.with_local_images()` hands the shared template a copy of the topics
+  from which an unsafe image is removed, for the standalone HTML and the viewer
+  alike, and the stored topics and `report.json` stay as they were.
 - **A stored report above six topics is unreadable.** `load_report()` returns
   `None` for it, as for any corrupt report, because the summary image draws six
   cards at most. The viewer answers 404 and `render` exits 1 without touching
@@ -849,9 +853,9 @@ every link passed through the guard. There is no query, no cache and no state
 between requests — one settings object resolved at import, and the file system
 for everything else.
 
-A missing route, an invalid date and an absent report are all the same 404,
-because whether a report exists is not something an unauthenticated request needs
-distinguished for it.
+A missing route, an invalid date, and an absent report all return the same
+404 response. An unauthenticated request does not need to distinguish
+whether a report exists.
 
 ## 16. Settings
 
@@ -951,16 +955,17 @@ things.
   The same check rejects URL userinfo on either API backend before collection,
   without quoting the configured endpoint value.
 - **Validates `NEWS_FEED_URLS` as HTTPS targets only after `apply_overrides()`.**
-  The loaders read it as an ordinary list, unchecked. `Config.validate_news_feed_urls()`
-  is called on the effective value `run` is about to collect from, so an
-  invalid lower-priority environment or `.env` value never blocks a valid
-  `--news-feed-urls` override for that invocation.
+  The loaders read it as an ordinary list, unchecked.
+  `Config.validate_news_feed_urls()` is called on the effective value `run` is
+  about to collect from, so an invalid lower-priority environment or `.env`
+  value never blocks a valid `--news-feed-urls` override for that invocation.
   A `NEWS_FEED_URLS` item embedding userinfo is refused the same way, by
   position and without quoting the item. A collector handed one anyway
   neither requests it nor reports its userinfo.
-- **Resolves the font, strictly, with `is_usable_font_path()` as the single
-  usability check** — a file that exists *and* that Pillow can load as a
-  scalable font — shared by every route a font path reaches this module by.
+- **Resolves font paths using `is_usable_font_path()` as the single
+  usability check.** A usable path names an existing file that Pillow can
+  load as a scalable font. The same check applies to every execution path
+  that resolves a font path through this module.
   An unset or blank `AI_DIGEST_FONT_PATH` is automatic mode: `CJK_FONT_CANDIDATES`
   is probed in its existing order, skipping a candidate that is missing or
   unusable, and `None` is returned when none is, which the image generators

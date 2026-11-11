@@ -223,10 +223,11 @@ its availability.
 
 ### What the batch asks of the endpoint
 
-The `anthropic-compatible` backend calls the Messages API with a tool named `build_report`, and
-reads the answer from the `tool_use` block. An Anthropic-compatible endpoint
-must therefore support `tools` and return `tool_use` responses. Being compatible
-with the Messages API is not enough on its own.
+The `anthropic-compatible` backend calls the Messages API with a tool
+named `build_report`, and reads the answer from the `tool_use` block.
+An Anthropic-compatible endpoint must therefore support `tools` and
+return `tool_use` responses. Being compatible with the Messages API is
+not enough on its own.
 
 Where an endpoint differs, the difference is a setting rather than a code path:
 

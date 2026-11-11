@@ -292,7 +292,7 @@ NUMERIC_OPTIONS = (
 
 
 class NumericOptionParityTest(unittest.TestCase):
-    """ Every numeric option shares its bounds with the same setting read from the environment. """
+    """ Keep numeric option bounds aligned with environment settings. """
 
     def dest(self, option):
         return option.lstrip("-").replace("-", "_")

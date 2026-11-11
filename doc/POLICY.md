@@ -19,9 +19,10 @@ documents, and the criteria by which a change is judged. The documents beside
 it describe rather than decide. The README is the reference for the settings,
 the command line and the shape of a run, [`DEPLOYMENT.md`](DEPLOYMENT.md) for
 installing and scheduling the batch, and [`DEMO.md`](DEMO.md) for the offline
-demo. Where a rule appears both here and in one of them, this document is where
-it is decided and the other is corrected to agree. Where behaviour they
-describe changes, the change is not finished until they describe it.
+demo. Where a rule appears both here and in another document, this policy is
+authoritative and the other document must agree with it. When the behavior
+described in another document changes, that document must be updated before
+the change is complete.
 
 ---
 
@@ -39,8 +40,8 @@ validation. Satisfy those obligations without unnecessary complexity.
 - Prioritize clarity, portability, and explicit control over convenience.
 - Favor predictable behavior and long-term maintainability.
 - Avoid implicit behavior. Make control flow, errors, and side effects explicit.
-- Keep the daily batch (`cli.py`) and the read-only viewer (`app.py`) independent,
-  so that a failed or slow batch never takes the site down.
+- Keep the daily batch (`cli.py`) and the read-only viewer (`app.py`)
+  independent, so that a failed or slow batch never takes the site down.
 
 Where there are several ways to do something and the rest of this document does
 not settle which, these come in order:
@@ -239,8 +240,9 @@ they are read strictly.
   help or version information without encountering an error.
 - **1: General failure**
   The default failure code. Use it for invalid arguments, missing resources,
-  processing errors, or any failure that does not require explicit classification
-  (for example a missing API key, no entry collected, or a summarization error).
+  processing errors, or any failure that does not require explicit
+  classification (for example a missing API key, no entry collected, or a
+  summarization error).
 - **2: The command line was rejected**
   What `argparse` returns for an unknown option, a missing subcommand or an
   argument it cannot convert, such as a count that is not a positive whole
@@ -345,9 +347,9 @@ they are read strictly.
   entry already standing at the top of `doc/VERSIONS`.
 - An unreleased entry carries `(Release Date: TBD)`, and its version number
   stays provisional until it ships. An entry opened under one number may be
-  released under another once what accumulated in it is known. Which number it
-  takes is decided then. Replacing `TBD` with the actual date is the release
-  itself, not a change to record.
+  released under another once what accumulated in it is known. Its final
+  release number is decided at that point. Replacing `TBD` with the actual
+  date is the release itself, not a change to record.
 - A repository that has not yet made its first release is in its initial
   construction stage, and that stage takes no entry here. Typically this is the
   state while `v1.0` is the first release and the repository still stands below

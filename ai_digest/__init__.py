@@ -230,9 +230,11 @@ class Topic:
 
     Attributes:
         category: Category label produced by the selected topic-editing backend.
-        title: Headline of the topic in the language produced by the selected backend.
-        bullets: Bullet points produced by the selected backend. API-backed topics
-                 carry two to four, while plain topics carry one to four.
+        title: Headline of the topic in the language produced by the
+               selected backend.
+        bullets: Bullet points produced by the selected backend.
+                 API-backed topics carry two to four, while plain topics
+                 carry one to four.
         sources: List of {'title': ..., 'url': ...} dictionaries.
         image: File name of the topic image inside the report directory.
         image_credit: Where the image came from, or 'generated'.
