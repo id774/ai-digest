@@ -28,6 +28,8 @@
 #  - requests
 #
 #  Version History:
+#  v1.3 2026-11-11
+#       Use the unbracketed connection hostname for IPv6 literal URLs.
 #  v1.2 2026-11-09
 #       Bound the preflight lookup of target_pin by the fetch-wide deadline.
 #  v1.1 2026-09-23
@@ -228,6 +230,10 @@ def canonical_connect_hostname(url: str) -> str:
     connection's own lookup would use a different string and never hit
     the pin.
 
+    The brackets of an IPv6 literal URL are URL syntax only: the
+    connection layer asks socket.getaddrinfo() about the address without
+    them, so that unbracketed address is what is returned for such a URL.
+
     Raises:
         ValueError: url has no host, or one urllib3 itself could not
             parse or IDNA-encode; refuse it rather than guess a target.
@@ -238,7 +244,10 @@ def canonical_connect_hostname(url: str) -> str:
         raise ValueError(str(error)) from error
     if not parsed.host:
         raise ValueError("no host in {0}".format(url))
-    return parsed.host
+    hostname = parsed.host
+    if hostname.startswith("[") and hostname.endswith("]"):
+        return hostname[1:-1]
+    return hostname
 
 
 @contextmanager

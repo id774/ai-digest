@@ -78,12 +78,17 @@
 #      past the error threshold, and keep an ordinary image usable.
 #    - Refuse a truncated PNG or JPEG whose header and size still read, try
 #      the next citation, and end in a generated card when none is usable.
+#    - Pin a public IPv6 literal by its unbracketed address without a DNS
+#      preflight, reach the request with it, and refuse loopback,
+#      unique-local and link-local IPv6 literals before any request.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow, requests, beautifulsoup4
 #
 #  Version History:
+#  v1.6 2026-11-11
+#       Cover validated public and rejected private IPv6 literal targets.
 #  v1.5 2026-11-09
 #       Verify DNS resolver restoration after interrupted pin installation.
 #  v1.4 2026-11-08
@@ -105,6 +110,7 @@
 import io
 import ipaddress
 import os
+import socket
 import tempfile
 import time
 import unittest
@@ -553,6 +559,25 @@ class ValidatePublicTargetTest(unittest.TestCase):
                                  resolver.socket.getaddrinfo)
             self.assertIs(patched_during_test, resolver.socket.getaddrinfo)
 
+    def test_public_ipv6_literal_is_pinned_without_dns_preflight(self):
+        real_getaddrinfo = mock.Mock(name="real_getaddrinfo")
+
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               real_getaddrinfo):
+            patched_before = resolver.socket.getaddrinfo
+            with resolver.validate_and_pin_public_target(
+                    "https://[2606:4700:4700::1111]/image.png"):
+                pinned = resolver.socket.getaddrinfo(
+                    "2606:4700:4700::1111", 443, socket.AF_INET6,
+                    socket.SOCK_STREAM)
+            restored = resolver.socket.getaddrinfo
+
+        self.assertEqual(1, len(pinned))
+        self.assertEqual(socket.AF_INET6, pinned[0][0])
+        self.assertEqual(("2606:4700:4700::1111", 443, 0, 0), pinned[0][4])
+        real_getaddrinfo.assert_not_called()
+        self.assertIs(patched_before, restored)
+
     def test_restores_getaddrinfo_when_pin_installation_is_interrupted(self):
         original = mock.Mock(name="original_getaddrinfo")
         assigned = []
@@ -695,6 +720,62 @@ class SSRFRefusalIntegrationTest(unittest.TestCase):
 
         self.assertIsNone(result)
         session_cls.return_value.get.assert_not_called()
+
+    def test_private_ipv6_literal_is_refused_before_request(self):
+        for host in ("[::1]", "[fc00::1]", "[fe80::1]"):
+            with self.subTest(host=host):
+                with mock.patch.object(
+                        resolver.socket, "getaddrinfo",
+                        side_effect=socket.gaierror("offline")), \
+                        mock.patch.object(transport.requests,
+                                          "Session") as session_cls:
+                    with self.assertRaises(
+                            resolver.PublicNetworkOnlyError):
+                        with transport.https_get(
+                                "https://{0}/x".format(host), 5,
+                                "ai-digest",
+                                target_pin=resolver
+                                .validate_and_pin_public_target,
+                                trust_env=False):
+                            pass
+
+                session_cls.return_value.get.assert_not_called()
+
+    def test_public_ipv6_literal_reaches_validated_request(self):
+        host = "2606:4700:4700::1111"
+        response = _FakeRedirectResponse(
+            200, url="https://[{0}]/image.png".format(host))
+        session = mock.MagicMock()
+        session.__enter__.return_value = session
+        session.__exit__.return_value = False
+        seen = []
+
+        def get(*args, **kwargs):
+            seen.append(resolver.socket.getaddrinfo(
+                host, 443, socket.AF_INET6, socket.SOCK_STREAM))
+            return response
+
+        session.get.side_effect = get
+        real_getaddrinfo = mock.Mock(name="real_getaddrinfo")
+
+        with mock.patch.object(resolver.socket, "getaddrinfo",
+                               real_getaddrinfo):
+            with mock.patch.object(transport.requests, "Session",
+                                   return_value=session):
+                with transport.https_get(
+                        "https://[{0}]/image.png".format(host), 5,
+                        "ai-digest",
+                        target_pin=resolver.validate_and_pin_public_target,
+                        trust_env=False) as got:
+                    self.assertIs(response, got)
+
+        self.assertEqual(1, session.get.call_count)
+        self.assertEqual([(host, 443, 0, 0)],
+                         [info[4] for info in seen[0]])
+        real_getaddrinfo.assert_not_called()
+        self.assertFalse(session.trust_env)
+        self.assertTrue(response.closed)
+        session.__exit__.assert_called_once()
 
     def test_a_direct_private_ip_target_is_never_requested(self):
         with mock.patch.object(transport.requests, "Session") as session_cls:

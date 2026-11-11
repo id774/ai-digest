@@ -112,9 +112,11 @@ also resolve to a public network address: a target whose host is a loopback,
 private, link-local, unspecified, multicast or otherwise non-global address is
 refused before the request is sent, on the initial target and on every
 redirect hop alike, closing the path a scraped page could otherwise use to
-reach the host's own internal network. Checking the address a hostname
-resolves to is not enough on its own, since a name server can answer a
-preflight lookup and the connection's own lookup differently; **the address
+reach the host's own internal network. A public IPv6 literal written in URL
+brackets is checked and pinned by its unbracketed connection address;
+non-global IPv6 literals are refused before connection. Checking the address
+a hostname resolves to is not enough on its own, since a name server can
+answer a preflight lookup and the connection's own lookup differently; **the address
 actually connected to must be one of the addresses checked**, not a fresh
 answer a name server gives in between, or the check protects nothing. **This
 must hold for a non-ASCII hostname too**, judged and pinned under the same
@@ -423,10 +425,11 @@ three: **plain**, **anthropic-compatible** and **openai-compatible**.
   automatic failover between them. Selecting a backend is an operator's
   decision, not a recovery mechanism.
 - Connection target, credential, model, retry count and timeouts are
-  settings. **An explicitly configured connection target must be HTTPS**; a
-  plain `http://` or malformed endpoint is a configuration error before
-  anything is collected, not a value passed on to the SDK to fail with
-  later.
+  settings. **An explicitly configured connection target must be HTTPS, name
+  a usable host, have a valid port when present, and contain no URL
+  credentials (userinfo)**; a non-HTTPS, malformed or credential-bearing
+  endpoint is a configuration error before anything is collected. Its
+  value is never quoted in application logs or errors.
 - **A backend's own optional dependency, when it needs one, is checked
   before anything is collected too.** The openai-compatible backend needs
   a package that is not installed by default; its absence must fail the

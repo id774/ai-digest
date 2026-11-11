@@ -11,8 +11,8 @@ v1.3 (Release Date: TBD)
   incompatible change to how a setting is resolved.
 - Exclude future-dated or unrepresentable feed timestamps and require ASCII
   digits in report dates, incompatible changes to accepted entries and dates.
-- Keep image retrieval best effort for incomplete downloads and malformed URLs,
-  and bound public-target DNS validation with safe pin restoration.
+- Fall back for incomplete images or malformed URLs; validate and pin public
+  IPv4/IPv6 targets within the fetch deadline with safe DNS restoration.
 - Reject Anthropic text JSON fallback responses stopped by the token limit.
 - Reject citations with missing hosts or invalid ports, an incompatible
   change to which source links are published.
@@ -20,8 +20,8 @@ v1.3 (Release Date: TBD)
   an incompatible change to which image paths can be shown or served.
 - Reject stored reports above six topics, an incompatible change to which
   archived reports are readable, so HTML and summary images agree.
-- Reject credential-bearing NEWS_FEED_URLS before collection, an incompatible
-  change that prevents their credentials from reaching logs or reports.
+- Reject credential-bearing feed and endpoint URLs before use, an incompatible
+  change that keeps embedded credentials out of application logs and reports.
 
 v1.2.3 (2026-09-23)
 -------------------

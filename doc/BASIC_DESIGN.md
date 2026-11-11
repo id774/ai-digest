@@ -482,6 +482,10 @@ leave the real connection's own lookup, for the encoded form, unpinned and
 free to answer a rebound address instead. Resolving, validating and pinning
 under that identical canonical form is what keeps a Unicode scraping target
 covered by the same guarantee as an ASCII one.
+For an IPv6 literal URL, the brackets are URL syntax only:
+canonical_connect_hostname() returns the unbracketed address that the
+connection layer actually passes to getaddrinfo(), so public literals are
+accepted and non-global literals are refused under the same pin.
 
 Pinning alone is not enough when an environment proxy is configured: a
 `requests.Session` that trusts `HTTPS_PROXY` and similar variables hands the
@@ -936,6 +940,8 @@ things.
   checked with the same `is_https_url()` the transport boundary uses,
   whichever backend is selected, so a plain `http://` endpoint or a
   malformed one is refused before collecting rather than reached later.
+  The same check rejects URL userinfo on either API backend before collection,
+  without quoting the configured endpoint value.
 - **Validates `NEWS_FEED_URLS` as HTTPS targets only after `apply_overrides()`.**
   The loaders read it as an ordinary list, unchecked; `Config.validate_news_feed_urls()`
   is called on the effective value `run` is about to collect from, so an
@@ -1022,6 +1028,7 @@ The line recording what an endpoint answered — its stop reason and content typ
 — is at info level, because it is the line an operator reads when a run fails.
 The response body is at debug level only, because it runs to thousands of tokens
 and would swamp a mail. No credential appears at any level.
+An overridden SUMMARIZER_BASE_URL is logged by setting name only, with its value redacted; invalid endpoint errors do not quote the URL.
 
 ## 19. Security design
 
