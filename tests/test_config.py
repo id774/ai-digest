@@ -93,15 +93,17 @@
 #    - Require every configured news feed to be an absolute HTTPS URL, and
 #      keep load_config() itself from enforcing it, so a valid CLI
 #      override still wins over an invalid lower-priority raw value.
+#    - Refuse userinfo in SUMMARIZER_BASE_URL on both API backends, and an
+#      invalid endpoint, with fixed messages that never quote the URL.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Pillow
 #
 #  Version History:
-#  v1.7 2026-11-08
-#       Cover refusal of NEWS_FEED_URLS items that embed credentials, from the
-#       environment, .env and the command line, without quoting them.
+#  v1.7 2026-11-11
+#       Verify credential-bearing feed and endpoint URLs are rejected
+#       without exposing their values in errors.
 #  v1.6 2026-11-01
 #       Cover the five default arXiv categories and seven default feeds, and
 #       their match with .env.example.
@@ -322,6 +324,48 @@ class SummarizerBaseUrlTest(unittest.TestCase):
 
         self.assertIsNone(loaded.summarizer_base_url)
         loaded.validate_summarizer_base_url()
+
+    def test_rejects_url_userinfo_on_both_api_protocols_without_quoting_it(
+            self):
+        for backend in ("anthropic-compatible", "openai-compatible"):
+            for url in ("https://user:secret@example.test/v1",
+                        "https://user@example.test/v1",
+                        "https://@example.test/v1"):
+                with self.subTest(backend=backend, url=url):
+                    loaded = self.load({"SUMMARIZER_BACKEND": backend,
+                                        "SUMMARIZER_BASE_URL": url})
+
+                    with self.assertRaises(RuntimeError) as caught:
+                        loaded.validate_summarizer_base_url()
+
+                    message = str(caught.exception)
+                    self.assertEqual(
+                        "SUMMARIZER_BASE_URL must not contain credentials "
+                        "(userinfo).", message)
+                    self.assertNotIn("user", message.replace("userinfo", ""))
+                    self.assertNotIn("secret", message)
+                    self.assertNotIn(url, message)
+        plain = self.load({"SUMMARIZER_BASE_URL": "https://example.test/v1"})
+        plain.validate_summarizer_base_url()
+        self.load({}).validate_summarizer_base_url()
+
+    def test_invalid_endpoint_error_does_not_quote_url(self):
+        for url in ("http://user:secret@example.test/v1", "https://[invalid"):
+            with self.subTest(url=url):
+                loaded = self.load({"SUMMARIZER_BASE_URL": url})
+
+                with self.assertRaises(RuntimeError) as caught:
+                    loaded.validate_summarizer_base_url()
+
+                message = str(caught.exception)
+                self.assertEqual(
+                    "SUMMARIZER_BASE_URL must be an absolute HTTPS URL.",
+                    message)
+                self.assertNotIn("secret", message)
+                self.assertNotIn(url, message)
+        at_in_path = self.load({
+            "SUMMARIZER_BASE_URL": "https://example.test/v1/a@b?k=x@y"})
+        at_in_path.validate_summarizer_base_url()
 
     def test_a_missing_base_url_still_passes_on_plain(self):
         loaded = self.load({"SUMMARIZER_BACKEND": "plain"})

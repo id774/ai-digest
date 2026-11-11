@@ -57,12 +57,16 @@
 #    - Accept a token option normalized the same way _env_token() would
 #      normalize it, whatever whitespace or case it arrives with.
 #    - Print only the package version number for -v and --version.
+#    - Log a --summarizer-base-url override by name with a redacted value,
+#      keeping the real value in the returned configuration.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.6 2026-11-11
+#       Cover endpoint URL redaction in command line override logs.
 #  v1.5 2026-11-07
 #       Cover overrides winning over invalid lower priority settings, and
 #       the rejection of non-ASCII digits in an explicit date.
@@ -156,6 +160,28 @@ class OverrideTest(unittest.TestCase):
         fields = set(vars(Config()))
 
         self.assertEqual(set(), set(cli.OVERRIDABLE_FIELDS) - fields)
+
+    def test_summarizer_base_url_override_value_is_redacted_from_log(self):
+        for url in ("https://user:secret@example.test/v1",
+                    "https://example.test/v1"):
+            with self.subTest(url=url):
+                with self.assertLogs("ai_digest.cli", level="INFO") as logs:
+                    applied = self.override(
+                        ["run", "--summarizer-base-url", url])
+
+                text = "\n".join(logs.output)
+                self.assertIn("summarizer_base_url=<redacted>", text)
+                self.assertNotIn("secret", text)
+                self.assertNotIn("user", text)
+                self.assertNotIn(url, text)
+                self.assertEqual(url, applied.summarizer_base_url)
+        with self.assertLogs("ai_digest.cli", level="INFO") as logs:
+            self.override(["run", "--lookback-hours", "72",
+                           "--summarizer-base-url",
+                           "https://example.test/v1"])
+        self.assertIn(
+            "lookback_hours=72, summarizer_base_url=<redacted>",
+            "\n".join(logs.output))
 
     def test_credentials_have_no_option(self):
         for option in ("--summarizer-api-key", "--summarizer-auth-token"):

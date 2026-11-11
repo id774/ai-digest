@@ -145,9 +145,9 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
-#  v2.4 2026-11-08
-#       Reject a NEWS_FEED_URLS item that embeds credentials, an incompatible
-#       change that keeps them out of requests, logs and reports.
+#  v2.4 2026-11-11
+#       Incompatible: reject userinfo in feed and summarizer endpoint URLs,
+#       keeping credentials out of requests, logs and reports.
 #  v2.3 2026-11-07
 #       Skip settings the command line replaces, an incompatible change to how
 #       a setting is resolved: a malformed lower value is no longer refused.
@@ -609,7 +609,9 @@ class Config:
         empty value there means Anthropic itself, by design. Either
         backend refuses an explicit value that is not HTTPS, since it
         names an outbound network destination the same as any other
-        retrieval target.
+        retrieval target, and one that embeds credentials (userinfo),
+        which belong in SUMMARIZER_API_KEY or SUMMARIZER_AUTH_TOKEN. The
+        errors never quote the configured URL.
 
         summarizer_base_url is already the trimmed value by the time it
         reaches here - _resolve_batch_settings() and apply_overrides()
@@ -627,8 +629,12 @@ class Config:
             )
         if base_url and not is_https_url(base_url):
             raise RuntimeError(
-                "SUMMARIZER_BASE_URL is '{0}'; expected an absolute "
-                "HTTPS URL.".format(base_url)
+                "SUMMARIZER_BASE_URL must be an absolute HTTPS URL."
+            )
+        if base_url and "@" in urlparse(base_url).netloc:
+            raise RuntimeError(
+                "SUMMARIZER_BASE_URL must not contain credentials "
+                "(userinfo)."
             )
 
     def validate_retry_budget(self) -> None:

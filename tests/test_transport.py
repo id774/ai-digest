@@ -52,12 +52,16 @@
 #    - Return a streamed body within the limit, accept one at exactly the
 #      limit, and give up once it is exceeded without buffering an endless
 #      one in full first.
+#    - Return the unbracketed address for an IPv6 literal URL, the form the
+#      connection layer passes to getaddrinfo().
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - requests
 #
 #  Version History:
+#  v1.3 2026-11-11
+#       Verify unbracketed canonical hosts for IPv6 literal URLs.
 #  v1.2 2026-11-09
 #       Cover the fetch-wide deadline bounding a blocking target_pin.
 #  v1.1 2026-09-23
@@ -206,6 +210,12 @@ class CanonicalConnectHostnameTest(unittest.TestCase):
             "xn--mnchen-3ya.example",
             transport.canonical_connect_hostname(
                 "https://MÜNCHEN.example/x"))
+
+    def test_unbrackets_public_ipv6_literal_for_connection(self):
+        self.assertEqual(
+            "2606:4700:4700::1111",
+            transport.canonical_connect_hostname(
+                "https://[2606:4700:4700::1111]/image.png"))
 
     def test_a_port_is_not_part_of_the_hostname(self):
         self.assertEqual(

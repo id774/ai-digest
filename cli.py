@@ -118,6 +118,8 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v2.4 2026-11-11
+#       Redact summarizer endpoint URL values in override logs.
 #  v2.3 2026-11-07
 #       Skip environment settings the command line replaces, an incompatible
 #       change to how a setting is resolved: a lower invalid value is ignored.
@@ -367,7 +369,8 @@ def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
     state a blank value in the environment already means, rather than
     holding the literal blank string. The replacements are logged,
     because a report has to stay explainable from the run that wrote
-    it.
+    it. The value of summarizer_base_url is the one exception: it is
+    logged as <redacted>, since a URL may embed credentials.
     """
     given = vars(args)
     overrides: Dict[str, Any] = {}
@@ -390,7 +393,10 @@ def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
     # the parser accepted; it is used as is, never re-resolved.
 
     logger.info("command line overrides: %s", ", ".join(
-        "{0}={1}".format(name, overrides[name])
+        "{0}={1}".format(
+            name,
+            "<redacted>" if name == "summarizer_base_url"
+            else overrides[name])
         for name in sorted(overrides)))
     return replace(config, **overrides)
 
