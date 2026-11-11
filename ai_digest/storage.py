@@ -22,7 +22,7 @@
 #  <DATA_DIR>/<date> once every artifact it needs is written. Publishing
 #  a date that already holds a complete report moves the previous tree
 #  aside first, so that a failure while putting the new one in place can
-#  restore it; the previous tree is discarded only once the new one has
+#  restore it. The previous tree is discarded only once the new one has
 #  taken its place. Neither directory is named like a date, so neither
 #  is ever listed or served as a report of its own.
 #
@@ -236,7 +236,7 @@ def _publish(staging_dir: str, final_dir: str, date: str) -> None:
 
     A date that is not yet published is a plain rename. One that is
     already published is moved aside under a backup name first, so that
-    a failure renaming the new tree into place can restore it; the old
+    a failure renaming the new tree into place can restore it. The old
     tree is discarded only once the new one has taken its place.
 
     Raises:
@@ -301,7 +301,7 @@ def publication_workspace(data_dir: str, date: str) -> Iterator[str]:
     replaced by it, with no artifact of the previous report left
     standing. Raising out of the block leaves an existing final report
     exactly as it was and removes the staging directory on a best
-    effort basis; that cleanup failure never replaces the original
+    effort basis. That cleanup failure never replaces the original
     error.
 
     Args:
@@ -449,7 +449,7 @@ def load_report(data_dir: str, date: str) -> Optional[Dict[str, Any]]:
         return None
     if len(topics) > MAX_REPORT_TOPICS:
         # The summary image draws at most this many cards, so a longer
-        # report could never be shown consistently; it is refused whole
+        # report could never be shown consistently. It is refused whole
         # rather than cut down to fit.
         logger.warning("report %s holds %d topics, above the limit of %d",
                        date, len(topics), MAX_REPORT_TOPICS)

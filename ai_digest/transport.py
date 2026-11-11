@@ -29,12 +29,13 @@
 #
 #  Version History:
 #  v1.3 2026-11-11
-#       Use the unbracketed connection hostname for IPv6 literal URLs.
+#       Use unbracketed IPv6 connection hosts and refuse credential-bearing
+#       request targets and redirects without echoing the URL.
 #  v1.2 2026-11-09
 #       Bound the preflight lookup of target_pin by the fetch-wide deadline.
 #  v1.1 2026-09-23
 #       Add target_pin, trust_env and a hard, DNS-inclusive fetch-wide
-#       deadline; validate HTTPS URLs and pin by canonical hostname.
+#       deadline. Validate HTTPS URLs and pin by canonical hostname.
 #  v1.0 2026-09-08
 #       Initial release.
 #
@@ -99,11 +100,11 @@ def hard_deadline(seconds: float) -> Iterator[None]:
     alike - is in progress interrupts it, and raising from the handler,
     rather than returning from it, is what turns that interruption into
     FetchTimeoutError instead of the interrupted call being silently
-    retried (PEP 475). The interrupted operation itself ends there; no
+    retried (PEP 475). The interrupted operation itself ends there. No
     retry and no background thread carries it on past the deadline.
 
     Only usable from the main thread, where the batch's one fetch runs
-    at a time; signal.signal() raises ValueError anywhere else.
+    at a time. signal.signal() raises ValueError anywhere else.
 
     Raises:
         FetchTimeoutError: seconds had already elapsed, or elapsed
@@ -152,7 +153,7 @@ def read_capped_content(response: requests.Response,
 
     Reading in chunks and counting as they arrive is what keeps an
     oversized or endless body from ever being fully buffered in the
-    first place; the response's own Content-Length, sent or not, is
+    first place. The response's own Content-Length, sent or not, is
     never the only thing trusted. The caller must have requested the
     response with stream=True, or the body is already read in full by
     the time this function sees it.
@@ -236,7 +237,7 @@ def canonical_connect_hostname(url: str) -> str:
 
     Raises:
         ValueError: url has no host, or one urllib3 itself could not
-            parse or IDNA-encode; refuse it rather than guess a target.
+            parse or IDNA-encode. Refuse it rather than guess a target.
     """
     try:
         parsed = _parse_connect_url(url)
@@ -260,7 +261,7 @@ def https_get(url: str, timeout: int, user_agent: str,
 
     This is the one place that actually opens a network connection for
     source collection and illustration scraping. The initial target must
-    already be an absolute HTTPS URL; automatic redirect following is
+    already be an absolute HTTPS URL. Automatic redirect following is
     turned off, and each redirect target is validated as HTTPS in turn
     before the next request is sent, so a downgrade to plaintext is
     refused rather than followed.
@@ -316,9 +317,10 @@ def https_get(url: str, timeout: int, user_agent: str,
             one raised by target_pin.
     """
     if not is_https_url(url):
+        raise HTTPSOnlyError("refusing non-HTTPS request target")
+    if "@" in urlparse(url).netloc:
         raise HTTPSOnlyError(
-            "refusing non-HTTPS request target: {0}".format(url)
-        )
+            "refusing request target with embedded credentials")
 
     pin = target_pin if target_pin is not None else (lambda _url: nullcontext())
     deadline = time.monotonic() + timeout
@@ -372,17 +374,16 @@ def https_get(url: str, timeout: int, user_agent: str,
                 next_url = urljoin(response.url or current_url, location)
             except ValueError:
                 response.close()
-                raise HTTPSOnlyError(
-                    "malformed redirect target from {0}: {1}".format(
-                        current_url, location)
-                )
+                raise HTTPSOnlyError("malformed redirect target")
 
             if not is_https_url(next_url):
                 response.close()
+                raise HTTPSOnlyError("refusing non-HTTPS redirect target")
+
+            if "@" in urlparse(next_url).netloc:
+                response.close()
                 raise HTTPSOnlyError(
-                    "refusing non-HTTPS redirect target: {0}".format(
-                        next_url)
-                )
+                    "refusing redirect target with embedded credentials")
 
             response.close()
             current_url = next_url

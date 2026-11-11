@@ -48,6 +48,8 @@
 #  - Flask (through app.py, exercised by ViewerHeaderTest)
 #
 #  Version History:
+#  v1.3 2026-11-11
+#       Cover rejection of credential-bearing links and stored report hrefs.
 #  v1.2 2026-11-07
 #       Cover refusal of a link with no host or an invalid port, in the
 #       guard, the collectors and a stored report.
@@ -114,12 +116,28 @@ class SafeUrlTest(unittest.TestCase):
                 self.assertFalse(is_safe_url(url))
                 self.assertEqual("#", safe_url(url))
 
-    def test_keeps_a_valid_port_and_userinfo_with_a_host(self):
+    def test_keeps_a_valid_port_with_a_host(self):
         for url in ("https://example.org:8080/x", "http://example.org:80/x",
-                    "https://user:pass@example.org/x",
                     "https://[2001:db8::1]:8443/x"):
             with self.subTest(url=url):
                 self.assertTrue(is_safe_url(url))
+
+    def test_rejects_every_form_of_userinfo(self):
+        for url in ("https://user:pass@example.org/x",
+                    "https://user@example.org/x",
+                    "https://@example.org/x",
+                    "http://user:pass@example.org:8080/x",
+                    "https://user:pass@[2001:db8::1]/x"):
+            with self.subTest(url=url):
+                self.assertFalse(is_safe_url(url))
+                self.assertEqual("#", safe_url(url))
+
+    def test_an_at_sign_in_the_path_or_query_is_not_userinfo(self):
+        for url in ("https://example.org/a@b", "https://example.org/x?k=a@b",
+                    "https://example.org/x#a@b"):
+            with self.subTest(url=url):
+                self.assertTrue(is_safe_url(url))
+                self.assertEqual(url, safe_url(url))
 
     def test_filter_replaces_an_unsafe_url(self):
         self.assertEqual("#", safe_url("javascript:alert(1)"))
@@ -148,6 +166,15 @@ class RenderedLinkTest(unittest.TestCase):
         html = self.render("https://example.test:8443/article")
 
         self.assertIn('href="https://example.test:8443/article"', html)
+
+    def test_neutralizes_a_userinfo_link_stored_in_a_report(self):
+        for url in ("https://user:secret@example.test/a",
+                    "https://@example.test/a"):
+            with self.subTest(url=url):
+                html = self.render(url)
+
+                self.assertIn('href="#"', html)
+                self.assertNotIn("secret", html)
 
     def test_neutralizes_a_hostless_link_stored_in_a_report(self):
         for url in HOSTLESS_OR_BAD_PORT_URLS:

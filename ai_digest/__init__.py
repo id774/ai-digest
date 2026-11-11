@@ -31,6 +31,9 @@
 #  - Python Version: 3.9 or later
 #
 #  Version History:
+#  v1.4 2026-11-11
+#       Reject source links containing URL userinfo, an incompatible change to
+#       which links are published, so credentials do not reach reports.
 #  v1.3 2026-11-07
 #       Refuse a link with no host or an invalid port, an incompatible
 #       change to which source links are published.
@@ -52,8 +55,8 @@ __version__ = "1.2.3"
 
 # Schemes accepted for any link that ends up in a report. Collected
 # links come from third party feeds and are rendered as anchors, where
-# 'javascript:' and 'data:' would execute in the reader's browser;
-# autoescaping does not help there, since the value is a valid
+# 'javascript:' and 'data:' would execute in the reader's browser.
+# Autoescaping does not help there, since the value is a valid
 # attribute, not markup.
 SAFE_URL_SCHEMES = ("http", "https")
 
@@ -83,18 +86,21 @@ def is_safe_url(url: str) -> bool:
     report is rendered both by the viewer and by the standalone HTML,
     where the document it is opened from is not a reliable base. A
     netloc that holds only a port or only user information names no
-    host, so it is refused as well.
+    host, so it is refused as well. A link that embeds user information
+    at all (user:password@host, user@host or @host) is refused too, so
+    no credential reaches a stored report or a rendered href.
     """
     if not url:
         return False
     try:
         parsed = urlparse(url.strip())
-        # Reading .port is what validates it; it raises on a bad value.
+        # Reading .port is what validates it. It raises on a bad value.
         parsed.port
     except ValueError:  # malformed IPv6 literals, invalid ports and the like
         return False
     return (parsed.scheme.lower() in SAFE_URL_SCHEMES
-            and bool(parsed.hostname))
+            and bool(parsed.hostname)
+            and "@" not in parsed.netloc)
 
 
 def safe_url(url: str) -> str:
@@ -220,12 +226,12 @@ class Topic:
     A topic is one block of the daily report and carries the title,
     bullets and category produced by the selected topic-editing backend
     together with the illustration resolved for it. API-backed backends
-    produce Japanese topic text; plain mode preserves the source language.
+    produce Japanese topic text. Plain mode preserves the source language.
 
     Attributes:
         category: Category label produced by the selected topic-editing backend.
         title: Headline of the topic in the language produced by the selected backend.
-        bullets: Bullet points produced by the selected backend; API-backed topics
+        bullets: Bullet points produced by the selected backend. API-backed topics
                  carry two to four, while plain topics carry one to four.
         sources: List of {'title': ..., 'url': ...} dictionaries.
         image: File name of the topic image inside the report directory.

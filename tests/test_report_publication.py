@@ -18,7 +18,7 @@
 #  outside, through list_dates() and load_report(), exactly as the
 #  viewer would. 'run' uses SUMMARIZER_BACKEND=plain and collect_entries()
 #  is replaced by a stub, so no network access and no credential are
-#  needed; every case uses a temporary directory as the archive and
+#  needed. Every case uses a temporary directory as the archive and
 #  touches nothing under data/.
 #
 #  Author: id774 (More info: https://id774.net)
@@ -46,8 +46,8 @@
 #    - 'demo' rejects an impossible sample date before any report work,
 #      when '--date' does not override it.
 #    - 'render' on a generation failure leaves the stored report
-#      untouched; on a publication failure it rolls the stored report
-#      back; on success it keeps the authoritative report.json and topic
+#      untouched. On a publication failure it rolls the stored report
+#      back. On success it keeps the authoritative report.json and topic
 #      assets while replacing the derived artifacts.
 #    - 'run' with no --date files the report under the host's local
 #      calendar date, not UTC's, when the two disagree.

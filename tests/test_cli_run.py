@@ -64,7 +64,7 @@
 #    - Fail with exit status 1 when the optional openai package is
 #      unavailable for the openai-compatible backend, before collecting,
 #      proven against both a mocked and the real, genuinely absent
-#      package; leave the other backends unaffected by the check.
+#      package. Leave the other backends unaffected by the check.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -98,7 +98,7 @@ class OpenAiCompatibleBaseUrlPreflightTest(unittest.TestCase):
         # This class is about the base URL check specifically, so the
         # openai package preflight is held fixed here regardless of
         # whether the package happens to be installed in this
-        # environment; OpenAiPackagePreflightTest covers that check.
+        # environment. OpenAiPackagePreflightTest covers that check.
         with mock.patch.object(cli.openai_compat, "package_available",
                               return_value=True):
             with mock.patch.object(

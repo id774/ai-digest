@@ -93,7 +93,7 @@ def package_available() -> bool:
 
     cli.py calls this before collecting anything, so a run that cannot
     reach the openai-compatible backend fails immediately instead of
-    after spending a collection pass it was always going to discard;
+    after spending a collection pass it was always going to discard.
     _build_client() keeps its own check too, for a caller that reaches
     it some other way.
     """
@@ -208,12 +208,12 @@ def summarize(entries: List[Entry], api_key: str, model: str,
         model: Model identifier as that endpoint names it.
         max_topics: Maximum number of topics to keep.
         base_url: Base URL of the endpoint, including the version path.
-            Required; a missing or blank value is refused rather than
+            Required. A missing or blank value is refused rather than
             left to the OpenAI SDK's own default endpoint.
         max_retries: Retries the SDK may spend on one request. None
-            keeps the SDK default; 0 spends exactly one request.
+            keeps the SDK default. 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
-        timeout: SDK HTTP timeout setting for each attempt; not a hard
+        timeout: SDK HTTP timeout setting for each attempt, not a hard
             wall-clock limit. Retries and their delays add elapsed time.
         lookback_hours: Age limit the collectors applied, named in the
             prompt so that it matches the material actually sent.

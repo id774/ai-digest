@@ -27,6 +27,9 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.6 2026-11-11
+#       Skip untitled articles and credential-bearing links without logging
+#       source URLs, an incompatible change to which articles are collected.
 #  v1.5 2026-11-08
 #       Keep only entries published within the look back window up to the
 #       collection time, and drop one whose time cannot be represented.
@@ -58,7 +61,7 @@ import requests
 from ai_digest import CollectionResult, Entry, is_safe_url
 from ai_digest.transport import https_get, read_capped_content
 
-# Strip HTML markup from feed summaries; feeds mix plain text, escaped
+# Strip HTML markup from feed summaries. Feeds mix plain text, escaped
 # HTML and full articles, and only the readable text is useful here.
 TAG_PATTERN = re.compile(r"<[^>]+>")
 
@@ -140,7 +143,7 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
     Args:
         feed_urls: Feed URLs to read.
         lookback_hours: Only articles published within this many hours
-            up to now are kept; a future-dated article is dropped.
+            up to now are kept. A future-dated article is dropped.
         timeout: HTTP timeout in seconds.
         user_agent: User-Agent header sent to the feed hosts.
 
@@ -203,13 +206,19 @@ def collect(feed_urls: List[str], lookback_hours: int, timeout: int = 15,
             if not link or link in seen_urls:
                 continue
             if not is_safe_url(link):
-                logger.warning("dropping entry with unusable link %s", link)
+                logger.warning("dropping entry with unusable link from %s",
+                               origin)
+                continue
+            title = " ".join(getattr(raw_entry, "title", "").split())
+            if not title:
+                logger.warning("dropping entry without a title from %s",
+                               origin)
                 continue
             seen_urls.add(link)
             summary = getattr(raw_entry, "summary", "")
             entries.append(Entry(
                 source_type="news",
-                title=" ".join(getattr(raw_entry, "title", "").split()),
+                title=title,
                 url=link,
                 summary=_plain_text(summary),
                 published=published.isoformat(),

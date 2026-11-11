@@ -227,7 +227,7 @@ class CustomSampleTest(unittest.TestCase):
                        "build_report": {"topics": []}})
 
     def test_accepts_an_entry_missing_every_optional_field(self):
-        # Only title and url are required; from_dict()'s own defaults
+        # Only title and url are required. from_dict()'s own defaults
         # apply to the rest, exactly as for the bundled sample.
         date, topics, collected = self.build({
             "date": "2026-01-02",

@@ -11,7 +11,7 @@
 #  The API is documented at https://info.arxiv.org/help/api/index.html.
 #  Results are requested sorted by submission date in descending order,
 #  so the age filter can stop as soon as older entries appear. arXiv
-#  asks clients to stay well below one request every three seconds; the
+#  asks clients to stay well below one request every three seconds. The
 #  collector issues a single request per category and sleeps in between.
 #
 #  Network and parsing failures are logged and swallowed: a failing
@@ -30,6 +30,8 @@
 #  - feedparser, requests
 #
 #  Version History:
+#  v1.7 2026-11-11
+#       Avoid quoting rejected citation URLs in logs, including URL credentials.
 #  v1.6 2026-11-08
 #       Keep only entries published within the look back window up to the
 #       collection time, and drop one whose time cannot be represented.
@@ -193,7 +195,7 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
         categories: arXiv category identifiers such as 'cs.AI'.
         max_results: Maximum entries requested per category.
         lookback_hours: Only papers published within this many hours up
-            to now are kept; a future-dated paper is dropped.
+            to now are kept. A future-dated paper is dropped.
         timeout: HTTP timeout in seconds.
         user_agent: User-Agent header sent to arXiv.
 
@@ -227,7 +229,7 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
                                "publication time from arXiv %s", category)
                 continue
             if published > now:
-                # A future date is outside the window as well; later
+                # A future date is outside the window as well. Later
                 # entries may still be in it, so keep scanning.
                 result.items_outside_window += 1
                 continue
@@ -241,7 +243,7 @@ def collect(categories: List[str], max_results: int, lookback_hours: int,
             if not url or url in seen_urls:
                 continue
             if not is_safe_url(url):
-                logger.warning("dropping paper with unusable link %s", url)
+                logger.warning("dropping paper with unusable link")
                 continue
             seen_urls.add(url)
             entries.append(Entry(

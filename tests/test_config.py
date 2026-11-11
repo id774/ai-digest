@@ -35,7 +35,7 @@
 #  driven: unset and blank both read as the default, an explicit value
 #  that is not a whole number is a configuration error rather than a
 #  silent fallback to the default, and the same holds for a value
-#  outside the setting's range. SUMMARIZER_MAX_RETRIES accepts zero; the
+#  outside the setting's range. SUMMARIZER_MAX_RETRIES accepts zero. The
 #  other seven do not. MAX_TOPICS is also the one setting bounded above,
 #  since it names how many cards the fixed summary image grid can draw:
 #  1 through 6 are accepted and 7 is refused.
@@ -118,7 +118,7 @@
 #  v1.2 2026-09-08
 #       Cover HTTPS validation of configured news feeds.
 #  v1.1 2026-09-06
-#       Resolve font paths per execution scope; explicit invalid values fail.
+#       Resolve font paths per execution scope. Explicit invalid values fail.
 #  v1.0 2026-08-05
 #       Initial release.
 #
@@ -191,7 +191,7 @@ class SummarizerBackendTest(unittest.TestCase):
             loaded.validate_summarizer_backend()
 
     def test_require_api_key_is_gone(self):
-        # It was never called; validate_summarizer_auth() is the check.
+        # It was never called. validate_summarizer_auth() is the check.
         self.assertFalse(hasattr(config.Config, "require_api_key"))
 
 
@@ -487,7 +487,7 @@ class BlankSummarizerSettingTest(unittest.TestCase):
 # (env var name, Config field, default, minimum, maximum, a valid sample
 # strictly inside the setting's range) for every integer setting.
 # MAX_TOPICS is the one setting bounded above, since it names how many
-# cards the fixed summary image grid can draw; its sample is 5, not
+# cards the fixed summary image grid can draw. Its sample is 5, not
 # default + 1 (7), which is outside that range. Every other setting has
 # no maximum, and its sample is simply default + 1.
 NUMERIC_SETTINGS = (
@@ -856,7 +856,7 @@ class NewsFeedUrlsTest(unittest.TestCase):
 
     def test_the_load_itself_does_not_reject_a_non_https_url(self):
         # Loading must not enforce this so that a valid CLI override can
-        # still win over an invalid lower-priority raw value; only the
+        # still win over an invalid lower-priority raw value. Only the
         # explicit call is where an invalid effective value fails.
         loaded = self.load({"NEWS_FEED_URLS": "http://example.test/feed"})
 

@@ -15,7 +15,7 @@
 #  scope is never even looked at, so a malformed batch setting, an
 #  unknown backend, a missing credential, an unusable font path or a
 #  legacy ANTHROPIC_*/OPENAI_* name must not stop the viewer, 'list',
-#  'render' or 'demo'; conversely, an invalid PORT must not stop 'run',
+#  'render' or 'demo'. Conversely, an invalid PORT must not stop 'run',
 #  and each scope still rejects its own invalid settings, an unusable
 #  explicit font path included. A dedicated case imports app.py itself,
 #  because the viewer resolves its configuration at import time and
@@ -60,7 +60,7 @@
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
-#  - See requirements.txt (the app.py case imports Flask; font cases use Pillow)
+#  - See requirements.txt (the app.py case imports Flask. Font cases use Pillow)
 #
 #  Version History:
 #  v1.2 2026-11-07
@@ -147,7 +147,7 @@ class ScopeMatrixTest(unittest.TestCase):
         })
 
         self.assertEqual(3, loaded.summarizer_max_retries)
-        self.assertEqual(3000, loaded.port)  # default; PORT never read
+        self.assertEqual(3000, loaded.port)  # default. PORT never read
 
 
 class PrecedenceTest(unittest.TestCase):

@@ -44,7 +44,9 @@ The sample's own shape is checked before anything is built from it - the
 top level an object, `date` a real calendar date, `entries` a non-empty
 list of objects each with a nonblank title and a safe absolute URL -
 failing the command cleanly on the first violation instead of letting a
-malformed custom `--input` file crash with a raw exception. The stored
+malformed custom `--input` file crash with a raw exception. A custom sample
+entry URL must have an HTTP or HTTPS host, a valid port when present, and no
+embedded URL credentials. The stored
 `build_report` payload then goes through `summarizer.to_topics()`, the same
 validation a live tool call passes, and the topics are then illustrated,
 stored and rendered by the same code as any other report. `report.json`
@@ -73,13 +75,13 @@ reading the demo as a preview of your own runs:
   tries the `ar5iv` figure of a paper or the Open Graph image of an
   article, and only falls back when that fails.
 - **The summary image names its period "デモサンプル", not an hour count.**
-  The demo collects nothing, so there is no window to announce; the header
+  The demo collects nothing, so there is no window to announce. The header
   and the footer's 対象期間 show that fixed label instead of formatting a
   fabricated number of hours, and the footer's データソース reflects
   whatever the sample's topics actually cite.
 
 A CJK font is required all the same, since the cards and the composite
-image draw Japanese text; see [Japanese font](../README.md#japanese-font).
+image draw Japanese text. See [Japanese font](../README.md#japanese-font).
 
 ## Screenshots
 
@@ -87,8 +89,8 @@ The images under [`doc/screenshots/`](screenshots) were produced from a
 demo run by `tools/capture_screens.py`, which starts the read only
 viewer on a loopback port and drives a headless Chromium over it. The
 composite image is drawn by the batch rather than by a page, so the
-script copies `summary.png` out of the report instead of capturing it;
-one command therefore refreshes every image the README embeds.
+script copies `summary.png` out of the report instead of capturing it.
+One command therefore refreshes every image the README embeds.
 Playwright is not in `requirements.txt`, because neither the batch nor
 the viewer needs a browser:
 

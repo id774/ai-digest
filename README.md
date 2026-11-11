@@ -24,19 +24,30 @@
 **ai-digest** collects AI related papers and news once a day, organizes them
 into topics through the configured summarization backend, and publishes the
 result as a browsable HTML report together with a single composite PNG image.
-API-backed backends can translate and edit the topics in Japanese; `plain`
+API-backed backends can translate and edit the topics in Japanese. `plain`
 mode remains mechanical and needs no credential.
 
-The batch pipeline and the web viewer are separate processes. `cli.py` performs the daily collection and generation, writes everything under `data/reports/<date>/`, and exits. `app.py` is a read only Flask application that serves what the batch already produced, so a failed or slow run never takes the site down and the web process needs no API key. The two also resolve their configuration independently: the viewer reads only `DATA_DIR` and `PORT`, `cli.py list` reads only `DATA_DIR`, and a malformed or missing batch setting can never stop either one; see [Configuration](#configuration).
+The batch pipeline and the web viewer are separate processes. `cli.py` performs
+the daily collection and generation, writes everything under
+`data/reports/<date>/`, and exits. `app.py` is a read only Flask application
+that serves what the batch already produced, so a failed or slow run never takes
+the site down and the web process needs no API key. The two also resolve their
+configuration independently: the viewer reads only `DATA_DIR` and `PORT`,
+`cli.py list` reads only `DATA_DIR`, and a malformed or missing batch setting
+can never stop either one. See [Configuration](#configuration).
 
-Every topic carries an illustration. The application first tries to obtain a real image from the source, an `ar5iv` figure for arXiv papers or the Open Graph image for news articles, and draws a card locally with Pillow when that fails. Scraping is best effort by design; a publisher changing its markup degrades the look of the report, never its availability.
+Every topic carries an illustration. The application first tries to obtain a
+real image from the source, an `ar5iv` figure for arXiv papers or the Open Graph
+image for news articles, and draws a card locally with Pillow when that fails.
+Scraping is best effort by design. A publisher changing its markup degrades the
+look of the report, never its availability.
 
 An API-backed summarization endpoint is used only for the topic-editing stage.
 Collection (arXiv, RSS/Atom) and every image path already run without an API
 credential. Setting `SUMMARIZER_BACKEND=plain` removes the endpoint dependency:
 no summarization API is called, but the run still reaches the network over HTTPS
 for the papers and news feeds and, unless `--no-images` is given, for the source
-pages and images; see [Standalone use, no API key](#standalone-use-no-api-key).
+pages and images. See [Standalone use, no API key](#standalone-use-no-api-key).
 
 - Requirements definition: [doc/REQUIREMENTS.md](doc/REQUIREMENTS.md)
 - Basic design: [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md)
@@ -47,21 +58,35 @@ pages and images; see [Standalone use, no API key](#standalone-use-no-api-key).
 
 ## Features
 
-- **Daily pipeline in a single command**: collect, deduplicate, summarize, illustrate, render
-- **Structured API-backed summarization**: the selected API backend returns tool-call arguments that are validated as structured data rather than prose
-- **API-backed Japanese editing**: with an API-backed backend, English sources are translated and condensed into two to four Japanese bullet points per topic; `plain` keeps the source language
-- **Backend-specific categories**: API-backed backends let the model choose a label for the day's content; `plain` derives the label mechanically from the source origin, and colors are derived from the resulting label
-- **Resilient image handling**: scraping is attempted first and falls back to locally generated cards
-- **One image per day**: a composite PNG summarizing the whole report, drawn with Pillow, without a headless browser
+- **Daily pipeline in a single command**: collect, deduplicate, summarize,
+  illustrate, render
+- **Structured API-backed summarization**: the selected API backend returns
+  tool-call arguments that are validated as structured data rather than prose
+- **API-backed Japanese editing**: with an API-backed backend, English sources
+  are translated and condensed into two to four Japanese bullet points per
+  topic. `plain` keeps the source language
+- **Backend-specific categories**: API-backed backends let the model choose a
+  label for the day's content. `plain` derives the label mechanically from the
+  source origin, and colors are derived from the resulting label
+- **Resilient image handling**: scraping is attempted first and falls back to
+  locally generated cards
+- **One image per day**: a composite PNG summarizing the whole report, drawn
+  with Pillow, without a headless browser
 - **No database**: reports are plain JSON and PNG files under one directory per day
-- **Deployable as is**: `systemd`, `nginx` and `cron` examples in [deploy/](deploy), a `Procfile` for Heroku
+- **Deployable as is**: `systemd`, `nginx` and `cron` examples in
+  [deploy/](deploy), a `Procfile` for Heroku
 
 ## Requirements
 
 - Python 3.9 or later
-- A credential for an endpoint speaking the Anthropic Messages API or the OpenAI Chat Completions API, unless `SUMMARIZER_BACKEND=plain` (see [Standalone use, no API key](#standalone-use-no-api-key))
-- A CJK capable TrueType font, for example the `fonts-noto-cjk` package; see [Japanese font](#japanese-font)
-- Outbound HTTPS access to `export.arxiv.org`, the configured feeds, source pages used for optional illustrations and, unless running standalone, the configured summarization endpoint
+- A credential for an endpoint speaking the Anthropic Messages API or the OpenAI
+  Chat Completions API, unless `SUMMARIZER_BACKEND=plain` (see
+  [Standalone use, no API key](#standalone-use-no-api-key))
+- A CJK capable TrueType font, for example the `fonts-noto-cjk` package. See
+  [Japanese font](#japanese-font)
+- Outbound HTTPS access to `export.arxiv.org`, the configured feeds, source
+  pages used for optional illustrations and, unless running standalone, the
+  configured summarization endpoint
 
 Python dependencies are listed in `requirements.txt`:
 
@@ -78,7 +103,8 @@ Python dependencies are listed in `requirements.txt`:
 
 ## Installation
 
-The following steps assume Debian or Ubuntu. Adjust the package manager commands for other systems.
+The following steps assume Debian or Ubuntu. Adjust the package manager commands
+for other systems.
 
 ### 1. Install the system packages
 
@@ -87,7 +113,12 @@ sudo apt update
 sudo apt install python3 python3-venv python3-pip fonts-noto-cjk
 ```
 
-`fonts-noto-cjk` is not optional in practice. The generated images always contain Japanese interface text, and API-backed reports also draw Japanese topic text. The `plain` backend may preserve non-Japanese source titles and bullets, but the fixed image labels still require CJK glyphs. Neither the bitmap font bundled with Pillow nor DejaVuSans contains those glyphs, so without a CJK-capable font the affected image text renders as empty boxes.
+`fonts-noto-cjk` is not optional in practice. The generated images always
+contain Japanese interface text, and API-backed reports also draw Japanese topic
+text. The `plain` backend may preserve non-Japanese source titles and bullets,
+but the fixed image labels still require CJK glyphs. Neither the bitmap font
+bundled with Pillow nor DejaVuSans contains those glyphs, so without a
+CJK-capable font the affected image text renders as empty boxes.
 
 ### 2. Clone the repository
 
@@ -121,7 +152,7 @@ variables take precedence over `.env` values.
 The settings that address the endpoint are named after the summarization stage
 rather than after a vendor, because the same key, base URL and model reach
 whichever endpoint is configured. The `ANTHROPIC_*` and `OPENAI_*` names they
-replaced are refused at startup and answered with their replacement; see
+replaced are refused at startup and answered with their replacement. See
 [Renamed settings](#renamed-settings).
 
 ### 5. Verify the installation
@@ -132,36 +163,55 @@ python cli.py list
 python -m unittest discover -s tests
 ```
 
-The first command prints the version, the second prints nothing on a fresh installation because no report exists yet. The third runs the whole test suite, which needs no network access, no API key and nothing beyond the standard library and the installed dependencies; see [Tests](#tests).
+The first command prints the version, the second prints nothing on a fresh
+installation because no report exists yet. The third runs the whole test suite,
+which needs no network access, no API key and nothing beyond the standard
+library and the installed dependencies. See [Tests](#tests).
 
 ## Configuration
 
-All settings are read from environment variables, optionally through `.env`. They are collected in `config.py`. Settings used by the batch also have command-line overrides on `cli.py` except `SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN`; `PORT` belongs to
-the viewer. See [Overriding a setting for one run](#overriding-a-setting-for-one-run).
+All settings are read from environment variables, optionally through `.env`.
+They are collected in `config.py`. Settings used by the batch also have
+command-line overrides on `cli.py` except `SUMMARIZER_API_KEY` and
+`SUMMARIZER_AUTH_TOKEN`. `PORT` belongs to the viewer. See
+[Overriding a setting for one run](#overriding-a-setting-for-one-run).
 
-Each execution path resolves only the settings it actually uses: `cli.py run` reads the full table below except `PORT`; `cli.py list` reads only `DATA_DIR`; `cli.py render` adds `AI_DIGEST_FONT_PATH` and `LOOKBACK_HOURS`, the latter only as the fallback for a stored report predating that statistic; `cli.py demo` adds `AI_DIGEST_FONT_PATH` and `MAX_TOPICS`, but not `LOOKBACK_HOURS`, since demo collects nothing and records no window; the viewer reads only `DATA_DIR` and `PORT`. A setting outside that path's own scope being malformed, missing, or carrying a superseded name never stops it. Within its scope, a setting that a command-line option replaces is not read from the environment or `.env` at all, so an invalid lower priority value cannot stop a run whose effective value is valid; the order is command line, exported environment, `.env`, then the default. A superseded variable name is still refused whether or not an option is given.
+Each execution path resolves only the settings it actually uses: `cli.py run`
+reads the full table below except `PORT`. `cli.py list` reads only `DATA_DIR`.
+`cli.py render` adds `AI_DIGEST_FONT_PATH` and `LOOKBACK_HOURS`, the latter only
+as the fallback for a stored report predating that statistic. `cli.py demo` adds
+`AI_DIGEST_FONT_PATH` and `MAX_TOPICS`, but not `LOOKBACK_HOURS`, since demo
+collects nothing and records no window. The viewer reads only `DATA_DIR` and
+`PORT`. A setting outside that path's own scope being malformed, missing, or
+carrying a superseded name never stops it. Within its scope, a setting that a
+command-line option replaces is not read from the environment or `.env` at all,
+so an invalid lower priority value cannot stop a run whose effective value is
+valid. The order is command line, exported environment, `.env`, then the
+default. A superseded variable name is still refused whether or not an option is
+given.
 
-The `--summarizer-base-url` override is recorded by name with a redacted value; its URL is never printed in the override log.
+The `--summarizer-base-url` override is recorded by name with a redacted value.
+Its URL is never printed in the override log.
 
 | Variable | Default | Description |
 |---|---|---|
-| `SUMMARIZER_BACKEND` | `anthropic-compatible` | Wire protocol of the summarization endpoint. `anthropic-compatible` speaks the Anthropic Messages API. `openai-compatible` speaks the OpenAI Chat Completions API; see [OpenAI-compatible endpoints](#openai-compatible-endpoints). `plain` builds topics mechanically, with no credential and no clustering or translation; see [Standalone use, no API key](#standalone-use-no-api-key). Any other value stops `cli.py run` before it collects anything, rather than falling back on the default. |
+| `SUMMARIZER_BACKEND` | `anthropic-compatible` | Wire protocol of the summarization endpoint. `anthropic-compatible` speaks the Anthropic Messages API. `openai-compatible` speaks the OpenAI Chat Completions API. See [OpenAI-compatible endpoints](#openai-compatible-endpoints). `plain` builds topics mechanically, with no credential and no clustering or translation. See [Standalone use, no API key](#standalone-use-no-api-key). Any other value stops `cli.py run` before it collects anything, rather than falling back on the default. |
 | `SUMMARIZER_API_KEY` | none | API key of the endpoint. Mutually exclusive with `SUMMARIZER_AUTH_TOKEN`. |
 | `SUMMARIZER_AUTH_TOKEN` | none | Bearer token of the endpoint. Mutually exclusive with `SUMMARIZER_API_KEY`. |
-| `SUMMARIZER_BASE_URL` | none | Base URL of the endpoint. Optional on `anthropic-compatible`, where empty means Anthropic itself. Required on `openai-compatible`, whose base URL must include the version path. An explicit value must be HTTPS, have a usable host and a valid port when present, and must not contain URL credentials (userinfo); invalid values are rejected before collection without quoting the URL. Use `SUMMARIZER_API_KEY` or `SUMMARIZER_AUTH_TOKEN` for credentials. |
+| `SUMMARIZER_BASE_URL` | none | Base URL of the endpoint. Optional on `anthropic-compatible`, where empty means Anthropic itself. Required on `openai-compatible`, whose base URL must include the version path. An explicit value must be HTTPS, have a usable host and a valid port when present, and must not contain URL credentials (userinfo). Invalid values are rejected before collection without quoting the URL. Use `SUMMARIZER_API_KEY` or `SUMMARIZER_AUTH_TOKEN` for credentials. |
 | `SUMMARIZER_MODEL` | `claude-sonnet-4-5` on `anthropic-compatible` | Model asked for on the endpoint. Required by `SUMMARIZER_BACKEND=openai-compatible`, whose model names are the endpoint's own. |
 | `SUMMARIZER_MAX_RETRIES` | `2` | Retries the SDK may spend on one request, on either API backend. `0` spends exactly one request per run. |
 | `SUMMARIZER_THINKING_MODE` | `default` | Read by `anthropic-compatible`. `default` sends no thinking parameter and keeps the provider default. `disabled` sends `thinking.type=disabled`, for a model that would otherwise think until the output budget is gone. |
 | `SUMMARIZER_TOOL_CHOICE_MODE` | `forced` | Read by `anthropic-compatible`. `forced` names `build_report` in `tool_choice`. `any` demands a tool without naming one. `auto` lets the model choose the tool and disables parallel tool use. |
-| `SUMMARIZER_TEXT_JSON_FALLBACK` | `disabled` | Read by `anthropic-compatible`. `enabled` also accepts a report written as JSON text when no tool call came back; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
+| `SUMMARIZER_TEXT_JSON_FALLBACK` | `disabled` | Read by `anthropic-compatible`. `enabled` also accepts a report written as JSON text when no tool call came back. See [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call). |
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL,cs.CV,cs.CR` | arXiv categories to collect, comma separated: artificial intelligence, machine learning, computation and language, computer vision, and cryptography and security. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
-| `NEWS_FEED_URLS` | the seven feeds listed below | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL without embedded credentials (`user:password@`), which are refused before collection without being printed; blank disables news-feed collection. |
+| `NEWS_FEED_URLS` | the seven feeds listed below | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL without embedded credentials (`user:password@`), which are refused before collection without being printed. Blank disables news-feed collection. |
 | `LOOKBACK_HOURS` | `24` | How many hours before the collection time an entry may have been published. An entry dated after the collection time is not collected. |
-| `MAX_TOPICS` | `6` | Maximum topics per report, `1` through `6`. Six fills the summary image grid; report.json, the HTML and summary.png always describe the same topic set. |
+| `MAX_TOPICS` | `6` | Maximum topics per report, `1` through `6`. Six fills the summary image grid. report.json, the HTML and summary.png always describe the same topic set. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
-| `SUMMARIZER_TIMEOUT` | `180` | SDK HTTP timeout setting in seconds for each summarization attempt on either API backend; it is not a whole-attempt wall-clock deadline. See [Timeouts](#timeouts). |
-| `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. Blank probes automatically; an explicit value must be a font Pillow can load, or the command fails; see [Japanese font](#japanese-font). |
+| `SUMMARIZER_TIMEOUT` | `180` | SDK HTTP timeout setting in seconds for each summarization attempt on either API backend. It is not a whole-attempt wall-clock deadline. See [Timeouts](#timeouts). |
+| `AI_DIGEST_FONT_PATH` | probed | Path of the font used for image generation. Blank probes automatically. An explicit value must be a font Pillow can load, or the command fails. See [Japanese font](#japanese-font). |
 | `DATA_DIR` | `data/reports` | Directory holding the generated reports. |
 | `HTTP_TIMEOUT` | `60` | Timeout in seconds of every collector and scraper request. The summarization request uses `SUMMARIZER_TIMEOUT`. |
 | `USER_AGENT` | `ai-digest/1.0 ...` | User-Agent sent with every collector and scraper request. The summarization request does not carry it. |
@@ -179,27 +229,42 @@ The default `NEWS_FEED_URLS` are, in this order:
 | Microsoft Research | `https://www.microsoft.com/en-us/research/blog/feed/` |
 | NVIDIA Developer Blog | `https://developer.nvidia.com/blog/feed` |
 
-With `anthropic-compatible` or `openai-compatible`, at most 60 deduplicated entries are sent to the model: 45 papers and 15 news articles in the usual case. A kind that has fewer entries than its share leaves the unused places to the other kind, and when fewer than 60 entries remain all of them are sent. The model still chooses at most `MAX_TOPICS` topics by importance. The share is fixed and is not a setting. `plain` does not use it and takes the most recent deduplicated entries by publication time.
+With `anthropic-compatible` or `openai-compatible`, at most 60 deduplicated
+entries are sent to the model: 45 papers and 15 news articles in the usual case.
+A kind that has fewer entries than its share leaves the unused places to the
+other kind, and when fewer than 60 entries remain all of them are sent. The
+model still chooses at most `MAX_TOPICS` topics by importance. The share is
+fixed and is not a setting. `plain` does not use it and takes the most recent
+deduplicated entries by publication time.
 
 Every numeric setting above shares one rule: unset or blank uses the default
-shown; an explicit value that is not a whole number, or that is out of range,
+shown. An explicit value that is not a whole number, or that is out of range,
 is refused instead of silently falling back to the default. `SUMMARIZER_MAX_RETRIES`
-accepts `0` and above; `MAX_TOPICS` accepts `1` through `6`; every other
+accepts `0` and above. `MAX_TOPICS` accepts `1` through `6`. Every other
 numeric setting requires `1` or above. The command-line option of the same
 setting enforces the same range.
 
 Source retrieval is HTTPS-only. Feed and scraper redirects are followed only
-while their resolved targets remain HTTPS; an HTTP downgrade is refused before
+while their resolved targets remain HTTPS. An HTTP downgrade is refused before
 the next request is sent. This does not change citation compatibility: reports
 may still contain ordinary absolute HTTP or HTTPS source links, but the batch
 does not fetch an HTTP source page for illustration.
+
+Initial request targets and redirects containing URL credentials are refused
+before the affected request. Refusal messages do not quote the URL. An article
+or paper link containing URL credentials (userinfo) is not collected or
+published. A stored legacy link of that kind renders as no link. An image URL
+with userinfo is not fetched. A later safe image candidate may be tried, and
+otherwise a local card is used. Image credits contain no userinfo. An RSS
+article without a nonblank title is skipped without discarding the other
+articles in the feed. The application does not invent a title.
 
 ### Anthropic-compatible APIs
 
 Set a base URL and Bearer token to use an Anthropic-compatible Messages API.
 For example, Sakura AI Engine can be configured as follows. Choose
 `SUMMARIZER_MODEL` from the model names currently offered by the configured
-service; this repository does not copy the service-owned model catalogue.
+service. This repository does not copy the service-owned model catalogue.
 
 ```env
 SUMMARIZER_AUTH_TOKEN=<UUID>:<secret>
@@ -240,18 +305,18 @@ read the `api response:` line the summarizer logs for `stop_reason` and
    `stop_reason=max_tokens`.
 4. `SUMMARIZER_TEXT_JSON_FALLBACK=enabled` — only once a raw response has shown
    the endpoint answering with the right JSON as text. The report is then read
-   from a text block that parses into an object with a `topics` list; anything
+   from a text block that parses into an object with a `topics` list. Anything
    else is still refused, and the run logs a warning naming this setting.
-5. `SUMMARIZER_BACKEND=openai-compatible` — when the Anthropic-compatible route stays
-   unreliable, below.
+5. `SUMMARIZER_BACKEND=openai-compatible` — when the Anthropic-compatible route
+   stays unreliable, below.
 
 `SUMMARIZER_MAX_RETRIES=0` makes each attempt cost exactly one request, which
 matters when the endpoint bills per request and two settings are being compared.
 
 ### OpenAI-compatible endpoints
 
-`SUMMARIZER_BACKEND=openai-compatible` sends the same prompt and the same tool schema to an
-OpenAI-compatible Chat Completions API, reading the answer from
+`SUMMARIZER_BACKEND=openai-compatible` sends the same prompt and the same tool
+schema to an OpenAI-compatible Chat Completions API, reading the answer from
 `tool_calls[].function.arguments`. It is a second explicit path rather than a
 fallback: both backends validate the parsed arguments identically, so a report
 does not differ by the route it took.
@@ -259,7 +324,7 @@ does not differ by the route it took.
 This backend offers `build_report` as the only tool and sends
 `tool_choice="required"` rather than naming that function explicitly. Since
 `build_report` is the only tool available, requiring a tool call still means
-requiring a `build_report` call; no provider, model or URL is inspected to
+requiring a `build_report` call. No provider, model or URL is inspected to
 choose between a required and a named tool choice.
 
 ```env
@@ -274,11 +339,11 @@ SUMMARIZER_MODEL=<model-name>
 rewriting that line as well as `SUMMARIZER_BACKEND`. Unlike
 `anthropic-compatible`, an empty `SUMMARIZER_BASE_URL` is not accepted here:
 `cli.py run` refuses to start before collecting anything rather than let the
-OpenAI SDK fall back on its own default endpoint, so the request destination
-is always one this configuration chose explicitly. This
-backend needs the `openai` package, which is deliberately absent from
-`requirements.txt` so that the default installation does not include an API client used only by
-this optional backend:
+OpenAI SDK fall back on its own default endpoint, so the request destination is
+always one this configuration chose explicitly. This backend needs the `openai`
+package, which is deliberately absent from `requirements.txt` so that the
+default installation does not include an API client used only by this optional
+backend:
 
 ```sh
 pip install openai
@@ -286,7 +351,7 @@ pip install openai
 
 ### Kimi K3
 
-Kimi K3 is used over this same `openai-compatible` backend; no
+Kimi K3 is used over this same `openai-compatible` backend. No
 Kimi-specific backend is added for it:
 
 ```env
@@ -298,14 +363,14 @@ SUMMARIZER_MODEL=kimi-k3
 
 The base URL is `https://api.moonshot.ai/v1` and the model is
 `kimi-k3`. This backend still needs the `openai` package described
-above; run `pip install openai` if it is not already installed.
+above. Run `pip install openai` if it is not already installed.
 `ai-digest` sends Kimi K3 the same `build_report` function tool, the
 same prompt and the same validation as any other `openai-compatible`
-endpoint; none of these are changed for Kimi K3. If a response does not
+endpoint. None of these are changed for Kimi K3. If a response does not
 satisfy the existing tool-call contract, the run fails rather than
 falling back to another provider or backend. Kimi K3 uses thinking by
 default and its response may carry a `reasoning_content` field
-alongside the tool call; `ai-digest` reads only the final tool-call
+alongside the tool call. `ai-digest` reads only the final tool-call
 arguments, and this configuration adds no Kimi-specific setting to
 control, display, store or log that thinking output.
 
@@ -380,7 +445,7 @@ or quiet, and raising `MAX_OUTPUT_TOKENS` lengthens it.
 attempt, not a hard wall-clock deadline for a complete attempt. Its read
 timeout limits the wait for each incoming chunk, so an intermittently
 responding server can keep an attempt running longer than that setting.
-`SUMMARIZER_MAX_RETRIES` is the number of retries after the initial attempt;
+`SUMMARIZER_MAX_RETRIES` is the number of retries after the initial attempt.
 `0` disables retries. At most `SUMMARIZER_MAX_RETRIES + 1` attempts are made.
 `SUMMARIZER_TIMEOUT * (SUMMARIZER_MAX_RETRIES + 1)` is the sum of the nominal
 timeout settings for that maximum number of attempts, not a guaranteed lower
@@ -389,14 +454,18 @@ jitter or server-requested delays such as `Retry-After` add waiting time.
 Other stages of the run take time too. A cron interval longer than this
 expression does not guarantee that the previous run has finished, so do not
 rely on the interval alone to prevent overlapping runs. `HTTP_TIMEOUT` and
-`SUMMARIZER_TIMEOUT` must be positive; `SUMMARIZER_MAX_RETRIES` must be zero
+`SUMMARIZER_TIMEOUT` must be positive. `SUMMARIZER_MAX_RETRIES` must be zero
 or greater. `cli.py run` validates these settings before collection.
 
 ### Japanese font
 
-`AI_DIGEST_FONT_PATH` and `--font-path` name the font used by the image generators, and the two modes this setting has do not blend into each other:
+`AI_DIGEST_FONT_PATH` and `--font-path` name the font used by the image
+generators, and the two modes this setting has do not blend into each other:
 
-- **Unset or blank** (whitespace only counts as blank) asks for automatic detection. These locations are probed in order, and the first one Pillow can actually load as a font wins, skipping over one that is missing, a directory, or unloadable:
+- **Unset or blank** (whitespace only counts as blank) asks for automatic
+  detection. These locations are probed in order, and the first one Pillow can
+  actually load as a font wins, skipping over one that is missing, a directory,
+  or unloadable:
 
   ```
   /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
@@ -405,13 +474,21 @@ or greater. `cli.py run` validates these settings before collection.
   /usr/share/fonts/truetype/vlgothic/VL-Gothic-Regular.ttf
   ```
 
-  When none of them is usable, the batch logs a warning once and keeps running with the Pillow bitmap font; the HTML report stays correct, but the images lose their text.
+When none of them is usable, the batch logs a warning once and keeps running
+with the Pillow bitmap font. The HTML report stays correct, but the images lose
+their text.
 
-- **A nonblank value is an explicit request for exactly that path.** It must be a font Pillow can load, or the command fails rather than silently trying another candidate or falling back to the bitmap font: `AI_DIGEST_FONT_PATH=/does/not/exist.ttf` is a configuration error (exit `1`), and `--font-path /does/not/exist.ttf` is refused by the parser (exit `2`), in both cases before anything is collected or generated.
+- **A nonblank value is an explicit request for exactly that path.** It must be
+  a font Pillow can load, or the command fails rather than silently trying
+  another candidate or falling back to the bitmap font:
+  `AI_DIGEST_FONT_PATH=/does/not/exist.ttf` is a configuration error (exit `1`),
+  and `--font-path /does/not/exist.ttf` is refused by the parser (exit `2`), in
+  both cases before anything is collected or generated.
 
 ## Standalone use, no API key
 
-Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without a credential of any kind:
+Set `SUMMARIZER_BACKEND=plain` to run the whole pipeline without a credential of
+any kind:
 
 ```sh
 [ -f .env ] || cp .env.example .env
@@ -419,9 +496,17 @@ sed 's/^SUMMARIZER_BACKEND=.*/SUMMARIZER_BACKEND=plain/' .env > .env.new && mv .
 python cli.py run
 ```
 
-The copy is guarded because step 4 already created `.env`, and an unconditional `cp` here would overwrite the key configured there. `.env.example` already defines `SUMMARIZER_BACKEND=anthropic-compatible`, so rewrite that line rather than appending a second one: a file carrying the same key twice states two different intentions, and which one wins is a property of the parser rather than of the configuration. The command above is plain POSIX `sed` writing to a new file, because in-place editing is spelled `sed -i` on GNU and `sed -i ''` on BSD and macOS.
+The copy is guarded because step 4 already created `.env`, and an unconditional
+`cp` here would overwrite the key configured there. `.env.example` already
+defines `SUMMARIZER_BACKEND=anthropic-compatible`, so rewrite that line rather
+than appending a second one: a file carrying the same key twice states two
+different intentions, and which one wins is a property of the parser rather than
+of the configuration. The command above is plain POSIX `sed` writing to a new
+file, because in-place editing is spelled `sed -i` on GNU and `sed -i ''` on BSD
+and macOS.
 
-For a single run, setting the variable in the environment needs no edit at all, since exported variables take precedence over `.env`:
+For a single run, setting the variable in the environment needs no edit at all,
+since exported variables take precedence over `.env`:
 
 ```sh
 SUMMARIZER_BACKEND=plain python cli.py run
@@ -430,10 +515,24 @@ SUMMARIZER_BACKEND=plain python cli.py run
 In this mode:
 
 - No summarization API is called, and `SUMMARIZER_API_KEY` can stay unset.
-- Each collected entry becomes its own topic, newest first; there is no cross-entry clustering and no translation, so titles and bullets stay in whatever language the source published them in (English for most feeds, English abstracts for arXiv). The `category` label is taken from the entry's origin (the arXiv category or the feed title) instead of being chosen freely by a model.
-- Topic illustrations are unaffected: image scraping and the Pillow fallback cards already run without a key. Without `--no-images`, a run still requests each source page and its image over HTTPS. Add `--no-images` to stop that scraping and only draw local cards, for a run that touches nothing but arXiv and the configured feeds.
+- Each collected entry becomes its own topic, newest first. There is no
+  cross-entry clustering and no translation, so titles and bullets stay in
+  whatever language the source published them in (English for most feeds,
+  English abstracts for arXiv). The `category` label is taken from the entry's
+  origin (the arXiv category or the feed title) instead of being chosen freely
+  by a model.
+- Topic illustrations are unaffected: image scraping and the Pillow fallback
+  cards already run without a key. Without `--no-images`, a run still requests
+  each source page and its image over HTTPS. Add `--no-images` to stop that
+  scraping and only draw local cards, for a run that touches nothing but arXiv
+  and the configured feeds.
 
-This trades the quality of the Japanese summary and the topic grouping for zero setup beyond `pip install -r requirements.txt`. Switch back to `SUMMARIZER_BACKEND=anthropic-compatible` (or unset it, since that is the default) whenever an API key becomes available again; both backends write the same `report.json` shape, and `cli.py render` works on reports produced by either one.
+This trades the quality of the Japanese summary and the topic grouping for zero
+setup beyond `pip install -r requirements.txt`. Switch back to
+`SUMMARIZER_BACKEND=anthropic-compatible` (or unset it, since that is the
+default) whenever an API key becomes available again. Both backends write the
+same `report.json` shape, and `cli.py render` works on reports produced by
+either one.
 
 ## Usage
 
@@ -443,11 +542,15 @@ This trades the quality of the Japanese summary and the topic grouping for zero 
 python cli.py run
 ```
 
-The command collects the last 24 hours, summarizes them, writes `data/reports/<today>/` — today in the host's local time zone, the day cron actually ran it on, not UTC's — and exits with status 1 when nothing usable could be produced, which makes failures visible in the batch's log output.
+The command collects the last 24 hours, summarizes them, writes
+`data/reports/<today>/` — today in the host's local time zone, the day cron
+actually ran it on, not UTC's — and exits with status 1 when nothing usable
+could be produced, which makes failures visible in the batch's log output.
 
 #### "no entry collected"
 
-The error names the cause, so a quiet day and a broken network never look alike. Every source that answered normally but had nothing recent to offer:
+The error names the cause, so a quiet day and a broken network never look alike.
+Every source that answered normally but had nothing recent to offer:
 
 ```
 INFO ai_digest.collectors.arxiv: collected 0 arXiv papers from 5 of 5 categories (300 papers offered, look back 24 hours)
@@ -462,12 +565,19 @@ WARNING ai_digest.collectors.arxiv: arXiv request failed for cs.AI: HTTPSConnect
 ERROR ai_digest.cli: no entry collected: all 12 sources failed, so nothing was read at all; check the network connection, the proxy settings and the configured URLs (arXiv cs.AI: ...)
 ```
 
-An empty window is expected, not a bug, and it is unrelated to `SUMMARIZER_BACKEND`, since collection happens before summarization runs. Two causes are common:
+An empty window is expected, not a bug, and it is unrelated to
+`SUMMARIZER_BACKEND`, since collection happens before summarization runs. Two
+causes are common:
 
-- **arXiv does not announce papers on weekends.** Friday through Sunday submissions are all announced on Monday, so `cli.py run` on a Saturday or Sunday routinely collects 0 arXiv papers.
-- **The configured news feeds do not publish every day.** The configured feeds may go a day or more without new posts.
+- **arXiv does not announce papers on weekends.** Friday through Sunday
+  submissions are all announced on Monday, so `cli.py run` on a Saturday or
+  Sunday routinely collects 0 arXiv papers.
+- **The configured news feeds do not publish every day.** The configured feeds
+  may go a day or more without new posts.
 
-When only some sources fail, the run continues with the rest and logs a `WARNING ... continuing with N of M sources` line, so a single broken feed neither hides the report nor passes unnoticed.
+When only some sources fail, the run continues with the rest and logs a
+`WARNING ... continuing with N of M sources` line, so a single broken feed
+neither hides the report nor passes unnoticed.
 
 To work around a quiet day:
 
@@ -486,13 +596,24 @@ python cli.py render 2026-07-25       # rebuild HTML and PNG from stored JSON
 python cli.py list                    # print the stored report dates
 ```
 
-`render` never calls the API, so it is the cheap way to try a layout change on an existing report. A stored report holding more than six topics is refused as corrupt: `render` exits with status `1` and leaves the report as it was, and the viewer answers 404 for it. A topic image that does not resolve to a file inside the report directory is left out of the page, while the rest of the topic is kept.
+`render` never calls the API, so it is the cheap way to try a layout change on
+an existing report. A stored report holding more than six topics is refused as
+corrupt: `render` exits with status `1` and leaves the report as it was, and the
+viewer answers 404 for it. A topic image that does not resolve to a file inside
+the report directory is left out of the page, while the rest of the topic is
+kept.
 
-`--date` and `render`'s `DATE` argument must name a real calendar date, not merely a `YYYY-MM-DD`-shaped string: `--date 2026-02-31` is refused by the parser with exit status `2`, before anything is collected or an API request is spent. Only the ASCII digits `0` to `9` are accepted, so a date written with full width digits is refused as well.
+`--date` and `render`'s `DATE` argument must name a real calendar date, not
+merely a `YYYY-MM-DD`-shaped string: `--date 2026-02-31` is refused by the
+parser with exit status `2`, before anything is collected or an API request is
+spent. Only the ASCII digits `0` to `9` are accepted, so a date written with
+full width digits is refused as well.
 
 ### Overriding a setting for one run
 
-Every setting listed under [Configuration](#configuration), except the credentials and `PORT`, can be given as an option named after its variable, which wins over the environment and `.env` for that invocation only:
+Every setting listed under [Configuration](#configuration), except the
+credentials and `PORT`, can be given as an option named after its variable,
+which wins over the environment and `.env` for that invocation only:
 
 ```sh
 python cli.py run --lookback-hours 72 --max-topics 4
@@ -502,11 +623,21 @@ python cli.py render 2026-07-25 --font-path /usr/share/fonts/truetype/vlgothic/V
 python cli.py list --data-dir /srv/ai-digest/reports
 ```
 
-Which options a subcommand takes follows from what it does: `--data-dir` is accepted everywhere, the collection and summarization settings by `run`, and `--font-path` by the three subcommands that draw images. `cli.py run --help` lists them with the variable each one replaces, and a run that overrides anything logs what it replaced, so the log of a report says how it was produced.
+Which options a subcommand takes follows from what it does: `--data-dir` is
+accepted everywhere, the collection and summarization settings by `run`, and
+`--font-path` by the three subcommands that draw images. `cli.py run --help`
+lists them with the variable each one replaces, and a run that overrides
+anything logs what it replaced, so the log of a report says how it was produced.
 
-`SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN` deliberately have no option: a command line is readable by every user of the host, through `ps`, so a credential stays in the environment or in `.env`.
+`SUMMARIZER_API_KEY` and `SUMMARIZER_AUTH_TOKEN` deliberately have no option: a
+command line is readable by every user of the host, through `ps`, so a
+credential stays in the environment or in `.env`.
 
-Values are validated by the parser, which refuses a look back window of `0` or a model name given to `--summarizer-backend`, and exits with status 2 without collecting anything. A valid option is not affected by an invalid value of the same setting in the environment or `.env`; the other settings of the subcommand are still validated, and an invalid one ends the run with exit status 1.
+Values are validated by the parser, which refuses a look back window of `0` or a
+model name given to `--summarizer-backend`, and exits with status 2 without
+collecting anything. A valid option is not affected by an invalid value of the
+same setting in the environment or `.env`. The other settings of the subcommand
+are still validated, and an invalid one ends the run with exit status 1.
 
 ### Browse the reports
 
@@ -515,7 +646,7 @@ python app.py
 ```
 
 Then open `http://127.0.0.1:3000/`. `app.py` binds `127.0.0.1` and reads
-`PORT`, so the development server answers only on that address; the Debian
+`PORT`, so the development server answers only on that address. The Debian
 systemd example runs gunicorn on `127.0.0.1` too, behind nginx, while the
 Heroku `Procfile` runs gunicorn bound to `0.0.0.0:$PORT` so Heroku's router
 can reach it. The routes are:
@@ -524,8 +655,8 @@ can reach it. The routes are:
 |---|---|
 | `/` | List of the stored report dates |
 | `/reports/<date>` | Report of one day |
-| `/reports/<date>/image` | Composite summary PNG of that day; answered with 404 unless `summary.png` is a file inside that report directory |
-| `/reports/<date>/assets/<file>` | One file from that report directory; report pages use it for topic illustrations |
+| `/reports/<date>/image` | Composite summary PNG of that day. Answered with 404 unless `summary.png` is a file inside that report directory |
+| `/reports/<date>/assets/<file>` | One file from that report directory. Report pages use it for topic illustrations |
 | `/healthz` | Plain text liveness response |
 
 ### Output of one run
@@ -540,12 +671,13 @@ data/reports/2026-07-25/
 └── ...
 ```
 
-`index.html` is self contained, so a day can also be published by copying its directory to any static web server.
+`index.html` is self contained, so a day can also be published by copying its
+directory to any static web server.
 
 ## When something fails
 
 The batch reports a failure and exits with a status. An arXiv category that
-returns HTTP 429 is retried up to twice, after 30 and 60 seconds; other
+returns HTTP 429 is retried up to twice, after 30 and 60 seconds. Other
 collector failures are not retried. No half written report is left in the
 archive. The viewer keeps serving what is already stored, because it never
 depends on a run having succeeded.
@@ -560,7 +692,7 @@ depends on a run having succeeded.
 
 `deploy/ai-digest.cron` redirects both stdout and stderr into
 `/var/log/ai-digest/run.log`, which turns these into the only monitoring the
-batch needs. The log lines say which of these it was; the exit status itself
+batch needs. The log lines say which of these it was. The exit status itself
 is not written to that file, only acted on by cron and by whatever ran the
 command.
 
@@ -571,13 +703,13 @@ Every failure names its cause at `ERROR` level and ends the run:
 | Log line | Usually means |
 |---|---|
 | `SUMMARIZER_BACKEND is 'X'; expected one of: ...` | A typo in a setting. The run stops before collecting, so no request is spent on it |
-| `SUMMARIZER_BACKEND is 'claude', which named a vendor ...` | A value from before the rename; the message names its replacement, see [Renamed settings](#renamed-settings) |
-| `ANTHROPIC_API_KEY is no longer read by ai-digest; use ...` | A setting from before the rename is still exported; see [Renamed settings](#renamed-settings) |
-| `MAX_OUTPUT_TOKENS is 0; expected a positive number.` | Same, for the output budget; `SUMMARIZER_TIMEOUT` is refused the same way |
+| `SUMMARIZER_BACKEND is 'claude', which named a vendor ...` | A value from before the rename. The message names its replacement, see [Renamed settings](#renamed-settings) |
+| `ANTHROPIC_API_KEY is no longer read by ai-digest; use ...` | A setting from before the rename is still exported. See [Renamed settings](#renamed-settings) |
+| `MAX_OUTPUT_TOKENS is 0; expected a positive number.` | Same, for the output budget. `SUMMARIZER_TIMEOUT` is refused the same way |
 | `SUMMARIZER_API_KEY or SUMMARIZER_AUTH_TOKEN is required.` | No credential is configured, and `SUMMARIZER_BACKEND` is not `plain` |
-| `no entry collected: ...` | The window held nothing, or the sources could not be reached. The message distinguishes the two; see ["no entry collected"](#no-entry-collected) |
+| `no entry collected: ...` | The window held nothing, or the sources could not be reached. The message distinguishes the two. See ["no entry collected"](#no-entry-collected) |
 | `summarization failed: ...` | The request was made and produced no report. The `api response:` line logged beside it says what came back |
-| `Model returned no build_report tool call` | The endpoint answered without calling the tool; see [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call) |
+| `Model returned no build_report tool call` | The endpoint answered without calling the tool. See [When the endpoint returns no tool call](#when-the-endpoint-returns-no-tool-call) |
 | `... so the report is truncated; lower MAX_TOPICS or raise MAX_OUTPUT_TOKENS` | The answer was cut off mid-object. A truncated report is refused rather than published in part |
 | `the model returned no usable topic` | The answer arrived and validated into nothing. `--verbose` dumps the whole response body |
 | `no stored report for DATE` | `render` was given a date the archive does not hold |
@@ -621,17 +753,27 @@ setting.
 
 ## Tests
 
-The suite lives in `tests/` and uses `unittest` from the standard library, so there is nothing to install beyond `requirements.txt`. Every test stubs the network and the API clients: no outbound access, no API key and no `.env` are needed, and nothing under `data/` is touched.
+The suite lives in `tests/` and uses `unittest` from the standard library, so
+there is nothing to install beyond `requirements.txt`. Every test stubs the
+network and the API clients: no outbound access, no API key and no `.env` are
+needed, and nothing under `data/` is touched.
 
-Run everything at once, from the repository root, with the virtual environment active:
+Run everything at once, from the repository root, with the virtual environment
+active:
 
 ```sh
 python -m unittest discover -s tests
 ```
 
-The command discovers every `tests/test_*.py` and reports one summary for all of them. It exits with status 0 only when all tests pass, which is what a cron job or a CI step should check.
+The command discovers every `tests/test_*.py` and reports one summary for all of
+them. It exits with status 0 only when all tests pass, which is what a cron job
+or a CI step should check.
 
-The repository root must be the working directory, because the tests import the top level modules (`config`, `cli`, `ai_digest`) from there. Running a file directly as `python tests/test_config.py` fails with `ModuleNotFoundError`, since then only `tests/` lands on the import path; always go through `python -m unittest`.
+The repository root must be the working directory, because the tests import the
+top level modules (`config`, `cli`, `ai_digest`) from there. Running a file
+directly as `python tests/test_config.py` fails with `ModuleNotFoundError`,
+since then only `tests/` lands on the import path. Always go through
+`python -m unittest`.
 
 Narrower selections use the same runner:
 
@@ -667,15 +809,16 @@ python -m unittest discover -s tests -p "test_c*.py"             # modules match
 | `test_render_command.py` | the window a rebuilt image announces, read from the statistics the run stored rather than from the current configuration |
 | `test_demo.py` | bundled demo report build |
 
-A passing suite says nothing about the feeds or the API being reachable; those are exercised only by an actual `python cli.py run`.
+A passing suite says nothing about the feeds or the API being reachable. Those
+are exercised only by an actual `python cli.py run`.
 
 ## Deployment
 
 ### VPS
 
-The viewer runs under gunicorn and systemd; the batch runs from cron. The two
+The viewer runs under gunicorn and systemd. The batch runs from cron. The two
 share nothing but `DATA_DIR`, which is what keeps yesterday's report on the site
-while a batch fails; the example unit sets the viewer's `DATA_DIR` and `PORT`
+while a batch fails. The example unit sets the viewer's `DATA_DIR` and `PORT`
 directly rather than sourcing the batch's `.env`, so its credential is never
 part of the viewer's environment. gunicorn listens on `127.0.0.1` only, and
 nginx provides HTTPS and access control.
@@ -707,7 +850,10 @@ heroku config:set SUMMARIZER_API_KEY=sk-ant-...
 git push heroku master
 ```
 
-The dyno file system is ephemeral. Reports written by a one off dyno disappear on the next restart or deploy, and Heroku alone therefore cannot host the daily archive. Treat a Heroku deployment as a demonstration of the viewer and run the real pipeline on a VPS or locally, where `DATA_DIR` is persistent.
+The dyno file system is ephemeral. Reports written by a one off dyno disappear
+on the next restart or deploy, and Heroku alone therefore cannot host the daily
+archive. Treat a Heroku deployment as a demonstration of the viewer and run the
+real pipeline on a VPS or locally, where `DATA_DIR` is persistent.
 
 ## Repository Structure
 
@@ -765,9 +911,17 @@ The dyno file system is ephemeral. Reports written by a one off dyno disappear o
     └── COPYING.LESSER
 ```
 
-`tools/capture_screens.py` is a documentation helper. It is not imported by the application, and `playwright`, which only that script needs, is deliberately absent from `requirements.txt` so that neither the batch nor the viewer pulls in a browser.
+`tools/capture_screens.py` is a documentation helper. It is not imported by the
+application, and `playwright`, which only that script needs, is deliberately
+absent from `requirements.txt` so that neither the batch nor the viewer pulls in
+a browser.
 
-`app.py` imports nothing from `ai_digest.collectors` or `ai_digest.analyzer`. That is what keeps the viewer free of a credential and of outbound access: it cannot call an API because it does not carry the code that would. It also resolves its configuration through `config.py`'s `load_viewer_config()`, which reads only `DATA_DIR` and `PORT`, so a batch credential never becomes part of the viewer's configuration or its process environment either.
+`app.py` imports nothing from `ai_digest.collectors` or `ai_digest.analyzer`.
+That is what keeps the viewer free of a credential and of outbound access: it
+cannot call an API because it does not carry the code that would. It also
+resolves its configuration through `config.py`'s `load_viewer_config()`, which
+reads only `DATA_DIR` and `PORT`, so a batch credential never becomes part of
+the viewer's configuration or its process environment either.
 
 ### Adding a collector
 
@@ -826,24 +980,38 @@ python cli.py demo
 python app.py
 ```
 
-The demo builds a report from the sample bundled in `ai_digest/demo/`. It collects nothing and calls no API, so it runs on a fresh clone with neither a key nor outbound access, and it is the quickest way to see what a finished report looks like. The result is a normal report under `data/reports/`, which the viewer lists next to the collected ones and marks with `"model": "demo"` in its statistics.
+The demo builds a report from the sample bundled in `ai_digest/demo/`. It
+collects nothing and calls no API, so it runs on a fresh clone with neither a
+key nor outbound access, and it is the quickest way to see what a finished
+report looks like. The result is a normal report under `data/reports/`, which
+the viewer lists next to the collected ones and marks with `"model": "demo"` in
+its statistics.
 
 ```sh
 python cli.py demo --date 2026-08-01   # file it under another date
 python cli.py demo --input mine.json   # use another sample
 ```
 
-The date defaults to the one recorded in the sample, so repeated runs overwrite the same directory. Delete `data/reports/<date>/` to remove the demo again. A custom sample whose recorded date is not a real calendar date fails the command before anything is generated. [`doc/DEMO.md`](doc/DEMO.md) describes what the demo replaces and how it differs from a collected report.
+The date defaults to the one recorded in the sample, so repeated runs overwrite
+the same directory. Delete `data/reports/<date>/` to remove the demo again. A
+custom sample whose recorded date is not a real calendar date fails the command
+before anything is generated. [`doc/DEMO.md`](doc/DEMO.md) describes what the
+demo replaces and how it differs from a collected report.
 
-This is not the same as `SUMMARIZER_BACKEND=plain`, which still collects from the network and only skips the API; see [Standalone use, no API key](#standalone-use-no-api-key).
+This is not the same as `SUMMARIZER_BACKEND=plain`, which still collects from
+the network and only skips the API. See
+[Standalone use, no API key](#standalone-use-no-api-key).
 
 ### Sample output
 
-The composite PNG written for one day. It is drawn with Pillow rather than screenshotted from the HTML, so the batch needs no headless browser:
+The composite PNG written for one day. It is drawn with Pillow rather than
+screenshotted from the HTML, so the batch needs no headless browser:
 
 ![Composite summary image of one day](doc/screenshots/summary.png)
 
-The same day in the Flask viewer, which shows the composite image first and then one card per topic, each with its category label, its bullet points and its sources:
+The same day in the Flask viewer, which shows the composite image first and then
+one card per topic, each with its category label, its bullet points and its
+sources:
 
 ![Report page of the viewer](doc/screenshots/report-desktop.png)
 
@@ -851,14 +1019,17 @@ The archive index, the entry point of the viewer:
 
 ![Archive index of the viewer](doc/screenshots/index-desktop.png)
 
-These pages were captured from a demo run, so they can be reproduced without a key and without collecting anything:
+These pages were captured from a demo run, so they can be reproduced without a
+key and without collecting anything:
 
 ```sh
 python cli.py demo          # build the bundled sample report
 python app.py               # browse it at http://127.0.0.1:3000/
 ```
 
-See [Demo mode](#demo-mode) above and [`doc/DEMO.md`](doc/DEMO.md), which states exactly which stages the demo replaces and how it differs from a collected report.
+See [Demo mode](#demo-mode) above and [`doc/DEMO.md`](doc/DEMO.md), which states
+exactly which stages the demo replaces and how it differs from a collected
+report.
 
 ## Contribution
 
@@ -868,15 +1039,24 @@ Contributions are welcome. You can help by:
 - Improving the layout of the composite image
 - Reporting bugs or feature requests
 
-Please follow the style used in this repository: module level header comments describing purpose, requirements and version history, English comments, and documentation updated together with the code.
+Please follow the style used in this repository: module level header comments
+describing purpose, requirements and version history, English comments, and
+documentation updated together with the code.
 
 ## Primary Branch
 
 This repository uses `master` as its primary branch name.
 
-The name is used solely as a technical identifier, following the long-standing convention historically used by Git. It does not express or imply any association with racism, slavery, discrimination, or any political or social ideology.
+The name is used solely as a technical identifier, following the long-standing
+convention historically used by Git. It does not express or imply any
+association with racism, slavery, discrimination, or any political or social
+ideology.
 
 ## License
 
-This repository is dual licensed under the [GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the [LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
-For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also [doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the complete license texts.
+This repository is dual licensed under the
+[GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the
+[LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
+For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also
+[doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the
+complete license texts.

@@ -76,7 +76,7 @@ def deduplicate(entries: List[Entry],
     Drop near duplicate entries, keeping the first occurrence.
 
     The input order decides which entry survives, so callers should
-    sort by preference beforehand; the pipeline passes papers first so
+    sort by preference beforehand. The pipeline passes papers first so
     that the primary source outranks the reporting about it.
 
     Args:

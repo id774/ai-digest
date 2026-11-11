@@ -158,7 +158,7 @@ class TextJsonFallbackTest(unittest.TestCase):
             self.extract([_text("すみません、ツールを使えませんでした。")], True)
 
     def test_rejects_json_with_prose_before_it(self):
-        # Only the whole text block may be the report; a preamble
+        # Only the whole text block may be the report. A preamble
         # around a real report object must not be unwrapped.
         with self.assertRaisesRegex(RuntimeError, "no build_report"):
             self.extract(
@@ -176,7 +176,7 @@ class TextJsonFallbackTest(unittest.TestCase):
                 [_text('Sure: {"topics": [{"title": "a"}]} Thanks.')], True)
 
     def test_rejects_prose_after_the_closing_fence(self):
-        # The closing ``` must be the last non-blank line; trailing
+        # The closing ``` must be the last non-blank line. Trailing
         # prose after it disqualifies the fence.
         with self.assertRaisesRegex(RuntimeError, "no build_report"):
             self.extract(
@@ -282,7 +282,7 @@ class ConfigurationTest(unittest.TestCase):
 
     def test_openai_backend_needs_a_model(self):
         # The anthropic-compatible backend falls back on a known Claude
-        # model here; this one has nothing to fall back on, because the
+        # model here. This one has nothing to fall back on, because the
         # models an endpoint offers are its own.
         loaded = self.load({"SUMMARIZER_BACKEND": "openai-compatible",
                             "SUMMARIZER_API_KEY": "key"})

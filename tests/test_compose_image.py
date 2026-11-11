@@ -73,7 +73,7 @@ class LegendEntriesTest(unittest.TestCase):
     def setUp(self):
         self.draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
         # The bundled bitmap font keeps the test independent of the
-        # fonts installed on the host; only relative widths matter here.
+        # fonts installed on the host. Only relative widths matter here.
         self.font = ImageFont.load_default()
 
     def entries(self, categories, available):
@@ -175,7 +175,7 @@ class DataSourceLabelTest(unittest.TestCase):
                          compose_image._data_source_label(topics))
 
     def test_a_malformed_stored_url_is_skipped_without_raising(self):
-        # A stored source URL is only ever checked as a string; one
+        # A stored source URL is only ever checked as a string. One
         # urlparse() itself refuses, a malformed IPv6 literal here,
         # must not raise out of a rebuild.
         topics = [self.topic(["https://[::1/x"])]

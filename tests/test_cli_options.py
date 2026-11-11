@@ -276,7 +276,7 @@ class NumericOptionTest(unittest.TestCase):
 
 
 # (option, minimum, maximum) for every numeric option 'run' accepts.
-# Retries alone allows zero; --max-topics alone has an upper bound, the
+# Retries alone allows zero. --Max-topics alone has an upper bound, the
 # six topics the summary image grid can draw. The environment variable
 # of the same name shares each bound, which is what NumericSettingTest
 # in test_config.py pins on the other side of the same setting.
@@ -514,7 +514,7 @@ class FontPathOptionTest(unittest.TestCase):
     'run', 'demo' and 'render' reject an unusable --font-path at the
     parser boundary. is_usable_font_path() is mocked for the usable and
     the Pillow-refused cases, so nothing here depends on a font actually
-    installed on the host; the missing-file and directory cases need no
+    installed on the host. The missing-file and directory cases need no
     mock, since they fail the existence check on their own.
     """
 

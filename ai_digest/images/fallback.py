@@ -13,7 +13,7 @@
 #  contains fixed Japanese labels, so a CJK-capable font is required for
 #  complete image rendering. The font is resolved through
 #  config.detect_font_path(), which honours AI_DIGEST_FONT_PATH and
-#  probes the usual Noto CJK locations; a warning is emitted once when
+#  probes the usual Noto CJK locations. A warning is emitted once when
 #  nothing suitable is installed.
 #
 #  This module also exposes the text helpers load_font(), text_size()
@@ -61,7 +61,7 @@ def load_font(font_path: Optional[str], size: int) -> ImageFont.ImageFont:
 
     The bitmap font has no CJK glyphs and ignores the requested size,
     so the result is only legible for ASCII text. Callers cannot do
-    anything about it at run time; the operator has to install a CJK
+    anything about it at run time. The operator has to install a CJK
     font, which the warning explains.
     """
     global _font_warning_emitted
@@ -92,7 +92,7 @@ def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont,
     Wrap text to a pixel width.
 
     Japanese has no word separators, so wrapping is performed character
-    by character; ASCII passages are still broken at a sensible place
+    by character. ASCII passages are still broken at a sensible place
     because a character that does not fit simply starts the next line.
 
     Args:

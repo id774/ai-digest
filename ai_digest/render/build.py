@@ -11,8 +11,8 @@
 #  by copying its directory to any static web server, or opened directly
 #  from the file system when no server is running.
 #
-#  The Flask application does not depend on this module's batch rendering;
-#  it renders the same templates on demand and imports only with_local_images
+#  The Flask application does not depend on this module's batch rendering.
+#  It renders the same templates on demand and imports only with_local_images
 #  from here, which validates local image references before display. Batch
 #  rendering exists only to make the archive self contained.
 #

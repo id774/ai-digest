@@ -68,12 +68,16 @@
 #    - Stream both collectors' requests, parse a body within the response
 #      cap normally, and fail only the oversized source, continuing with
 #      the next one, when the cap is exceeded.
+#    - Skip an untitled RSS article and a credential-bearing citation
+#      without logging its URL, keeping the other articles of the feed.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.5 2026-11-11
+#       Cover untitled RSS entries and private citation URLs without secret logs.
 #  v1.4 2026-11-08
 #       Cover the upper bound of the look back window at the collection
 #       time, and entries whose time cannot be represented or whose feed URL
@@ -225,6 +229,71 @@ class NewsLinkFilterTest(unittest.TestCase):
         self.assertEqual(["https://example.test/good"],
                          [entry.url for entry in entries])
 
+    def test_drops_a_credential_link_without_logging_it(self):
+        with self.assertLogs(news_rss.logger, "WARNING") as logged:
+            entries = self.collect([
+                "https://user:secret@example.test/a",
+                "https://example.test/good",
+            ])
+
+        self.assertEqual(["https://example.test/good"],
+                         [entry.url for entry in entries])
+        text = " ".join(logged.output)
+        self.assertIn("unusable link", text)
+        self.assertNotIn("secret", text)
+        self.assertNotIn("user", text)
+        self.assertNotIn("example.test/a", text)
+
+
+class UntitledNewsEntryTest(unittest.TestCase):
+    """ An article with no title is skipped and the feed goes on. """
+
+    def collect(self, entries):
+        parsed = SimpleNamespace(feed=SimpleNamespace(title="Feed"),
+                                 entries=entries)
+        with mock.patch.object(news_rss, "https_get",
+                               return_value=_FakeHttpsResponse(b"<rss/>")):
+            with mock.patch.object(news_rss.feedparser, "parse",
+                                   return_value=parsed):
+                return news_rss.collect(["https://feed.test/rss"], 24)
+
+    def test_skips_only_the_untitled_article(self):
+        untitled = SimpleNamespace(
+            link="https://example.test/untitled", title="",
+            summary="A valid description",
+            published_parsed=_recent_struct_time())
+        blank = SimpleNamespace(
+            link="https://example.test/blank", title="  \t ",
+            summary="A valid description",
+            published_parsed=_recent_struct_time())
+
+        with self.assertLogs(news_rss.logger, "WARNING") as logged:
+            result = self.collect([
+                untitled, blank, _feed_entry("https://example.test/good")])
+
+        self.assertEqual(["https://example.test/good"],
+                         [entry.url for entry in result.entries])
+        self.assertEqual(["Title"], [entry.title for entry in result.entries])
+        self.assertEqual(3, result.items_seen)
+        self.assertEqual(0, result.items_outside_window)
+        self.assertEqual(0, result.sources_failed)
+        text = " ".join(logged.output)
+        self.assertIn("without a title", text)
+        self.assertNotIn("example.test", text)
+
+    def test_an_untitled_article_does_not_use_up_its_url(self):
+        untitled = SimpleNamespace(
+            link="https://example.test/a", title="",
+            summary="A valid description",
+            published_parsed=_recent_struct_time())
+
+        with self.assertLogs(news_rss.logger, "WARNING"):
+            result = self.collect([untitled, _feed_entry(
+                "https://example.test/a")])
+
+        self.assertEqual(["https://example.test/a"],
+                         [entry.url for entry in result.entries])
+
 
 class ArxivLinkFilterTest(unittest.TestCase):
 
@@ -247,6 +316,20 @@ class ArxivLinkFilterTest(unittest.TestCase):
 
         self.assertEqual([], entries)
         self.assertIn("unusable link", logged.output[0])
+
+    def test_drops_a_credential_link_without_logging_it(self):
+        with self.assertLogs(arxiv.logger, "WARNING") as logged:
+            entries = self.collect([
+                "https://user:secret@arxiv.org/abs/2601.00001",
+                "https://arxiv.org/abs/2601.00002",
+            ])
+
+        self.assertEqual(["https://arxiv.org/abs/2601.00002"],
+                         [entry.url for entry in entries])
+        text = " ".join(logged.output)
+        self.assertNotIn("secret", text)
+        self.assertNotIn("user", text)
+        self.assertNotIn("2601.00001", text)
 
 
 class NewsDirectHttpTargetTest(unittest.TestCase):

@@ -20,7 +20,7 @@ it describe rather than decide. The README is the reference for the settings,
 the command line and the shape of a run, [`DEPLOYMENT.md`](DEPLOYMENT.md) for
 installing and scheduling the batch, and [`DEMO.md`](DEMO.md) for the offline
 demo. Where a rule appears both here and in one of them, this document is where
-it is decided and the other is corrected to agree; where behaviour they
+it is decided and the other is corrected to agree. Where behaviour they
 describe changes, the change is not finished until they describe it.
 
 ---
@@ -31,14 +31,14 @@ describe changes, the change is not finished until they describe it.
 
 This principle governs the following implementation and maintenance rules. It
 does not permit dropping required behavior, security, compatibility, or
-validation; satisfy those obligations without unnecessary complexity.
+validation. Satisfy those obligations without unnecessary complexity.
 
 ## 1. General Policy
 
 ### 1.1 Design Philosophy
 - Prioritize clarity, portability, and explicit control over convenience.
 - Favor predictable behavior and long-term maintainability.
-- Avoid implicit behavior; make control flow, errors, and side effects explicit.
+- Avoid implicit behavior. Make control flow, errors, and side effects explicit.
 - Keep the daily batch (`cli.py`) and the read-only viewer (`app.py`) independent,
   so that a failed or slow batch never takes the site down.
 
@@ -67,7 +67,7 @@ exception. Express preferences and situational decisions with `prefer`,
 so would defeat the repository's stated purpose, intended behavior,
 compatibility, safety, or approved change scope. Where the applicable
 specifications and policy leave a legitimate choice open, an explicit
-maintainer decision governs that choice; general conventions do not override
+maintainer decision governs that choice. General conventions do not override
 it.
 
 ### 1.2 Invariants
@@ -97,7 +97,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   stored, so that a report written before the filter existed, or edited by hand,
   cannot put another scheme into an `href`.
 - Collection and illustration retrieval use absolute HTTPS request targets only.
-  Redirects are followed only while the resolved target remains HTTPS; an HTTP
+  Redirects are followed only while the resolved target remains HTTPS. An HTTP
   downgrade is refused before that request is sent. This is separate from the
   report-link rule above, which continues to allow absolute http and https
   citations.
@@ -112,7 +112,7 @@ These lines are not crossed by a setting, by an option or by an extension.
   mapping use a hash written in the module.
 - Text that arrives from outside is material, never instruction. A feed entry,
   a scraped page, an abstract and a model answer are quoted into a prompt or
-  stored as data; a sentence inside one of them that addresses the system is
+  stored as data. A sentence inside one of them that addresses the system is
   part of the material, and is summarized rather than obeyed.
 - A setting that has been renamed is refused by its old name rather than read
   as its successor, so that a stale value on a host part way through a rename
@@ -123,7 +123,7 @@ The settings decide which API a run is sent to and what it is billed for, so
 they are read strictly.
 
 - Follow the backend-specific settings contract documented in the README and
-  requirements. Never infer or invent an endpoint or a required setting; honor
+  requirements. Never infer or invent an endpoint or a required setting. Honor
   only the defaults explicitly defined for the selected backend.
 - Do not accept an unknown backend. A value the code has no analyzer for is
   refused before a request, never read as one of the backends that does exist.
@@ -138,8 +138,8 @@ they are read strictly.
   because the other failed, and both validate the parsed arguments identically,
   so a report does not differ by the route it took.
 - Do not accept part of an answer. A report is the arguments of the tool call,
-  or the whole of a text block that parses into an object carrying `topics`;
-  an object cut out of surrounding prose is refused. Reading a report from a
+  or the whole of a text block that parses into an object carrying `topics`.
+  An object cut out of surrounding prose is refused. Reading a report from a
   text block at all is a path an operator turns on by name, and a run that
   takes it says so.
 - Do not vary the number of requests silently. A run costs the requests its
@@ -150,7 +150,7 @@ they are read strictly.
 
 ### 1.4 Logging and Output
 - Use the standard `logging` module. Do not print status to standard output
-  from library modules; obtain a module logger with
+  from library modules. Obtain a module logger with
   `logging.getLogger(__name__)` and log through it.
 - Map severity to levels: `INFO` for normal progress, `WARNING` for a degraded
   but recoverable condition (for example a dropped malformed topic or a failed
@@ -174,7 +174,7 @@ they are read strictly.
   `WARNING`) rather than raising the global level.
 - Never log a credential, and never quote one in an error message. Say that a
   key is missing, not what was read.
-- `--verbose` lowers the level to debug for one run; it is the only switch that
+- `--verbose` lowers the level to debug for one run. It is the only switch that
   does, and no module raises the level on its own.
 - When a run replaces a setting from the command line, log which setting took
   which value, so that an unattended run states what it actually ran with.
@@ -189,7 +189,7 @@ they are read strictly.
 
 ### 1.5 Control Flow Rules
 - Reserve explicit termination (`sys.exit`) for the process entry point.
-  Commands and helpers return their status; they do not call `sys.exit`.
+  Commands and helpers return their status. They do not call `sys.exit`.
 - Normal execution paths must return normally and propagate status explicitly.
 - Do not rely on implicit termination or language-specific shortcuts
   (for example a bare `except:` that swallows every error). When a broad
@@ -197,7 +197,7 @@ they are read strictly.
   failure modes are open-ended, log the reason before returning a failure code.
 - `RuntimeError` is the failure a configuration check or an analyzer raises when
   the run cannot go on. The command catches it, logs its message and returns a
-  failure code; it never reaches the top level as a traceback.
+  failure code. It never reaches the top level as a traceback.
 - `ValueError` stays what it is in Python: a value that is wrong on its own
   terms, such as a date that is not a date. The caller that received the value
   from outside decides whether that means a refusal or a `404`.
@@ -206,7 +206,7 @@ they are read strictly.
 - Command-line tools must provide consistent options:
   - `-h`, `--help` to display usage information and exit with code `0`.
   - `-v`, `--version` to display version information and exit with code `0`.
-- Build the parser with `argparse`; `-h`/`--help` is provided by it, and
+- Build the parser with `argparse`. `-h`/`--help` is provided by it, and
   `-v`/`--version` is declared explicitly.
 - Help or version output represents a successful, user-requested termination.
 - Invalid or unsupported options must result in usage output.
@@ -217,14 +217,14 @@ they are read strictly.
 - An option value the pipeline cannot use is refused by the parser, before
   anything is collected and before an API call is spent.
 - Subcommands carry the verbs of the batch (`run`, `demo`, `render`, `list`).
-  A new mode of operation becomes a subcommand; it does not become a flag that
+  A new mode of operation becomes a subcommand. It does not become a flag that
   changes what an existing subcommand means.
 
 ### 1.7 Error Handling and Exit Codes
 - Treat the operation result, whether later independent work continues, and
   whether anything needs to be reported as separate decisions. A required
   prerequisite whose absence makes correct completion impossible stops the
-  affected command; an independent source failure continues only under the
+  affected command. An independent source failure continues only under the
   explicit degraded-source rules already defined by this policy.
 - Detect command failures and unmet prerequisites early.
 - Make an error observable at the layer responsible for reporting it, naming
@@ -263,7 +263,7 @@ they are read strictly.
   code passes it is not supported.
 - Decide in advance what an absent optional capability leads to: use the
   alternative, skip the step, or refuse the run. Reporting is a separate
-  decision. An expected or normal skip may be silent; report the absence when
+  decision. An expected or normal skip may be silent. Report the absence when
   it is degraded, actionable, or otherwise operationally relevant. Do not emit
   the same non-actionable absence on every scheduled run.
 
@@ -276,7 +276,7 @@ they are read strictly.
   `Requirements`, `Environment Variables` (`config.py` only),
   `Version History`.
 - `Routes` sits next to `Description` because it says what the module serves,
-  which is part of what it is; `Usage`, `Options` and `Exit Codes` say how the
+  which is part of what it is. `Usage`, `Options` and `Exit Codes` say how the
   module is driven, and follow the identifying block.
 - `Requirements` names `Python Version: 3.9 or later` first, then what the
   module needs beyond it: the third-party packages by name, `See
@@ -345,7 +345,7 @@ they are read strictly.
   entry already standing at the top of `doc/VERSIONS`.
 - An unreleased entry carries `(Release Date: TBD)`, and its version number
   stays provisional until it ships. An entry opened under one number may be
-  released under another once what accumulated in it is known; which number it
+  released under another once what accumulated in it is known. Which number it
   takes is decided then. Replacing `TBD` with the actual date is the release
   itself, not a change to record.
 - A repository that has not yet made its first release is in its initial
@@ -384,7 +384,7 @@ they are read strictly.
 - Where the file has settled on a width of its own, predating this limit, a
   new entry is wrapped to that width and balanced against the lines already
   standing, so that the version history stays of a piece. Wrapping to hold an
-  established form does not overturn the two-line, 80-column limit above; the
+  established form does not overturn the two-line, 80-column limit above. The
   entries already written are not reflowed or rebuilt to suit it.
 - When an entry runs long, look first for what can be dropped or abstracted:
   the implementation detail, the example, the detailed reason, the secondary
@@ -395,7 +395,7 @@ they are read strictly.
 - An entry that is long because it names the identifiers it needs is not
   shortened for its length alone.
 - Merge changes that serve one purpose. Related changes to the same file within
-  one version are merged as a rule; changes to the same file that mean
+  one version are merged as a rule. Changes to the same file that mean
   different things are left as separate entries rather than forced together.
 - Place entries that touch the same feature, file or purpose near each other,
   and append an independent change to the end of that version. Reading well as
@@ -413,7 +413,7 @@ they are read strictly.
   not make it one.
 - The name states the format so that nobody has to infer it from the content.
   Reading a file to guess what it is gives a different answer to every reader
-  and to every agent; the extension gives all of them the same answer.
+  and to every agent. The extension gives all of them the same answer.
 - The two formats are kept apart because they are read in different places.
   Markdown is read rendered, in a browser, where the structure carries the
   meaning. Plain text is read raw, in a terminal, a pager or a diff, where the
@@ -512,12 +512,12 @@ they are read strictly.
   names the section it falls in. A document named with `.md` is covered by that
   line and needs no entry of its own.
 - `doc/VERSIONS` is excluded. It is underlined plain text, and `diff=markdown`
-  empties the hunk headers that otherwise name the version; leaving it out
+  empties the hunk headers that otherwise name the version. Leaving it out
   agrees with treating it as a plain text version history.
 - `doc/COPYING` and `doc/COPYING.LESSER` are excluded as the licence texts,
   which agrees with their role as the official legal wording.
 - No file is given `linguist-language`. Nothing in `.gitattributes` makes GitHub
-  render a document that carries no extension; that is what the `.md` names are
+  render a document that carries no extension. That is what the `.md` names are
   for, and an extensionless document is not dressed up as Markdown.
 - How a document appears on GitHub is not a reason on its own to change its
   format or its attributes.
@@ -568,7 +568,7 @@ they are read strictly.
 - Tests live under `tests/` as `test_*.py` and run with
   `python -m unittest discover -s tests`.
 - Use only the standard library for tests: `unittest` and `unittest.mock`.
-- Tests must not perform network access or call the Claude API; stub the client
+- Tests must not perform network access or call the Claude API. Stub the client
   and feed collectors fixed input instead.
 - A test needs no credential, no `.env` and no reachable endpoint.
 - A test writes nothing outside a temporary directory. Nothing under `data/` is
@@ -577,9 +577,9 @@ they are read strictly.
   modules (`config`, `cli`, `ai_digest`) from there.
 - The runner exits `0` only when every test passed, which is what a cron job or
   a CI step checks. A passing suite says nothing about the feeds or the API
-  being reachable; only an actual run does.
+  being reachable. Only an actual run does.
 - A fix for a defect arrives with the test that fails without it.
-- Assume cron execution by default; the batch reads its configuration from the
+- Assume cron execution by default. The batch reads its configuration from the
   environment or `.env`, so required variables are defined explicitly there.
 - The batch must be safe to run twice for the same date: a second run replaces
   the report of that day rather than appending to it or refusing to start.
@@ -589,7 +589,7 @@ they are read strictly.
   run left behind.
 - The batch, the viewer and the utilities run with the privileges their work
   needs and no more. A step that needs a raised privilege takes it for that
-  step; the process does not run its whole body under it.
+  step. The process does not run its whole body under it.
 
 ### 1.12 Pull Request Scope and History
 A pull request presents the change it proposes, not the sequence of corrections
@@ -680,7 +680,7 @@ Before a change is proposed, it answers these:
 
 ### 1.14 License
 - Follow the applicable terms in `doc/LICENSE.md`, `doc/COPYING`, and
-  `doc/COPYING.LESSER`; those documents are the authority for licensing.
+  `doc/COPYING.LESSER`. Those documents are the authority for licensing.
 - Every module header repeats the license line of the standard block, so that a
   file read on its own still states its terms.
 - Add a dependency only when its license is compatible with that choice.
@@ -690,7 +690,7 @@ Before a change is proposed, it answers these:
 ### 2.1 Supported Versions and Compatibility
 - Target Python 3.9 or later, and state `Python Version: 3.9 or later` in module
   headers. Do not state a minimum higher than the code actually requires.
-- Type hints are used throughout and are part of the house style; they are not
+- Type hints are used throughout and are part of the house style. They are not
   avoided for backward compatibility, because the supported floor is 3.9.
 - Prefer `str.format()` over f-strings, consistent with the existing code base.
 
@@ -717,7 +717,7 @@ Before a change is proposed, it answers these:
   settings used by that execution path, and the `validate_*` methods refuse an
   effective configuration no backend can serve. `load_config()` is retained
   for compatibility and tests and is not called by an application execution
-  path. A command runs the checks it needs before it collects anything;
+  path. A command runs the checks it needs before it collects anything.
   `--version` and the tests run none.
 - An empty or whitespace-only string setting reads as unset, so that a bare
   `NAME=` line in `.env` behaves exactly like the absent line.
@@ -726,13 +726,13 @@ Before a change is proposed, it answers these:
   whether it is required, and the default when it has one), `.env.example` as a
   file to copy, and the README for a reader who is not editing code.
 - `.env.example` ships no placeholder credential. An empty value is honest about
-  being unset; a fake key would pass the authentication check and fail only
+  being unset. A fake key would pass the authentication check and fail only
   after a whole run has been spent.
 
 ### 2.5 Dependencies and I/O
 - Runtime dependencies are declared and version-pinned in `requirements.txt`
   with compatible ranges, so that a future major release cannot break an
-  unattended cron run. Add a dependency only when it earns its place; prefer the
+  unattended cron run. Add a dependency only when it earns its place. Prefer the
   standard library otherwise.
 - A package that only one backend or one developer tool needs stays out of
   `requirements.txt` and is named where it is required (in the comment at the
@@ -744,10 +744,10 @@ Before a change is proposed, it answers these:
 - Treat scraping and every external fetch as best effort: enforce timeouts and
   size limits, and fall back rather than failing the whole run when a single
   source misbehaves.
-- Every outbound request carries an explicit timeout; there is no request
+- Every outbound request carries an explicit timeout. There is no request
   without one, because an unattended run must not hang until the next one
   starts. A collector or scraper request also carries the configured
-  User-Agent; the summarization request does not carry it. A collector or
+  User-Agent. The summarization request does not carry it. A collector or
   scraper timeout bounds the whole fetch by a single wall-clock deadline, not
   each socket operation separately, so a slow trickle of bytes cannot reset
   the budget and hold the request open past it.
