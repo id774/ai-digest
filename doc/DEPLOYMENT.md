@@ -4,8 +4,8 @@ This guide deploys ai-digest on Debian: the read only viewer behind nginx and
 HTTPS, and the daily batch under cron. Run the commands from an account with
 `sudo` access.
 
-The two processes share nothing but `DATA_DIR`. The batch writes it and exits;
-the viewer reads it and never calls an API. That separation is what this guide
+The two processes share nothing but `DATA_DIR`. The batch writes it and exits.
+The viewer reads it and never calls an API. That separation is what this guide
 installs, and it is why a failed batch leaves yesterday's report on the site.
 
 ## Before you begin
@@ -70,7 +70,7 @@ Set `SUMMARIZER_BACKEND=plain` instead to run without any credential at all, at
 the cost of translation and clustering. A host upgraded from an earlier release
 must unset the `ANTHROPIC_*` and `OPENAI_*` variables wherever they were
 exported: `cli.py run` refuses to start while one of them is present and names
-its replacement. In this deployment, `.env` supplies the batch settings; the
+its replacement. In this deployment, `.env` supplies the batch settings. The
 viewer unit supplies `DATA_DIR` and `PORT` directly. `config.py` may parse
 `.env` for the viewer, but its scoped loader ignores endpoint settings, so a
 stale legacy name here stops only the batch, never the site. Every setting is
@@ -82,7 +82,7 @@ credential and is read by one service user. `.env` is ignored by Git and must
 never be committed.
 
 Give the archive a home. The default `DATA_DIR` is `data/reports` under the
-installation directory, which the service user already owns; point it elsewhere
+installation directory, which the service user already owns. Point it elsewhere
 when the archive belongs on another volume:
 
 ```sh
@@ -107,7 +107,7 @@ the success condition. See [`DEMO.md`](DEMO.md).
 
 Review [`deploy/ai-digest.service`](../deploy/ai-digest.service) before copying
 it. Its user and paths must match the installation. The unit sets `DATA_DIR`
-and `PORT` directly in its `Environment=` lines; those exported values take
+and `PORT` directly in its `Environment=` lines. Those exported values take
 precedence over matching `.env` entries, and the viewer's scoped loader ignores
 batch-only settings. `ExecStart` binds gunicorn to that same `PORT` rather than
 a separate literal, so adjust the port in one place. Edit both if the default
@@ -156,12 +156,12 @@ local time. The cron entry deliberately:
 - It `cd`s into the installation directory first, because `.env` is found
   relative to the repository root and cron loads no profile.
 - It redirects both stdout and stderr into `/var/log/ai-digest/run.log`, so
-  cron has no output left to mail regardless of `MAILTO`; watch that log file
+  cron has no output left to mail regardless of `MAILTO`. Watch that log file
   (or the batch's exit status) to notice a broken feed or an expired key
   without anyone watching the site.
 
 Run it once by hand before trusting the schedule. An API-backed backend starts
-one summarization request before any configured SDK retry; `plain` starts none:
+one summarization request before any configured SDK retry. `plain` starts none:
 
 ```sh
 sudo -u ai-digest sh -c 'cd /opt/ai-digest && .venv/bin/python cli.py run'
@@ -184,8 +184,8 @@ sudo systemctl reload nginx
 ```
 
 The sample assumes a certificate already exists and redirects port 80 to HTTPS.
-Debian's Certbot packages can obtain and renew one when that is preferred;
-follow the certificate provider's current instructions rather than copying an
+Debian's Certbot packages can obtain and renew one when that is preferred.
+Follow the certificate provider's current instructions rather than copying an
 old command. Run `nginx -t` before every reload.
 
 ## Restrict access
@@ -225,7 +225,7 @@ its availability.
 
 The `anthropic-compatible` backend calls the Messages API with a tool named `build_report`, and
 reads the answer from the `tool_use` block. An Anthropic-compatible endpoint
-must therefore support `tools` and return `tool_use` responses; being compatible
+must therefore support `tools` and return `tool_use` responses. Being compatible
 with the Messages API is not enough on its own.
 
 Where an endpoint differs, the difference is a setting rather than a code path:
@@ -269,13 +269,13 @@ which is why `SUMMARIZER_BACKEND=plain` removes the cost entirely.
 for each summarization attempt, not a complete-attempt wall-clock deadline.
 The read timeout limits the wait for each incoming chunk, so one attempt can
 run longer while data continues arriving. `SUMMARIZER_MAX_RETRIES` (default 2)
-counts retries after the initial attempt; `0` means no retries. There can be
+counts retries after the initial attempt. `0` means no retries. There can be
 at most `SUMMARIZER_MAX_RETRIES + 1` attempts. The expression
 `SUMMARIZER_TIMEOUT * (SUMMARIZER_MAX_RETRIES + 1)` is the sum of the nominal
 attempt timeout settings, not an elapsed-time floor or ceiling. Early
 completion, SDK backoff, jitter, `Retry-After` and other stages of the run
 prevent it from bounding the total time. A cron interval longer than that
-expression does not guarantee that the previous run has ended; do not rely
+expression does not guarantee that the previous run has ended. Do not rely
 on the interval alone to prevent overlapping runs.
 `HTTP_TIMEOUT` (default 60 seconds) is a separate limit and applies to the
 collectors and the scraper, whose requests are many and short.
@@ -288,7 +288,7 @@ are not a contract.
 What is stable is the archive on disk. `data/reports/<date>/report.json` holds
 the topics, the sources and the run statistics, and `index.html` in the same
 directory is self contained, so one day can be published by copying its
-directory to any static web server. Read the files; do not scrape the viewer.
+directory to any static web server. Read the files. Do not scrape the viewer.
 
 ## Routine operations
 
@@ -319,7 +319,7 @@ requires `nginx -t` and a reload.
 **Rotate the API key** by replacing it in `.env`. The viewer does not use the
 key: although `config.py` may parse `.env`, the credential is outside the
 viewer scope and is neither exported nor stored in its Config. Nothing needs
-restarting on the viewer's account; the next batch run is the first thing that
+restarting on the viewer's account. The next batch run is the first thing that
 exercises the new key, so run `cli.py run` by hand to confirm it rather than
 waiting for cron. Never put a key on a command line: `ps` is readable by every
 user of the host, which is why no credential has a command line option.
@@ -354,7 +354,7 @@ Back up `.env` securely as well. The virtual environment and the clone are both
 reproducible and need no backup.
 
 **Roll back** by checking out the previous revision and restarting. Reports
-already written are not touched by a rollback; `cli.py render DATE` redraws one
+already written are not touched by a rollback. `cli.py render DATE` redraws one
 from its stored JSON when a rendering change has to be undone in place.
 
 ## When a run fails

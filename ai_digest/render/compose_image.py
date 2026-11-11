@@ -22,7 +22,7 @@
 #  here rather than by a CSS engine.
 #
 #  The image includes fixed Japanese labels and may include Japanese
-#  topic text, so a CJK capable font is required; see
+#  topic text, so a CJK capable font is required. See
 #  ai_digest.images.fallback for how the font is resolved.
 #
 #  Author: id774 (More info: https://id774.net)
@@ -203,7 +203,7 @@ def _draw_header(draw: ImageDraw.ImageDraw, date: str,
     Draw the title, the subtitle and the category legend.
 
     lookback_hours is None for a demo report, which collected nothing
-    and so has no real window to announce; the subtitle names the
+    and so has no real window to announce. The subtitle names the
     sample instead of asserting a number of hours.
     """
     title_font = load_font(font_path, 40)
@@ -255,7 +255,7 @@ def _draw_footer(draw: ImageDraw.ImageDraw, font_path: Optional[str],
     """
     Draw the metadata strip and the disclaimer.
 
-    lookback_hours is None for a demo report; the period column names
+    lookback_hours is None for a demo report. The period column names
     the sample instead of asserting a number of hours. source_label is
     derived from what the report's topics actually cite, so an
     arXiv-only or news-only report is not described as drawing from
@@ -415,13 +415,13 @@ def compose(date: str, topics: List[Topic], report_dir: str,
     Args:
         date: Report date in YYYY-MM-DD form.
         topics: Topics of the report, already ordered and illustrated.
-        report_dir: Directory holding the topic images; the composite
+        report_dir: Directory holding the topic images. The composite
             image is written there as summary.png.
         font_path: Path of a CJK capable font, or None.
         lookback_hours: Age limit the collectors applied, announced in
             the header and the footer. None for a demo report, which
-            collected nothing and so has no real window to announce;
-            the header and the footer name the sample instead.
+            collected nothing and so has no real window to announce.
+            The header and the footer name the sample instead.
 
     Returns:
         The path of the written PNG file.

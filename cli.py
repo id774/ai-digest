@@ -124,11 +124,11 @@
 #       Skip environment settings the command line replaces, an incompatible
 #       change to how a setting is resolved: a lower invalid value is ignored.
 #  v2.2 2026-09-23
-#       Incompatible: use host-local implicit dates and number-only --version;
-#       also preflight openai and trim SUMMARIZER_BASE_URL.
+#       Incompatible: use host-local implicit dates and number-only --version.
+#       Also preflight openai and trim SUMMARIZER_BASE_URL.
 #  v2.1 2026-09-22
 #       Incompatible: normalize scalar overrides: trim, clear blanks and
-#       lower-case tokens; stop recording demo lookback_hours.
+#       lower-case tokens. Stop recording demo lookback_hours.
 #  v2.0 2026-09-12
 #       Incompatible: reject --max-topics values above the six-topic limit.
 #  v1.9 2026-09-08
@@ -191,7 +191,7 @@ logger = logging.getLogger("ai_digest.cli")
 
 # Config fields an option may replace. Every option is named after the
 # field it sets, so argparse stores it under that name and no table of
-# its own is needed; an option left out stays None and changes nothing.
+# its own is needed. An option left out stays None and changes nothing.
 OVERRIDABLE_FIELDS = (
     "summarizer_base_url",
     "summarizer_model",
@@ -263,7 +263,7 @@ def max_topics_int(value: str) -> int:
     Parse --max-topics, bounded to what the summary image grid can draw.
 
     run and demo share this bound, so a report's HTML, report.json and
-    fixed 3x2 summary.png always describe the same topic set; no
+    fixed 3x2 summary.png always describe the same topic set. No
     workaround truncates a larger value back down at render time.
     """
     return bounded_int(value, 1, MAX_REPORT_TOPICS)
@@ -338,7 +338,7 @@ _BLANK_OVERRIDE_DEFAULTS: Dict[str, Callable[[], Any]] = {
 }
 
 # Scalar string options config.py also trims when it reads them from
-# the environment or .env; trimmed here first so a value differing
+# the environment or .env. Trimmed here first so a value differing
 # from its environment equivalent only by surrounding whitespace is
 # not treated as a different, nonblank override, and so the same
 # trimmed value is what gets validated and, for summarizer_base_url,
@@ -390,7 +390,7 @@ def apply_overrides(config: Config, args: argparse.Namespace) -> Config:
     if "data_dir" in overrides:
         overrides["data_dir"] = os.path.abspath(overrides["data_dir"])
     # font_path_option() already validated and returned the exact path
-    # the parser accepted; it is used as is, never re-resolved.
+    # the parser accepted. It is used as is, never re-resolved.
 
     logger.info("command line overrides: %s", ", ".join(
         "{0}={1}".format(
@@ -465,7 +465,7 @@ def attach_images(topics: List[Topic], report_dir: str, config: Config,
     Give every topic an illustration, in place.
 
     Scraping is attempted on the sources of the topic in order. The
-    first usable image wins; when every attempt fails, or when scraping
+    first usable image wins. When every attempt fails, or when scraping
     is disabled, a card is generated locally so that no topic is left
     without an image.
     """
@@ -526,13 +526,13 @@ def build_and_publish_report(config: Config, date: str, topics: List[Topic],
 
     Every artifact is generated in the staging directory a publication
     workspace provides, and <DATA_DIR>/<date> is replaced by it as a
-    whole only once every one of them exists; a run that fails partway
+    whole only once every one of them exists. A run that fails partway
     through never leaves a half-written or mixed-version report where a
     complete one used to be, or should now be.
 
     Returns:
         True once the report is published. False when generation or
-        publication failed; either failure is logged before returning.
+        publication failed. Either failure is logged before returning.
     """
     try:
         with publication_workspace(config.data_dir, date) as staging_dir:
@@ -559,7 +559,7 @@ def command_run(args: argparse.Namespace, config: Config) -> int:
     local calendar date - the day cron actually ran it on - rather than
     UTC's, which can name the day before or after it around the date
     boundary depending on how far the host's zone sits from UTC. The
-    window collected and generated_at stay UTC-based; only which date
+    window collected and generated_at stay UTC-based. Only which date
     directory an unattended run's report lands in follows local time.
     """
     date = args.date or datetime.now().strftime("%Y-%m-%d")
@@ -685,7 +685,7 @@ def command_demo(args: argparse.Namespace, config: Config) -> int:
         return 1
 
     date = args.date or sample_date
-    # --date, when given, was already validated by the parser; a sample
+    # --date, when given, was already validated by the parser. A sample
     # date never passes through that boundary, so it is checked here,
     # before anything is generated or published.
     if not is_valid_date(date):
@@ -724,7 +724,7 @@ def command_render(args: argparse.Namespace, config: Config) -> int:
     The authoritative report.json and the topic illustrations are
     copied into a staging directory and only the derived artifacts are
     regenerated there, so a failure partway through leaves the stored
-    report exactly as it was; only a complete rebuild replaces it.
+    report exactly as it was. Only a complete rebuild replaces it.
     """
     report = load_report(config.data_dir, args.date)
     if report is None:

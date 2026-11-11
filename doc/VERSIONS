@@ -11,6 +11,7 @@ v1.3 (Release Date: TBD)
   incompatible change to how a setting is resolved.
 - Exclude future-dated or unrepresentable feed timestamps and require ASCII
   digits in report dates, incompatible changes to accepted entries and dates.
+- Skip untitled RSS entries instead of publishing blank topic headlines.
 - Fall back for incomplete images or malformed URLs; validate and pin public
   IPv4/IPv6 targets within the fetch deadline with safe DNS restoration.
 - Reject Anthropic text JSON fallback responses stopped by the token limit.
@@ -20,8 +21,8 @@ v1.3 (Release Date: TBD)
   an incompatible change to which image paths can be shown or served.
 - Reject stored reports above six topics, an incompatible change to which
   archived reports are readable, so HTML and summary images agree.
-- Reject credential-bearing feed and endpoint URLs before use, an incompatible
-  change that keeps embedded credentials out of application logs and reports.
+- Reject credential-bearing feeds, endpoints, citations, redirects and images,
+  an incompatible change that keeps embedded secrets out of logs and reports.
 
 v1.2.3 (2026-09-23)
 -------------------

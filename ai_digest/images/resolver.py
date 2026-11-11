@@ -9,7 +9,7 @@
 #  its primary source.
 #
 #  For arXiv papers the identifier is extracted from the URL and the
-#  HTML rendering hosted at ar5iv.labs.arxiv.org is parsed; the first
+#  HTML rendering hosted at ar5iv.labs.arxiv.org is parsed. The first
 #  image inside a <figure> element is used, which is normally the
 #  overview figure of the paper. For news articles the Open Graph image
 #  declared by <meta property="og:image"> is used.
@@ -28,6 +28,8 @@
 #  - requests, beautifulsoup4, Pillow
 #
 #  Version History:
+#  v1.8 2026-11-11
+#       Refuse image URLs containing credentials and omit userinfo from credits.
 #  v1.7 2026-11-09
 #       Restore the original DNS resolver when pin installation is interrupted.
 #  v1.6 2026-11-08
@@ -38,7 +40,7 @@
 #       incomplete picture falls back to another source or a generated card.
 #  v1.4 2026-09-23
 #       Pin under the canonical hostname, bypass proxy for, and time-bound
-#       scraping; refuse decompression bombs; classify arXiv by host/path.
+#       scraping. Refuse decompression bombs. Classify arXiv by host/path.
 #  v1.3 2026-09-08
 #       Fetch source pages and images only over HTTPS.
 #  v1.2 2026-08-04
@@ -72,7 +74,7 @@ from ai_digest.transport import (FetchTimeoutError, HTTPSOnlyError,
                                  hard_deadline, https_get)
 
 # arXiv abstract, PDF and versioned URLs all embed the same identifier,
-# at the start of the path; a version suffix or a .pdf extension after
+# at the start of the path. A version suffix or a .pdf extension after
 # it is not part of the match and does not need to be.
 ARXIV_PATH_PATTERN = re.compile(r"^/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})")
 
@@ -131,7 +133,7 @@ def _resolve_addresses(hostname: str) -> List[IPAddress]:
     A literal IP address is used as is. A DNS name is resolved through
     getaddrinfo(), the same resolver requests/urllib3 uses to actually
     connect, so the addresses checked are the ones a request would
-    reach; every address a name resolves to is returned, since a host
+    reach. Every address a name resolves to is returned, since a host
     that answers with a public address and a private one is only as
     safe as its worst answer.
 
@@ -159,7 +161,7 @@ def _pinned_getaddrinfo(hostname: str, addresses: List[IPAddress],
     Return a getaddrinfo() replacement answering only from addresses.
 
     A call naming any other host is passed through to the real resolver
-    unchanged; a call naming hostname can only ever get back one of the
+    unchanged. A call naming hostname can only ever get back one of the
     addresses already checked as public, whatever a name server would
     answer for it at that moment.
     """
@@ -193,7 +195,7 @@ def validate_and_pin_public_target(url: str) -> Iterator[None]:
     DNS resolution to exactly the addresses just checked.
 
     A preflight lookup and the lookup made when a connection is actually
-    opened are two separate DNS resolutions; a host that answers the
+    opened are two separate DNS resolutions. A host that answers the
     first with a public address and the second with a private one - DNS
     rebinding - would otherwise let a validated hostname's connection
     reach a private target anyway. Pinning closes that gap: for the life
@@ -201,14 +203,14 @@ def validate_and_pin_public_target(url: str) -> Iterator[None]:
     return an address this function already checked, so the address
     connected to is provably one of the addresses validated. The
     original hostname still decides TLS SNI, certificate validation and
-    the Host header; only which address the connection reaches is
+    the Host header. Only which address the connection reaches is
     fixed, and it is never a non-public one, whatever a name server
     answers meanwhile.
 
     url's host is canonicalized through canonical_connect_hostname()
     before it is resolved, validated or pinned, so a Unicode hostname is
     checked and pinned under the same lower-cased ASCII identity the
-    connection itself looks up; validating the raw string instead would
+    connection itself looks up. Validating the raw string instead would
     let a non-ASCII hostname's real connection miss the pin entirely and
     resolve through the unpinned system resolver.
 
@@ -290,7 +292,17 @@ def _fetch(url: str, timeout: int, user_agent: str,
     meaning here. trust_env is off, so an environment proxy never picks
     the connection's real destination out from under target_pin: without
     it, a proxy could resolve and route to a target_pin never sees.
+
+    A URL carrying userinfo is refused before any request, and neither
+    it nor its credentials are logged.
     """
+    try:
+        if "@" in urlparse(url).netloc:
+            logger.info("image source with embedded credentials refused")
+            return None
+    except ValueError:
+        logger.info("image source URL could not be parsed")
+        return None
     try:
         with https_get(url, timeout, user_agent, stream=True,
                        target_pin=validate_and_pin_public_target,
@@ -387,10 +399,14 @@ def _join_link(base: str, link: str) -> Optional[str]:
     """
     try:
         joined = urljoin(base, link)
-        urlparse(joined)
+        netloc = urlparse(joined).netloc
     except ValueError:
         # The page URL may itself carry userinfo, so it is not logged.
         logger.info("malformed image link ignored")
+        return None
+    if "@" in netloc:
+        # A candidate carrying userinfo is never fetched or credited.
+        logger.info("image link with embedded credentials ignored")
         return None
     return joined
 
@@ -460,6 +476,13 @@ def resolve(source_url: str, timeout: int = 15,
     """
     if not source_url:
         return None
+    try:
+        if "@" in urlparse(source_url).netloc:
+            logger.info("image source with embedded credentials refused")
+            return None
+    except ValueError:
+        logger.info("image source URL could not be parsed")
+        return None
 
     candidate = arxiv_figure_url(source_url, timeout, user_agent)
     if candidate is None:
@@ -472,4 +495,4 @@ def resolve(source_url: str, timeout: int = 15,
         return None
 
     content, extension = downloaded
-    return content, extension, urlparse(candidate).netloc
+    return content, extension, urlparse(candidate).netloc.rpartition("@")[2]

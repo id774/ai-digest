@@ -60,9 +60,9 @@
 #    - Return None for syntactically valid JSON with an invalid structure.
 #    - Return None when a stored topic's field types are ones the renderer
 #      cannot consume - a non-string category, title, image or
-#      image_credit; non-list bullets or a non-string bullet; non-list
+#      image_credit. Non-list bullets or a non-string bullet. Non-list
 #      sources, a non-dict source, or a source with a non-string title
-#      or url; and an image that is neither a string nor null.
+#      or url. And an image that is neither a string nor null.
 #    - Rebuild a topic from a minimal stored dict missing every optional
 #      field, relying on Topic.from_dict()'s own defaults.
 #    - Return None when the stored date does not match its directory.
@@ -88,6 +88,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.5 2026-11-11
+#       Keep the absolute-path rejection test artifact inside its own workspace.
 #  v1.4 2026-11-07
 #       Cover rejection of non-ASCII digit dates, stored reports above six
 #       topics, and topic or summary images outside their report directory.
@@ -158,7 +160,7 @@ class DateValidationTest(unittest.TestCase):
                     report_dir("/tmp/archive", date)
 
     def test_lookups_return_none_instead_of_raising(self):
-        # The viewer passes URL segments straight through; a crafted one
+        # The viewer passes URL segments straight through. A crafted one
         # has to end as a 404, not as a traceback or a file outside the
         # archive.
         self.assertIsNone(load_report("/tmp/archive", "../../etc"))
@@ -577,7 +579,7 @@ class PublicationWorkspaceTest(unittest.TestCase):
 
             def flaky_rename(src, dst):
                 calls.append((src, dst))
-                # The first rename moves the existing report aside; the
+                # The first rename moves the existing report aside. The
                 # second, moving the new one into place, is the one that
                 # fails here so the rollback path is exercised.
                 if len(calls) == 2:
@@ -726,8 +728,10 @@ class ReportLocalAssetPathTest(unittest.TestCase):
                 directory, "../secret.png"))
 
     def test_rejects_an_absolute_path(self):
-        with tempfile.TemporaryDirectory() as directory:
-            outside = os.path.join(directory, "..", "secret.png")
+        with tempfile.TemporaryDirectory() as workspace:
+            directory = os.path.join(workspace, "report")
+            os.makedirs(directory)
+            outside = os.path.join(workspace, "secret.png")
             with open(outside, "wb") as handle:
                 handle.write(b"x")
 

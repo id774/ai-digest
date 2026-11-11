@@ -111,7 +111,7 @@ class RenderLookbackTest(unittest.TestCase):
     def test_names_a_demo_report_by_its_model_even_with_a_stale_window(
             self):
         # A demo report stored before this rule existed still carries a
-        # numeric lookback_hours; the demo model must still win.
+        # numeric lookback_hours. The demo model must still win.
         code, compose = self.render({"model": "demo", "lookback_hours": 72})
 
         self.assertEqual(0, code)

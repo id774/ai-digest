@@ -23,7 +23,7 @@
 #  still derive an HTTPS ar5iv URL to fetch.
 #
 #  No request is made. resolver.https_get is replaced by a stub
-#  returning a stand-in response for most cases; the direct HTTP source
+#  returning a stand-in response for most cases. The direct HTTP source
 #  and SSRF refusal cases go through the real transport helper with
 #  requests.Session mocked instead, so that "no request is ever sent" is
 #  proven rather than assumed. The suite needs no network either way.
@@ -54,7 +54,7 @@
 #    - Refuse an HTTPS to http downgrade redirect target.
 #    - Derive the HTTPS ar5iv URL from an http arXiv citation, a
 #      subdomain of arxiv.org, and one carrying a version suffix or a
-#      .pdf extension; never fetch a non-arXiv host merely carrying the
+#      .pdf extension. Never fetch a non-arXiv host merely carrying the
 #      text 'arxiv.org/abs/...' somewhere in its own path or query.
 #    - Judge a public, loopback, private, link-local, unspecified and
 #      multicast address correctly, multicast in particular, since it
@@ -81,6 +81,8 @@
 #    - Pin a public IPv6 literal by its unbracketed address without a DNS
 #      preflight, reach the request with it, and refuse loopback,
 #      unique-local and link-local IPv6 literals before any request.
+#    - Refuse image page and candidate URLs carrying userinfo before any
+#      request, try the next safe candidate, and credit only host and port.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -88,7 +90,8 @@
 #
 #  Version History:
 #  v1.6 2026-11-11
-#       Cover validated public and rejected private IPv6 literal targets.
+#       Cover public/private IPv6 targets and refusal of images carrying
+#       URL credentials, including safe candidate fallback and credits.
 #  v1.5 2026-11-09
 #       Verify DNS resolver restoration after interrupted pin installation.
 #  v1.4 2026-11-08
@@ -184,7 +187,7 @@ class ReadCappedTest(unittest.TestCase):
         self.assertIsNone(resolver._read_capped(response, 100))
 
     def test_does_not_read_the_whole_body_before_giving_up(self):
-        # An endless response must not be buffered in full first; the
+        # An endless response must not be buffered in full first. The
         # generator is abandoned as soon as the limit is passed.
         read = []
 
@@ -324,7 +327,7 @@ class DownloadImageTest(unittest.TestCase):
 
     def test_a_decompression_bomb_warning_range_image_also_yields_none(self):
         # Below 2x MAX_IMAGE_PIXELS, Pillow only warns instead of
-        # raising; that range must be refused just as the error range
+        # raising. That range must be refused just as the error range
         # is, not let through as a usable image.
         side = int((1.5 * Image.MAX_IMAGE_PIXELS) ** 0.5) + 10
         buffer = io.BytesIO()
@@ -467,7 +470,7 @@ class PublicAddressJudgmentTest(unittest.TestCase):
             resolver._is_public_address(ipaddress.ip_address("0.0.0.0")))
 
     def test_rejects_multicast_even_though_it_is_global(self):
-        # 224.0.0.0/4 reports is_global True; is_multicast is what
+        # 224.0.0.0/4 reports is_global True. is_multicast is what
         # actually excludes it, so this pins that is_global alone is
         # not what _is_public_address relies on.
         address = ipaddress.ip_address("224.0.0.1")
@@ -655,7 +658,7 @@ class ValidatePublicTargetTest(unittest.TestCase):
     def test_a_unicode_host_is_resolved_and_pinned_under_its_ascii_form(
             self):
         # requests IDNA-encodes a non-ASCII host before it ever reaches
-        # socket.getaddrinfo(); validating and pinning the raw Unicode
+        # socket.getaddrinfo(). Validating and pinning the raw Unicode
         # string instead would leave the real connection's lookup, for
         # the ASCII form, unpinned and unchecked.
         addrinfo = [(None, None, None, None, ("93.184.216.34", 443))]
@@ -693,7 +696,7 @@ class ValidatePublicTargetTest(unittest.TestCase):
         self.assertEqual(1, real_getaddrinfo.call_count)
 
     def test_refuses_a_host_that_cannot_be_idna_encoded(self):
-        # A zero-width space is not a label idna can encode; the target
+        # A zero-width space is not a label idna can encode. The target
         # must be refused rather than resolved under some other guess.
         with self.assertRaises(resolver.PublicNetworkOnlyError):
             with resolver.validate_and_pin_public_target(
@@ -961,6 +964,102 @@ class MalformedImageLinkTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 resolver.open_graph_image_url("https://news.example/a", 5,
                                               "ai-digest")
+
+
+class CredentialImageLinkTest(unittest.TestCase):
+    """ An image URL carrying userinfo is never fetched or credited. """
+
+    SECRET = "hunter2-not-real"
+
+    def page(self, html, final_url="https://news.example/a"):
+        return mock.patch.object(
+            resolver, "_fetch", return_value=(html.encode(), final_url))
+
+    def test_a_credential_og_image_falls_back_to_twitter_image(self):
+        html = ('<meta property="og:image" '
+                'content="https://reader:{0}@cdn.example/i.png">'
+                '<meta name="twitter:image" content="/img/x.png">'
+                ).format(self.SECRET)
+        with self.page(html):
+            self.assertEqual(
+                "https://news.example/img/x.png",
+                resolver.open_graph_image_url("https://news.example/a", 5,
+                                              "ai-digest"))
+
+    def test_a_credential_figure_is_skipped_for_the_next_one(self):
+        html = ('<figure><img src="https://reader:{0}@cdn.example/f.png">'
+                '</figure><figure><img src="x1.png"></figure>'
+                ).format(self.SECRET)
+        with self.page(html, "https://ar5iv.labs.arxiv.org/html/2601.00001"):
+            self.assertEqual(
+                "https://ar5iv.labs.arxiv.org/html/x1.png",
+                resolver.arxiv_figure_url(
+                    "https://arxiv.org/abs/2601.00001", 5, "ai-digest"))
+
+    def test_a_credential_candidate_alone_yields_nothing(self):
+        html = ('<meta property="og:image" '
+                'content="https://{0}@cdn.example/i.png">'
+                ).format(self.SECRET)
+        with self.page(html), self.assertLogs(
+                resolver.logger, "INFO") as logs:
+            self.assertIsNone(resolver.open_graph_image_url(
+                "https://news.example/a", 5, "ai-digest"))
+
+        self.assertNotIn(self.SECRET, " ".join(logs.output))
+
+    def test_fetch_refuses_userinfo_before_any_request(self):
+        for url in ("https://reader:{0}@cdn.example/i.png".format(
+                        self.SECRET),
+                    "https://@cdn.example/i.png",
+                    "https://reader:{0}@[broken/i.png".format(self.SECRET)):
+            with self.subTest(url=url):
+                with mock.patch.object(transport.requests,
+                                       "Session") as session_cls, \
+                        self.assertLogs(resolver.logger, "INFO") as logs:
+                    result = resolver._fetch(url, 5, "ai-digest", 1024)
+                    resolver.logger.info("sentinel")
+
+                self.assertIsNone(result)
+                session_cls.assert_not_called()
+                text = " ".join(logs.output)
+                self.assertNotIn(self.SECRET, text)
+                self.assertNotIn("reader", text)
+
+    def test_resolve_with_a_credential_source_makes_no_request(self):
+        source = "https://reader:{0}@news.example/a".format(self.SECRET)
+        with mock.patch.object(transport.requests, "Session") as session_cls, \
+                self.assertLogs(resolver.logger, "INFO") as logs:
+            result = resolver.resolve(source)
+            resolver.logger.info("sentinel")
+
+        self.assertIsNone(result)
+        session_cls.assert_not_called()
+        self.assertNotIn(self.SECRET, " ".join(logs.output))
+
+    def test_the_credit_names_only_the_host_and_port(self):
+        with mock.patch.object(resolver, "arxiv_figure_url",
+                               return_value=None), \
+                mock.patch.object(
+                    resolver, "open_graph_image_url",
+                    return_value="https://reader:{0}@cdn.example:8443/i.png"
+                    .format(self.SECRET)), \
+                mock.patch.object(resolver, "_download_image",
+                                  return_value=(b"x", ".png")):
+            result = resolver.resolve("https://news.example/a")
+
+        self.assertEqual((b"x", ".png", "cdn.example:8443"), result)
+
+    def test_an_ordinary_credit_is_unchanged(self):
+        with mock.patch.object(resolver, "arxiv_figure_url",
+                               return_value=None), \
+                mock.patch.object(
+                    resolver, "open_graph_image_url",
+                    return_value="https://cdn.example/i.png"), \
+                mock.patch.object(resolver, "_download_image",
+                                  return_value=(b"x", ".png")):
+            result = resolver.resolve("https://news.example/a")
+
+        self.assertEqual("cdn.example", result[2])
 
 
 if __name__ == "__main__":

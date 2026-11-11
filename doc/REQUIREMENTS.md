@@ -27,7 +27,7 @@ drawing are how one is produced.
 **ai-digest collects AI related papers and news once a day, organizes them into
 the topics worth knowing about, and stores the result as a daily report that can
 be read then and later. API-backed topic editing produces Japanese headlines,
-categories and bullets; `plain` keeps titles and bullets in the source language
+categories and bullets. `plain` keeps titles and bullets in the source language
 and derives categories mechanically.**
 
 It is not a list of articles and it is not a search system. It exists to remove
@@ -73,7 +73,7 @@ handle.
 - **Not a news site.** No audience, no feed of its own, no comment, no account
   and no search.
 - **Not a mirror.** It stores a topic representation and a citation. API-backed
-  modes write the topic in Japanese; `plain` keeps source-language titles and
+  modes write the topic in Japanese. `plain` keeps source-language titles and
   bullets. It does not store, republish or serve the article or the paper the
   topic came from.
 - **Not a scraper of pages written for humans.** Its material comes from the
@@ -82,7 +82,7 @@ handle.
   source page, and not finding one is an ordinary outcome. See section 14.
 - **Not a chatbot.** There is no conversation and nothing a reader types reaches
   a model.
-- **Not a fact checker.** The system reports what its sources published; it does
+- **Not a fact checker.** The system reports what its sources published. It does
   not verify a claim, and the generated pages say so.
 - **Not a database application.** The archive is plain files in a directory.
 
@@ -95,11 +95,11 @@ A single Linux host — Debian or Ubuntu is the documented case — on Python 3.
 later, running two things with different lifetimes: **a batch that runs once a
 day and exits**, and **a viewer that runs continuously** behind a web server.
 The host needs outbound HTTPS to the sources and, unless the API free mode is
-used, to the summarization endpoint, plus a CJK capable TrueType font, because Japanese text can appear in the
-report images and must remain renderable.
+used, to the summarization endpoint, plus a CJK capable TrueType font, because
+Japanese text can appear in the report images and must remain renderable.
 
 All collection and illustration requests use HTTPS, and a redirect is followed
-only when its resolved target is also HTTPS; a downgrade target is refused
+only when its resolved target is also HTTPS. A downgrade target is refused
 before a plaintext request is sent. **A URL is HTTPS only when it also has a
 usable host and port**: a scheme of `https` alone does not make a hostless or
 malformed-port URL acceptable. This retrieval rule is separate from citation
@@ -113,10 +113,10 @@ private, link-local, unspecified, multicast or otherwise non-global address is
 refused before the request is sent, on the initial target and on every
 redirect hop alike, closing the path a scraped page could otherwise use to
 reach the host's own internal network. A public IPv6 literal written in URL
-brackets is checked and pinned by its unbracketed connection address;
-non-global IPv6 literals are refused before connection. Checking the address
+brackets is checked and pinned by its unbracketed connection address.
+Non-global IPv6 literals are refused before connection. Checking the address
 a hostname resolves to is not enough on its own, since a name server can
-answer a preflight lookup and the connection's own lookup differently; **the address
+answer a preflight lookup and the connection's own lookup differently. **The address
 actually connected to must be one of the addresses checked**, not a fresh
 answer a name server gives in between, or the check protects nothing. **This
 must hold for a non-ASCII hostname too**, judged and pinned under the same
@@ -126,7 +126,7 @@ never be checked at all. **An environment proxy must not be able to undo
 this check**: the resolver's own requests bypass a configured proxy so that
 the address checked is the address a connection actually reaches, rather
 than one a proxy resolves on its own. The arXiv API and the configured RSS
-and Atom feeds are not subject to this narrower rule; they keep the
+and Atom feeds are not subject to this narrower rule. They keep the
 HTTPS-only requirement above, together with a bound on how much of a
 response body is read, so that an oversized or endless source fails that
 source alone rather than exhausting memory, and a request-wide time budget -
@@ -137,7 +137,7 @@ An image accepted for illustration must also be safe to decode: a picture
 whose pixel count would exhaust the memory of the host is refused, at both
 the threshold Pillow raises on and the lower one it only warns at, whether it
 is being scraped for the first time or re-read from storage while a report is
-rebuilt. A scraped image is adopted only when it decodes completely; one whose
+rebuilt. A scraped image is adopted only when it decodes completely. One whose
 header reads but whose body is incomplete is treated like any other unusable
 image, so the next source is tried and a generated card is drawn when none
 remains.
@@ -149,7 +149,7 @@ symlink leading elsewhere is refused the same way a missing file is, and the
 refusal degrades to no image, or to a 404, rather than serving or decoding
 whatever it pointed to. A page, whether the standalone HTML or the viewer's,
 shows no picture for such a reference and keeps the topic, the text and the
-other pictures; `report.json` is not changed. The same holds for the summary
+other pictures. `report.json` is not changed. The same holds for the summary
 image: the viewer serves `summary.png` only when it is a file inside its
 report directory.
 
@@ -193,6 +193,9 @@ non-HTTPS effective value, or one embedding credentials (userinfo), is a
 configuration error before collection begins, and the error never quotes an
 item that contains credentials.
 
+An RSS article without a nonblank title is skipped without discarding the other
+articles in the feed. The application does not invent a title.
+
 Only material published inside a **look back window** is kept — twenty four
 hours by default, and configurable, because a quiet weekend is answered by
 widening the window rather than by waiting. The window reaches back from the
@@ -214,7 +217,7 @@ must mean N hours on every host.
 covers.** An unattended run with no explicit date names the archive directory
 after the host's own local calendar date — the day cron actually started it
 on — not UTC's, which could otherwise file it a day early or a day late
-around the date boundary; the window collected, and what the stored statistics
+around the date boundary. The window collected, and what the stored statistics
 record as generated, stay UTC-based regardless.
 
 **arXiv does not announce on weekends.** A run on a Saturday or a Sunday
@@ -234,7 +237,7 @@ end of it**:
 3. remove the obvious duplicates,
 4. edit the deduplicated entries into topics through the configured backend,
 5. with an API-backed backend, group and rank related entries and write Japanese
-   headlines, categories and bullets; with `plain`, keep one entry per topic,
+   headlines, categories and bullets. With `plain`, keep one entry per topic,
    preserve the source language and derive the category from the origin,
 6. attach the originating sources to each topic,
 7. give each topic an image,
@@ -254,7 +257,7 @@ Each topic carries the papers or articles it was built from, and the reader can
 follow them to the original.
 
 **A model must never invent a citation URL.** In API-backed modes it is asked
-which of the numbered input items a topic rests on; the application looks those
+which of the numbered input items a topic rests on. The application looks those
 items up in what it actually collected and takes the real URL and title from
 there. The model supplies the correspondence and the application supplies the
 address. In `plain`, each topic keeps the collected entry's real title and URL
@@ -302,7 +305,7 @@ are:
 deduplication, at most 60 candidates are sent. The basic allocation is 45 papers
 and 15 news articles, each kind taken in its existing order of preference. When
 one kind has fewer candidates than its allocation, the unused places go to the
-other kind; when fewer than 60 candidates remain, all of them are sent. For
+other kind. When fewer than 60 candidates remain, all of them are sent. For
 example:
 
 | Papers available | News available | Sent |
@@ -378,8 +381,11 @@ succeeding.** A publisher changing its markup degrades the look of a report,
 never its availability, and a locally drawn card is a normal outcome rather than
 a degraded one.
 
-An HTTP article citation is not fetched for illustration; when no HTTPS
+An HTTP article citation is not fetched for illustration. When no HTTPS
 retrieval path yields an image, the normal locally drawn card is used.
+
+An image URL with userinfo is not fetched. A later safe image candidate may be
+tried, and otherwise a local card is used. Image credits contain no userinfo.
 
 ## 15. Running without a model
 
@@ -427,12 +433,12 @@ three: **plain**, **anthropic-compatible** and **openai-compatible**.
 - Connection target, credential, model, retry count and timeouts are
   settings. **An explicitly configured connection target must be HTTPS, name
   a usable host, have a valid port when present, and contain no URL
-  credentials (userinfo)**; a non-HTTPS, malformed or credential-bearing
+  credentials (userinfo)**. A non-HTTPS, malformed or credential-bearing
   endpoint is a configuration error before anything is collected. Its
   value is never quoted in application logs or errors.
 - **A backend's own optional dependency, when it needs one, is checked
   before anything is collected too.** The openai-compatible backend needs
-  a package that is not installed by default; its absence must fail the
+  a package that is not installed by default. Its absence must fail the
   run immediately, the same as a missing credential or an invalid setting,
   not only once summarization is finally reached after a collection pass
   already spent.
@@ -445,7 +451,7 @@ rather than being quietly read as its successor. The same holds for every
 numeric setting: the default is used only when it is unset or blank, and an
 explicit value that is not a whole number, or that falls outside the setting's
 range, is a configuration error rather than a silent fallback to the default.
-This strictness applies to a setting an execution path actually uses; a
+This strictness applies to a setting an execution path actually uses. A
 malformed or superseded value of a setting it does not use is not that path's
 concern, and does not stop it. A malformed value that a valid command line
 option replaces is not read either, but a superseded name is refused regardless.
@@ -499,7 +505,7 @@ An empty report is never written as a success, and no half written report is
 left in the archive for any failure the process itself detects and handles -
 a generation error, a failed rename, an OS-level publication failure. This is
 not a guarantee against the process itself being killed or the host crashing
-mid-publish; the staged-replacement design in `doc/BASIC_DESIGN.md` states
+mid-publish. The staged-replacement design in `doc/BASIC_DESIGN.md` states
 exactly what is and is not covered.
 
 **When nothing was collected, the diagnosis must distinguish at least three
@@ -554,13 +560,13 @@ something says so in its log. Credentials are the exception in section 23.
 A setting has one effective value, taken from the command line, then the
 exported environment, then `.env`, then the default. A valid command line value
 makes a malformed value of the same setting in a lower source irrelevant, so it
-does not stop the run; a malformed value of any setting the command line did not
+does not stop the run. A malformed value of any setting the command line did not
 replace still does.
 
 **Each execution path depends only on the settings it actually uses.** The
-viewer depends on the archive location and its own port; printing the stored
-dates depends on the archive location alone; rebuilding a stored report or the
-bundled sample depends on what they draw with; only the full collect-and-summarize
+viewer depends on the archive location and its own port. Printing the stored
+dates depends on the archive location alone. Rebuilding a stored report or the
+bundled sample depends on what they draw with. Only the full collect-and-summarize
 run depends on the endpoint settings. A setting outside that dependency being
 malformed, missing, or carrying a superseded name must not stop an execution
 path that never reads it.
@@ -596,12 +602,17 @@ setting instead of the SDK default.**
 Further rules follow from rendering other people's text in a browser:
 
 - **Text from outside is material, never instruction.** A feed entry, a scraped
-  page, an abstract and a model answer are summarized or stored as data; a
+  page, an abstract and a model answer are summarized or stored as data. A
   sentence inside one of them that addresses the system is part of the material.
 - **A link is published only when it is an absolute ordinary web URL that names
   a host**, whatever route put it into the archive. A URL with an empty host or
   an invalid port is dropped when collected, and shown as no link when it is
-  found in a stored report.
+  found in a stored report. An article or paper link containing URL credentials
+  (userinfo) is not collected or published. A stored legacy link of that kind
+  renders as no link.
+- **A request target or redirect that embeds URL credentials is refused.**
+  Initial request targets and redirects containing URL credentials are refused
+  before the affected request. Refusal messages do not quote the URL.
 - **A report date is `YYYY-MM-DD`, written with the ASCII digits `0` to `9`,
   naming a real calendar date, not merely a string of that shape.** A date
   written with full width or other non-ASCII digits is refused, and an archive
@@ -668,5 +679,8 @@ like is not a property of where its material came from.**
 15. A run with no source setting collects from the five default arXiv categories
     and the seven default feeds, and a source that fails alone does not stop it.
 16. With enough of both kinds collected, an API-backed editor is sent 45 papers
-    and 15 news articles; with fewer of one kind, the unused places go to the
-    other; and the plain backend ignores this allocation.
+    and 15 news articles. With fewer of one kind, the unused places go to the
+    other. And the plain backend ignores this allocation.
+17. A link, request target, redirect or image URL that carries URL credentials
+    (userinfo) is neither collected, requested nor published, and no log line
+    or error message quotes it.

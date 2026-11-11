@@ -18,7 +18,7 @@
 #  reach whichever of them is configured. The former ANTHROPIC_* names
 #  were also the ones the Anthropic SDK and other tools read from the
 #  environment on their own, so a value exported for something else
-#  decided where a digest was sent; they are refused by name now.
+#  decided where a digest was sent. They are refused by name now.
 #
 #  One endpoint answers at a time, so there is one set of credentials
 #  rather than one per backend. SUMMARIZER_API_KEY and
@@ -33,7 +33,7 @@
 #  load_render_config(), load_demo_config() and load_run_config() -
 #  each resolving only the settings that path actually uses.
 #  load_config(), which resolves every setting, is kept for
-#  compatibility and for tests exercising a setting on its own; no
+#  compatibility and for tests exercising a setting on its own. No
 #  execution path calls it. Nothing in this module performs network
 #  access, but resolving AI_DIGEST_FONT_PATH does touch the file system
 #  beyond reading .env: an explicit or a probed candidate is opened
@@ -78,11 +78,11 @@
 #      default endpoint.
 #  - SUMMARIZER_MODEL
 #      Model asked for on the endpoint. Defaults to a Claude Sonnet
-#      model on the anthropic-compatible backend; required on the
+#      model on the anthropic-compatible backend. Required on the
 #      openai-compatible one, whose model names are the endpoint's own.
 #  - SUMMARIZER_MAX_RETRIES
 #      How often the SDK retries one request, on either API backend.
-#      Defaults to 2, the SDK default; set 0 to spend exactly one
+#      Defaults to 2, the SDK default. Set 0 to spend exactly one
 #      request per run, which is what comparing two endpoint settings
 #      needs.
 #  - SUMMARIZER_THINKING_MODE
@@ -111,28 +111,28 @@
 #      Upper bound of arXiv entries fetched per category.
 #  - NEWS_FEED_URLS
 #      Comma separated RSS/Atom feed URLs to collect. Every non-empty
-#      item must be an absolute HTTPS URL; blank disables news-feed
+#      item must be an absolute HTTPS URL. Blank disables news-feed
 #      collection.
 #  - LOOKBACK_HOURS
 #      Age limit, in hours, of collected entries.
 #  - MAX_TOPICS
 #      Maximum number of topics rendered in one daily report. Limited to
 #      1 through MAX_REPORT_TOPICS (6), the number of cards the fixed
-#      3x2 summary image grid can draw; report.json, the HTML and
+#      3x2 summary image grid can draw. report.json, the HTML and
 #      summary.png must all describe the same topic set.
 #  - MAX_OUTPUT_TOKENS
 #      Tokens the model may produce in one answer, on either API
 #      backend. Defaults to 8000, which fits the report with room to
 #      spare. A model that thinks before answering draws on this same
 #      budget, so an endpoint whose thinking cannot be turned off may
-#      need more; raising it buys no tool call on its own.
+#      need more. Raising it buys no tool call on its own.
 #  - SUMMARIZER_TIMEOUT
 #      SDK HTTP timeout setting in seconds for each summarization
 #      attempt, not a whole-attempt wall-clock deadline. Defaults to
 #      180. HTTP_TIMEOUT separately bounds an entire collection fetch.
 #  - AI_DIGEST_FONT_PATH
 #      Path of a CJK capable TrueType font used for image generation.
-#      Unset or blank probes the usual CJK locations; a nonblank value
+#      Unset or blank probes the usual CJK locations. A nonblank value
 #      is an explicit request and must be a font Pillow can load.
 #  - DATA_DIR
 #      Directory where generated reports are stored.
@@ -174,7 +174,7 @@
 #       instead of falling back to the SDK default endpoint.
 #  v1.4 2026-08-05
 #       Rename ANTHROPIC_*/OPENAI_* to a single SUMMARIZER_* set naming the wire
-#       protocol; refuse the old variable names at startup.
+#       protocol. Refuse the old variable names at startup.
 #  v1.3 2026-08-05
 #       Give the summarization request a timeout of its own, SUMMARIZER_TIMEOUT, so that no outgoing request is left without
 #       one. Raise the defaults of MAX_OUTPUT_TOKENS to 8000 and HTTP_TIMEOUT to 60, and move the viewer to port 3000.
@@ -214,17 +214,17 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARIZER_BACKENDS = ("anthropic-compatible", "openai-compatible", "plain")
 
 # Valid values of SUMMARIZER_THINKING_MODE. 'default' keeps the provider
-# default; 'disabled' asks the endpoint to answer without thinking.
+# default. 'disabled' asks the endpoint to answer without thinking.
 SUMMARIZER_THINKING_MODES = ("default", "disabled")
 
 # Valid values of SUMMARIZER_TOOL_CHOICE_MODE. 'forced' names the tool
-# to call; 'any' demands some tool without naming it, which is
-# unambiguous here because build_report is the only one offered; 'auto'
+# to call. 'any' demands some tool without naming it, which is
+# unambiguous here because build_report is the only one offered. 'auto'
 # leaves the choice to the model.
 SUMMARIZER_TOOL_CHOICE_MODES = ("forced", "any", "auto")
 
 # Valid values of SUMMARIZER_TEXT_JSON_FALLBACK. 'disabled' accepts only
-# a real tool call; 'enabled' also reads a JSON report written as text.
+# a real tool call. 'enabled' also reads a JSON report written as text.
 SUMMARIZER_TEXT_JSON_FALLBACK_MODES = ("disabled", "enabled")
 
 # Model used when SUMMARIZER_MODEL is unset and the backend speaks the
@@ -264,7 +264,7 @@ LEGACY_BACKENDS = {
 
 # Upper bound of MAX_TOPICS. The summary image draws a fixed 3x2 grid of
 # topic cards, so a topic count above this could never be rendered into
-# it; report.json, the HTML and summary.png must all describe the same
+# it. report.json, the HTML and summary.png must all describe the same
 # topic set, which is only possible up to the six the grid holds.
 MAX_REPORT_TOPICS = 6
 
@@ -277,7 +277,7 @@ DEFAULT_ARXIV_CATEGORIES = "cs.AI,cs.LG,cs.CL,cs.CV,cs.CR"
 # calling and where to complain.
 DEFAULT_USER_AGENT = "ai-digest/1.0 (+https://github.com/id774/ai-digest)"
 
-# Default news feeds. They are official, stable feeds; extend the list
+# Default news feeds. They are official, stable feeds. Extend the list
 # through NEWS_FEED_URLS instead of editing this constant.
 DEFAULT_NEWS_FEED_URLS = ",".join([
     "https://openai.com/news/rss.xml",
@@ -317,7 +317,7 @@ def validated_news_feed_urls(urls: List[str]) -> List[str]:
     Return urls unchanged, raising when one is not an absolute HTTPS URL.
 
     NEWS_FEED_URLS is a retrieval target, not a citation, so every item
-    must be requestable over HTTPS; a non-HTTPS item is a configuration
+    must be requestable over HTTPS. A non-HTTPS item is a configuration
     error rather than a URL silently repaired or skipped. An item that
     embeds userinfo (user:password@host, even an empty one) is refused as
     well, and a message never quotes an item that contains an '@', so a
@@ -392,7 +392,7 @@ def _env_int(env: Dict[str, str], name: str, default: int,
 
     An unset setting, or one that is empty or blank, yields default.
     Every other value must parse as a whole number no smaller than
-    minimum; a value that does not is a configuration error rather than
+    minimum. A value that does not is a configuration error rather than
     a silent fallback, so a typo is caught here instead of acted on.
     When maximum is given, a value above it is refused the same way:
     MAX_TOPICS is the one setting bounded above, because it names how
@@ -431,7 +431,7 @@ def _env_token(env: Dict[str, str], name: str, default: str) -> str:
 
 
 # Size the usability probe loads a candidate at. The value drawn at
-# render time does not matter here; only whether Pillow can open the
+# render time does not matter here. Only whether Pillow can open the
 # file as a scalable font at all.
 _FONT_PROBE_SIZE = 10
 
@@ -441,7 +441,7 @@ def is_usable_font_path(path: str) -> bool:
     Return True when Pillow can load path as a scalable font.
 
     A missing file, a directory, and a file Pillow cannot read as a
-    TrueType or OpenType font are all unusable; the extension is never
+    TrueType or OpenType font are all unusable. The extension is never
     trusted on its own. This is the one place that decides usability,
     for an automatic candidate, an explicit environment setting and the
     --font-path option alike.
@@ -604,7 +604,7 @@ class Config:
 
         An empty SUMMARIZER_BASE_URL used to be passed on to the OpenAI
         SDK unset, which let the SDK's own default endpoint decide where
-        the request went; ai-digest must choose that destination itself.
+        the request went. Ai-digest must choose that destination itself.
         The anthropic-compatible backend is not required to set one: an
         empty value there means Anthropic itself, by design. Either
         backend refuses an explicit value that is not HTTPS, since it
@@ -617,7 +617,7 @@ class Config:
         reaches here - _resolve_batch_settings() and apply_overrides()
         both trim it the same way they trim summarizer_model - so the
         value checked here and the value _build_client() later hands
-        the SDK are the same one; a value that is only whitespace was
+        the SDK are the same one. A value that is only whitespace was
         already unset before this method ever saw it.
         """
         base_url = (self.summarizer_base_url or "").strip()
@@ -730,7 +730,7 @@ def _refuse_legacy_variables(env: Dict[str, str]) -> None:
     names, and reading the new ones alongside it would leave the
     operator with a run that ignores half of what they wrote. These are
     endpoint settings, so only the scope that resolves the endpoint
-    checks for them; a legacy name left over from before the rename
+    checks for them. A legacy name left over from before the rename
     must not stop the viewer or an offline subcommand that never reads
     the setting it replaced.
     """
@@ -829,7 +829,7 @@ def load_run_config(overridden: Collection[str] = ()) -> Config:
 
     overridden names the fields the command line replaces. They are
     not read from the environment or .env, because a higher priority
-    value makes a malformed lower one irrelevant; the refusal of a
+    value makes a malformed lower one irrelevant. The refusal of a
     superseded setting name is independent of them and still applies.
     """
     env = _dotenv_values()

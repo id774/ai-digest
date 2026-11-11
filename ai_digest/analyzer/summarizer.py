@@ -15,7 +15,7 @@
 #  it, so the answer arrives as a dictionary instead of prose that would
 #  have to be parsed heuristically. Categories are not restricted to an
 #  enumeration on purpose, because the relevant themes change from day
-#  to day; colors are derived from the label later on.
+#  to day. Colors are derived from the label later on.
 #
 #  Anthropic-compatible endpoints do not all behave the same way here.
 #  Some ignore a named tool_choice, and some spend the whole output
@@ -58,7 +58,7 @@
 #       always announcing 24 hours.
 #  v1.1 2026-08-02
 #       Let the caller configure thinking, tool choice, JSON fallback, retry cap
-#       and output budget; report the stop reason on a missing tool call.
+#       and output budget. Report the stop reason on a missing tool call.
 #  v1.0 2026-07-25
 #       Initial release.
 #
@@ -282,8 +282,8 @@ def _extract_tool_input(message: Any,
     A RuntimeError is raised otherwise, and the message says which of
     the failures happened, because each needs a different answer. A
     model that used up max_tokens while thinking has to be told not to
-    think; one that stopped in the middle of the arguments wrote a
-    report too long for the budget; one that ended its turn with text
+    think. One that stopped in the middle of the arguments wrote a
+    report too long for the budget. One that ended its turn with text
     ignored the tool altogether.
     """
     stop_reason = getattr(message, "stop_reason", None)
@@ -343,7 +343,7 @@ def to_topics(payload: Any, entries: List[Entry],
     whole answer when payload itself is not an object, instead of being
     coerced into the type expected. A usable bullet is a nonblank
     string and a usable source index is an int, excluding bool, inside
-    the entry range; an API-backed topic needs 2 to 4 usable bullets
+    the entry range. An API-backed topic needs 2 to 4 usable bullets
     and at least one usable source, so that a partial hallucination
     cannot produce a citation free or near empty block.
     """
@@ -532,9 +532,9 @@ def summarize(entries: List[Entry], api_key: Optional[str], model: str,
         text_json_fallback: Accept a report written as JSON text when
             no tool call came back.
         max_retries: Retries the SDK may spend on one request. None
-            keeps the SDK default; 0 spends exactly one request.
+            keeps the SDK default. 0 spends exactly one request.
         max_output_tokens: Tokens the model may produce in one answer.
-        timeout: SDK HTTP timeout setting for each attempt; not a hard
+        timeout: SDK HTTP timeout setting for each attempt, not a hard
             wall-clock limit. Retries and their delays add elapsed time.
         lookback_hours: Age limit the collectors applied, named in the
             prompt so that it matches the material actually sent.

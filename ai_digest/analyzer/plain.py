@@ -47,7 +47,7 @@ BULLET_CHARS = 160
 
 # Splits an abstract into sentences on the terminators common to both
 # English and Japanese text. An ASCII terminator only splits where
-# whitespace follows, so "3.14" and similar are left alone; a Japanese
+# whitespace follows, so "3.14" and similar are left alone. A Japanese
 # terminator splits whether or not whitespace follows, since Japanese
 # sentences are commonly written with no space between them.
 SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+|(?<=[。！？])\s*")

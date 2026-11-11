@@ -171,7 +171,7 @@ class ConfigRequestOptionTest(unittest.TestCase):
             loaded.validate_protocol_options()
 
     def test_rejects_an_unknown_tool_choice_mode(self):
-        # 'any' used to stand for an unknown value here; it is a
+        # 'any' used to stand for an unknown value here. It is a
         # supported mode now, so the check needs a real typo.
         loaded = self.load({"SUMMARIZER_TOOL_CHOICE_MODE": "always"})
 
@@ -402,7 +402,7 @@ class CandidateSelectionTest(unittest.TestCase):
     def test_prompt_and_citations_use_the_same_list(self):
         entries = _make("paper", 100) + _make("news", 100)
         client = mock.Mock()
-        # Index 45 is the first news article of the selection; 60 is
+        # Index 45 is the first news article of the selection. 60 is
         # outside the 60 numbered candidates.
         client.messages.create.return_value = types.SimpleNamespace(
             content=[types.SimpleNamespace(

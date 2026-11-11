@@ -54,6 +54,8 @@
 #      one in full first.
 #    - Return the unbracketed address for an IPv6 literal URL, the form the
 #      connection layer passes to getaddrinfo().
+#    - Refuse an initial target or a redirect carrying URL userinfo before
+#      a further request, without echoing the URL in the error.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -61,7 +63,8 @@
 #
 #  Version History:
 #  v1.3 2026-11-11
-#       Verify unbracketed canonical hosts for IPv6 literal URLs.
+#       Cover unbracketed IPv6 hosts and refusal of credential-bearing
+#       initial and redirected URLs before further requests.
 #  v1.2 2026-11-09
 #       Cover the fetch-wide deadline bounding a blocking target_pin.
 #  v1.1 2026-09-23
@@ -249,7 +252,7 @@ class TrustEnvTest(unittest.TestCase):
     trust_env controls whether the Session reads proxy settings (and
     other environment-driven defaults) from the process environment.
     Collectors need it on, so a configured proxy still carries their
-    requests; the image resolver turns it off, so a proxy can never
+    requests. The image resolver turns it off, so a proxy can never
     quietly pick the destination target_pin validated.
     """
 
@@ -486,6 +489,84 @@ class TargetPinTest(unittest.TestCase):
         self.assertTrue(first.closed)
 
 
+class CredentialTargetTest(unittest.TestCase):
+    """
+    A request target or redirect carrying URL userinfo is refused before
+    any request is sent for it, and the refusal never echoes the URL.
+    """
+
+    def get(self, session, url="https://example.test/a"):
+        with mock.patch.object(transport.requests, "Session",
+                               return_value=session):
+            with transport.https_get(url, 5, "ua"):
+                pass
+
+    def assertQuiet(self, error):
+        text = str(error)
+        for fragment in ("user", "secret", "example.test", "http"):
+            self.assertNotIn(fragment, text)
+
+    def test_an_initial_target_with_userinfo_is_never_requested(self):
+        for url in ("https://user:secret@example.test/a",
+                    "https://user@example.test/a",
+                    "https://@example.test/a"):
+            with self.subTest(url=url):
+                session = _fake_session(FakeResponse(200))
+
+                with self.assertRaises(transport.HTTPSOnlyError) as caught:
+                    self.get(session, url)
+
+                session.get.assert_not_called()
+                self.assertQuiet(caught.exception)
+
+    def test_a_redirect_to_https_userinfo_is_not_followed(self):
+        first = FakeResponse(
+            302, headers={"Location": "https://user:secret@example.test/b"},
+            url="https://example.test/a")
+        session = _fake_session(first, FakeResponse(200))
+
+        with self.assertRaises(transport.HTTPSOnlyError) as caught:
+            self.get(session)
+
+        self.assertEqual(1, session.get.call_count)
+        self.assertTrue(first.closed)
+        self.assertQuiet(caught.exception)
+
+    def test_a_redirect_to_http_userinfo_is_not_followed(self):
+        first = FakeResponse(
+            302, headers={"Location": "http://user:secret@example.test/b"},
+            url="https://example.test/a")
+        session = _fake_session(first, FakeResponse(200))
+
+        with self.assertRaises(transport.HTTPSOnlyError) as caught:
+            self.get(session)
+
+        self.assertEqual(1, session.get.call_count)
+        self.assertQuiet(caught.exception)
+
+    def test_other_refusals_do_not_echo_the_url(self):
+        session = _fake_session(FakeResponse(200))
+        with self.assertRaises(transport.HTTPSOnlyError) as caught:
+            self.get(session, "http://user:secret@example.test/a")
+        self.assertQuiet(caught.exception)
+
+        first = FakeResponse(
+            302, headers={"Location": "http://example.test/b?k=secret"},
+            url="https://example.test/a")
+        with self.assertRaises(transport.HTTPSOnlyError) as caught:
+            self.get(_fake_session(first, FakeResponse(200)))
+        self.assertQuiet(caught.exception)
+        self.assertNotIn("secret", str(caught.exception))
+
+    def test_an_at_sign_in_the_path_or_query_is_still_requested(self):
+        response = FakeResponse(200, url="https://example.test/a@b?k=x@y")
+        session = _fake_session(response)
+
+        self.get(session, "https://example.test/a@b?k=x@y")
+
+        self.assertEqual(1, session.get.call_count)
+
+
 class SessionClosureTest(unittest.TestCase):
 
     def test_session_closes_on_success(self):
@@ -642,7 +723,7 @@ class ReadCappedContentTest(unittest.TestCase):
             transport.read_capped_content(response, 100)
 
     def test_does_not_read_the_whole_body_before_giving_up(self):
-        # An endless response must not be buffered in full first; the
+        # An endless response must not be buffered in full first. The
         # generator is abandoned as soon as the limit is passed.
         read = []
 

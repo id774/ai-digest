@@ -17,7 +17,7 @@
 #      /                          list of the stored report dates
 #      /reports/<date>            report of one day, rendered from JSON
 #      /reports/<date>/image      composite summary PNG of that day
-#      /reports/<date>/assets/<f> file from that report directory; templates use it for topic illustrations
+#      /reports/<date>/assets/<f> file from that report directory. Templates use it for topic illustrations
 #      /healthz                   liveness probe for process managers
 #
 #  Author: id774 (More info: https://id774.net)
@@ -31,7 +31,7 @@
 #      python app.py
 #
 #  Options:
-#  - None. The viewer takes no command line option; DATA_DIR and PORT
+#  - None. The viewer takes no command line option. DATA_DIR and PORT
 #    configure it, through the environment or .env. They are the only
 #    settings config.py resolves for the viewer, so a batch-only
 #    setting - malformed, missing or a superseded name - cannot stop
@@ -112,7 +112,7 @@ def report_image(date: str):
 @app.route("/reports/<date>/assets/<path:filename>")
 def report_asset(date: str, filename: str):
     """
-    Serve a file from that report directory; templates use it for topic
+    Serve a file from that report directory. Templates use it for topic
     illustrations.
 
     report_local_asset_path() is what actually decides the file served:

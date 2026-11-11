@@ -36,7 +36,7 @@ The following decisions shape everything below.
   has a command line option, and a setting outside a path's own scope cannot
   stop it.
 - **Failure degrades where the material is optional and stops where the
-  configuration is wrong.** A source, a scrape and an image each fall back; a
+  configuration is wrong.** A source, a scrape and an image each fall back. A
   setting the code has no branch for ends the run before any work is spent.
 
 ## 3. Composition
@@ -125,7 +125,7 @@ path it did not get from `ai_digest/storage.py`.
 
 The browser driver used only by documentation capture and the API client used
 only by the OpenAI-compatible backend are deliberately absent from
-`requirements.txt`; a default installation carries neither optional dependency.
+`requirements.txt`. A default installation carries neither optional dependency.
 
 ## 5. The common item form
 
@@ -144,7 +144,7 @@ structure carries a collected item:
 Nothing above the collectors knows that arXiv answers Atom or that a feed may be
 RSS. A topic likewise carries only what a report needs: category, title,
 bullets, sources as title and URL pairs, the image file name and where the image
-came from. API-backed backends produce Japanese topic text; `plain` preserves
+came from. API-backed backends produce Japanese topic text. `plain` preserves
 the source language.
 
 `CollectionResult` carries the *outcome* of a collection pass beside its
@@ -179,14 +179,16 @@ and resolves any override of them.
   answers would otherwise hold a hop open regardless of the budget computed
   for it. A signal delivered mid-syscall interrupts it outright, ending the
   operation there rather than letting it continue in the background past the
-  deadline; the interrupt itself raises `FetchTimeoutError` instead of the
+  deadline. The interrupt itself raises `FetchTimeoutError` instead of the
   call being silently retried.
 - **Every collector request goes through one HTTPS transport boundary.**
-  The initial target and each resolved redirect target must be absolute HTTPS;
-  a downgrade is refused before the next request is sent. `is_https_url()`
+  The initial target and each resolved redirect target must be absolute HTTPS.
+  A downgrade is refused before the next request is sent. `is_https_url()`
   checks the parsed hostname and port as well as the scheme, so a URL with no
   host or an out-of-range port is refused the same way a plain `http://` one
-  is, not treated as HTTPS merely because its scheme says so.
+  is, not treated as HTTPS merely because its scheme says so. Initial request
+  targets and redirects containing URL credentials are refused before the
+  affected request. Refusal messages do not quote the URL.
 - **A response body is read through `transport.read_capped_content()`,**
   streamed and counted as it arrives rather than buffered by
   `response.content` in full, so a response past
@@ -218,12 +220,16 @@ ordinary source failure and collection continues with the remaining sources.
 URL, so that the timeout and the User-Agent apply to every source. Markup is
 stripped from summaries and their length is capped, because a feed summary is
 sometimes the whole article and only its beginning is useful for judging it.
+An RSS article without a nonblank title is skipped without discarding the
+other articles in the feed. The application does not invent a title.
 
 Both drop an item whose link is not an ordinary absolute web URL that names a
 host, so an unsafe scheme never enters the archive in the first place.
 `is_safe_url()` also refuses an empty host, a netloc holding only a port or
-user information, and an invalid port; `safe_url()` applies the same test to a
-link already stored, so it is shown as no link.
+user information, and an invalid port. `safe_url()` applies the same test to a
+link already stored, so it is shown as no link. An article or paper link
+containing URL credentials (userinfo) is not collected or published. A stored
+legacy link of that kind renders as no link.
 
 ### Time normalization
 
@@ -274,8 +280,9 @@ Topic editing is one interchangeable stage with a fixed contract:
 
 Every backend satisfies it, so the illustration, storage and rendering stages
 never learn which produced the report. A backend is selected by
-`SUMMARIZER_BACKEND`, and exactly one runs per invocation — the backends are the API-backed routes plus the mechanical `plain` route,
-never a failover chain.
+`SUMMARIZER_BACKEND`, and exactly one runs per invocation — the backends are
+the API-backed routes plus the mechanical `plain` route, never a failover
+chain.
 
 | Backend | Editing |
 |---|---|
@@ -283,7 +290,8 @@ never a failover chain.
 | `openai-compatible` | a Chat Completions tool call |
 | `plain` | mechanical, no model and no credential |
 
-**The `anthropic-compatible` and `openai-compatible` backends share one candidate selection of at most 60 entries**
+**The `anthropic-compatible` and `openai-compatible` backends share one
+candidate selection of at most 60 entries**
 made before building the request. The deduplicated entries are split by kind
 into papers and news, each keeping the order deduplication left it. The basic
 allocation is 45 papers and 15 news articles, taken from the front of each
@@ -295,7 +303,7 @@ reporting about it collide, the split does not undo that rule.
 That single selected list numbers the candidates in the prompt and is the list
 `source_indexes` are resolved against during citation restoration, so a cited
 number always names the entry the model was shown. The allocation fixes which
-candidates the model can consider at all; it is not a quota on topics, which the
+candidates the model can consider at all. It is not a quota on topics, which the
 model still ranks by importance up to `MAX_TOPICS`. The mechanical backend
 applies no such selection: it takes the most recent of all deduplicated entries
 by publication time, up to `MAX_TOPICS`.
@@ -382,25 +390,25 @@ repaired: a field of the wrong shape drops the topic it belongs to, or the
 whole answer when the payload itself is not an object, instead of being
 coerced with `str()` into the type expected. It enforces, in order:
 
-- **the payload must be an object, and its `topics` field a list**; otherwise
-  no topic is produced;
-- **each raw topic must itself be an object**; anything else is dropped;
-- topics beyond the configured limit are dropped;
-- **`title` must be a nonblank string**; anything else drops the topic;
-- **`category` must be a string**; anything else drops the topic, and a
-  blank one becomes a neutral label rather than an empty one;
-- **`bullets` must be a list**; anything else drops the topic. A usable
+- **the payload must be an object, and its `topics` field a list**. Otherwise
+  no topic is produced.
+- **Each raw topic must itself be an object**. Anything else is dropped.
+- Topics beyond the configured limit are dropped.
+- **`title` must be a nonblank string**. Anything else drops the topic.
+- **`category` must be a string**. Anything else drops the topic, and a
+  blank one becomes a neutral label rather than an empty one.
+- **`bullets` must be a list**. Anything else drops the topic. A usable
   bullet is a nonblank string - a non-string entry is left out, never
   stringified - and the usable ones are whitespace-normalized and capped
-  at 4; **a topic left with fewer than 2 is dropped**;
-- **`source_indexes` must be a list**; anything else drops the topic. A
+  at 4. **A topic left with fewer than 2 is dropped**.
+- **`source_indexes` must be a list**. Anything else drops the topic. A
   usable index is an integer inside the range of the candidate list,
-  `bool` explicitly excluded since it is otherwise a subclass of `int`;
-  anything else is ignored. Up to 3 are kept, chosen by validity first: the
+  `bool` explicitly excluded since it is otherwise a subclass of `int`.
+  Anything else is ignored. Up to 3 are kept, chosen by validity first: the
   list is walked in order and the first 3 usable indexes are taken, so an
   invalid entry ahead of a valid one costs nothing, instead of capping the
-  raw list to its first 3 entries before checking which are usable;
-- **a topic left with no usable source is dropped** with a logged warning.
+  raw list to its first 3 entries before checking which are usable.
+- **A topic left with no usable source is dropped** with a logged warning.
 
 Citation restoration is the point of the index scheme:
 
@@ -419,7 +427,7 @@ An answer carrying no usable topic at all is a failed run, not an empty report.
 
 ## 11. Illustration
 
-Per topic, the sources are tried in order until one yields an image; otherwise a
+Per topic, the sources are tried in order until one yields an image. Otherwise a
 card is drawn.
 
 The resolver reads the figure of a paper from its HTML rendering, or the image an
@@ -434,7 +442,7 @@ image-byte cap, and a minimum image side **while reading** rather than after
 buffering, so oversized or unusable material is rejected before it is fully
 retained, and a decoder refusing an image is an ordinary "no image" rather than
 the end of a run. Pillow's own decompression bomb guard is two thresholds, not
-one: past the higher one it raises, and past the lower one it only warns; the
+one: past the higher one it raises, and past the lower one it only warns. The
 resolver turns that warning into the same refusal as the error, scoped to the
 one decode with `warnings.catch_warnings()`, never by changing the process-wide
 warning filter other code relies on. `render`'s composer applies the identical
@@ -443,7 +451,9 @@ image, so a file that passed the resolver's own cap once cannot be made to
 decode as a decompression bomb just because it is already on disk.
 
 A scraped image link that cannot be resolved to a URL is only an unusable
-candidate, and the next candidate or the card is used.
+candidate, and the next candidate or the card is used. An image URL with
+userinfo is not fetched. A later safe image candidate may be tried, and
+otherwise a local card is used. Image credits contain no userinfo.
 
 The resolver reaches a page or an image through the same shared HTTPS
 transport boundary as section 6's collectors, `https_get()`'s `target_pin`
@@ -452,7 +462,7 @@ initial target, and of every resolved redirect target, must resolve to a
 public network address. A loopback, private, link-local, unspecified,
 multicast or otherwise non-global address is refused before the request for
 it is sent, whether it is a literal IP in the URL or one among the addresses
-a DNS name resolves to; a name that fails to resolve is refused the same way.
+a DNS name resolves to. A name that fails to resolve is refused the same way.
 
 Checking a hostname's resolved address is not, by itself, a guarantee about
 the address a connection actually reaches: the lookup that validates a target
@@ -464,7 +474,7 @@ gap by pinning, not only validating: for the life of one wrapped request, a
 resolution of the validated hostname can return only the address set already
 checked, monkey-patching `socket.getaddrinfo()` for that hostname alone and
 restoring it once the request returns. The original hostname still decides
-TLS SNI, certificate validation and the `Host` header; only the address a
+TLS SNI, certificate validation and the `Host` header. Only the address a
 connection actually reaches is fixed, and it is provably one already found
 public. This closes the path a scraped page could otherwise use to redirect
 the resolver's own request into the host's internal network, a risk the
@@ -513,7 +523,7 @@ configured target
 The fallback draws a panel in the category colour with the label and the
 headline wrapped to the width, and it also owns the font loading, measuring and
 wrapping helpers the summary image reuses. It is where the missing-CJK-font
-warning is emitted once; without such a font the HTML stays correct and only the
+warning is emitted once. Without such a font the HTML stays correct and only the
 images lose their text.
 
 A downloaded image is adopted only when Pillow decodes all of it, not merely
@@ -537,7 +547,7 @@ the report format.
 <DATA_DIR>/<YYYY-MM-DD>/style.css      its stylesheet
 ```
 
-`report.json` is the authoritative record; the HTML and the images are derived
+`report.json` is the authoritative record. The HTML and the images are derived
 from it and are kept in the same directory.
 
 ```json
@@ -593,7 +603,7 @@ The following properties of this module carry weight:
   error, a payload that is not a mapping, topics that are not a list of
   mappings, statistics that are not a mapping, or a topic that will not rebuild
   all mean "no report". The viewer turns that into a 404, so one corrupt day
-  cannot take the archive down; an impossible calendar date reaches this same
+  cannot take the archive down. An impossible calendar date reaches this same
   defensive path, since `report_dir()` raising `ValueError` for it is caught
   where every other lookup failure is.
 - **A stored asset is resolved through `report_local_asset_path()` alone.**
@@ -613,7 +623,7 @@ The following properties of this module carry weight:
   the viewer alike, and the stored topics and `report.json` stay as they were.
 - **A stored report above six topics is unreadable.** `load_report()` returns
   `None` for it, as for any corrupt report, because the summary image draws six
-  cards at most; the viewer answers 404 and `render` exits 1 without touching
+  cards at most. The viewer answers 404 and `render` exits 1 without touching
   the stored files. Nothing is cut down to six. `list_dates()` still counts a
   date by its shape and its `report.json`, not by what the file holds.
 
@@ -639,13 +649,13 @@ it, as a single directory swap:
 - **A date that already holds a complete report** keeps that report exactly
   as it is for as long as the new one is being staged. Publishing it moves the
   previous directory aside under a backup name first, so that a failure
-  renaming the new tree into its place can restore the previous one; the
+  renaming the new tree into its place can restore the previous one. The
   previous tree is only discarded once the new one has taken its place. This
   is a directory replacement, not an append: whatever artifact only the
   previous report had — a stale topic image, for instance — does not survive
   into the replaced directory.
 - **A publication failure that can be rolled back** restores the previous
-  report and fails the command; one that cannot be rolled back still fails
+  report and fails the command. One that cannot be rolled back still fails
   the command, and keeps the previous report's backup copy on disk instead of
   discarding it, so the two directories that exist afterward are the evidence
   of what happened rather than a silently lost report.
@@ -667,14 +677,14 @@ individual `os.rename()` is atomic on its own, but the two-rename replacement
 of an already-published date - moving the old tree aside, then moving the
 new one into place - is not one atomic step as a whole. A process killed, or
 a host that crashes, between those two renames can leave `<DATA_DIR>/<date>`
-absent until the run is repeated; nothing in this design journals across that
+absent until the run is repeated. Nothing in this design journals across that
 gap or restores it automatically. This scope is deliberate: the repository is
 a single unattended daily batch, not a database, and a rerun is always the
 next scheduled run away.
 
 The staging and backup directories are managed by `ai_digest/storage.py`
 alone, the module that already owns every path computation of the
-application; no other module builds one of their paths, and the viewer never
+application. No other module builds one of their paths, and the viewer never
 sees or serves one, because its routes only ever resolve a validated
 `YYYY-MM-DD` name.
 
@@ -684,7 +694,7 @@ Both are generated from the stored topics, so the page and the image cannot be
 assembled from different material.
 
 The HTML renderer uses the same templates as the viewer and copies the
-stylesheet beside the output; one flag decides whether asset URLs point at
+stylesheet beside the output. One flag decides whether asset URLs point at
 neighbouring files or at the viewer's routes. Autoescaping and the link filter
 are registered where the environment is created, and the viewer registers the
 same two on its own, so both escape by identical rules.
@@ -726,7 +736,7 @@ Four subcommands:
 
 `--version` and `--help` print and exit. Every setting except the two
 credentials and the viewer's port also has an option named after its variable,
-applied over the resolved settings for one invocation; a test asserts that every
+applied over the resolved settings for one invocation. A test asserts that every
 overridable name is a real settings field and that no credential appears among
 them. Which options a subcommand takes follows from what it does: the archive
 directory everywhere, the collection and endpoint settings on `run`, the font on
@@ -740,7 +750,7 @@ refuses. An impossible explicit date therefore never reaches a handler at all:
 `parse_args()` exits `2` before `main()` loads any configuration or a single
 source is collected, which is what keeps a mistyped `--date` from spending a
 network request or an API call. `demo` reads its date from the bundled or a
-custom sample when `--date` is not given; that date bypasses the parser, so
+custom sample when `--date` is not given. That date bypasses the parser, so
 `command_demo()` checks it with the same `is_valid_date()` before staging,
 illustrating or writing anything, failing the command instead.
 
@@ -748,15 +758,15 @@ illustrating or writing anything, failing the command instead.
 date rather than UTC's: cron starts it on the host's own clock, and the two
 can name different days around the date boundary depending on how far the
 host's zone sits from UTC. Only which date directory an unattended run's
-report lands in follows local time; the collected window and `generated_at`
+report lands in follows local time. The collected window and `generated_at`
 stay UTC-based, unaffected by it.
 
 ### One run, in order
 
 1. **Validate the settings needed before collection** — the backend name
-   first; for the openai-compatible backend, whether the optional `openai`
+   first. For the openai-compatible backend, whether the optional `openai`
    package can even be imported, before spending a collection pass on a run
-   that was always going to fail building its client; then the credential,
+   that was always going to fail building its client. Then the credential,
    model, retry budget, output budget and timeout, and for the
    anthropic-compatible backend the three protocol options, then the
    effective `NEWS_FEED_URLS` as HTTPS targets. Nothing has been collected
@@ -776,7 +786,7 @@ stay UTC-based, unaffected by it.
 9. **Store** `report.json` in staging, with the topics and the run statistics.
 10. **Render** the summary image and the standalone HTML into staging.
 11. **Publish** the complete staging directory as `<DATA_DIR>/<date>`. A date
-    not yet published gets it for the first time; one that already holds a
+    not yet published gets it for the first time. One that already holds a
     complete report is replaced by it as a whole.
 12. **Succeed.**
 
@@ -790,7 +800,7 @@ report instead: it copies the authoritative `report.json`, and only the
 topic images its topics reference, into staging unchanged — never a stale
 file the stored directory otherwise still holds — performs step 10 there,
 and publishes the same way, which is why it costs nothing beyond redrawing
-and is the cheap way to try a layout change; the window it announces is read
+and is the cheap way to try a layout change. The window it announces is read
 from the statistics the original run stored, not from the current
 configuration, so a rebuild does not relabel history, and a rebuild that
 fails leaves the stored report untouched.
@@ -814,7 +824,7 @@ anything from it — the top level an object, `date` a real calendar date,
 safe absolute `http` or `https` `url` — raising `ValueError` on the first
 violation rather than letting a malformed one reach `Entry.from_dict()` or
 `is_valid_date()` as an uncaught `AttributeError` or `TypeError`. Its
-`build_report` object is not checked here; it goes through the same
+`build_report` object is not checked here. It goes through the same
 `to_topics()` validation a live tool call's answer does.
 
 ## 15. The viewer
@@ -826,7 +836,7 @@ Five routes, no credential, no outbound access, nothing that writes:
 | `/` | the stored dates, newest first |
 | `/reports/<date>` | one report, rendered from its JSON |
 | `/reports/<date>/image` | the summary image of that day |
-| `/reports/<date>/assets/<file>` | one file from that report directory; report pages use it for topic illustrations |
+| `/reports/<date>/assets/<file>` | one file from that report directory. Report pages use it for topic illustrations |
 | `/healthz` | a plain text liveness response |
 
 It imports nothing from the collectors or the analyzers. **That absence is the
@@ -855,7 +865,7 @@ options sit above both and apply to one invocation:
 
 A setting has one effective value, and only that value is validated. The
 command line is parsed first, and its overridden settings are passed to the
-scoped loader, which does not read them from the environment or `.env`; a
+scoped loader, which does not read them from the environment or `.env`. A
 malformed lower value of such a setting therefore cannot stop a run, while a
 malformed value of a setting that no option replaced still does. A superseded
 variable name is refused regardless, because that is a separate rule about
@@ -877,13 +887,13 @@ resolves exactly that scope and nothing past it.
 
 `LOOKBACK_HOURS` belongs to `render` as well as `run`, because it is what a
 stored report predating that statistic falls back on when its window is
-redrawn; `demo` does not resolve it at all, since it collects nothing and
+redrawn. `demo` does not resolve it at all, since it collects nothing and
 records no window of its own. `PORT` belongs to the viewer alone: `run`
 never resolves it, so an invalid one cannot stop a batch run, exactly as a
 malformed batch setting
 cannot stop the viewer. `load_config()`, which resolves every setting `PORT`
 included, still exists for compatibility and for a test exercising a setting
-on its own, but no execution path calls it; `cli.py` calls the loader its
+on its own, but no execution path calls it. `cli.py` calls the loader its
 subcommand registered, and `app.py` calls `load_viewer_config()` directly.
 
 Every scoped loader reads `.env` through `dotenv_values()`, which parses the
@@ -908,28 +918,26 @@ things.
   an offline subcommand that never reads the setting it replaced. Superseded
   backend values are answered the same way.
 - **Reads every numeric setting strictly, in the loader itself.** An unset or
-  blank value uses the setting's default; an explicit value is parsed as a
+  blank value uses the setting's default. An explicit value is parsed as a
   whole number and checked against the setting's minimum before `Config` is
   built, so a value that is not a number, or falls outside its range, stops
   the load instead of being silently replaced by the default. The command
   line option of the same setting enforces the same minimum, so a value is
-  valid or invalid the same way whichever route set it; only the exit code
+  valid or invalid the same way whichever route set it. Only the exit code
   differs, `2` from the parser against `1` from a failed load. This still
   only reaches a setting the running scope actually resolves.
 - **Normalizes a command line override the same way its environment
   equivalent is resolved.** `apply_overrides()` trims `--data-dir`,
-  `--summarizer-model` and `--user-agent` before applying them, matching the
-  `.strip()` the loaders already apply when reading `DATA_DIR`,
-  `SUMMARIZER_MODEL` and `USER_AGENT`, and a token option —
-  `--summarizer-backend`, `--summarizer-thinking-mode`,
+  `--summarizer-base-url`, `--summarizer-model` and `--user-agent` before
+  applying them, matching the `.strip()` the loaders already apply to
+  `DATA_DIR`, `SUMMARIZER_BASE_URL`, `SUMMARIZER_MODEL` and `USER_AGENT`.
+  A token option — `--summarizer-backend`, `--summarizer-thinking-mode`,
   `--summarizer-tool-choice-mode`, `--summarizer-text-json-fallback` — is
   trimmed and lower-cased at the `argparse` boundary the same way
-  `_env_token()` normalizes the setting from the environment, before either
-  one's `choices` check runs. `--summarizer-base-url` is deliberately left
-  untrimmed, since nothing repairs it from the environment either. Only
-  then does a blank scalar override clear to the same unset/default state a
-  blank environment value already means, rather than the literal blank
-  string.
+  `_env_token()` normalizes the setting from the environment, before
+  either one's `choices` check runs. Only then does a blank scalar
+  override clear to the same unset/default state a blank environment
+  value already means, rather than the literal blank string.
 - **Validates by concern, on demand.** Backend, credential, model, endpoint
   target, retry budget, output budget, timeout and protocol options are
   separate checks, and the batch calls the ones the selected backend needs
@@ -943,12 +951,12 @@ things.
   The same check rejects URL userinfo on either API backend before collection,
   without quoting the configured endpoint value.
 - **Validates `NEWS_FEED_URLS` as HTTPS targets only after `apply_overrides()`.**
-  The loaders read it as an ordinary list, unchecked; `Config.validate_news_feed_urls()`
+  The loaders read it as an ordinary list, unchecked. `Config.validate_news_feed_urls()`
   is called on the effective value `run` is about to collect from, so an
   invalid lower-priority environment or `.env` value never blocks a valid
   `--news-feed-urls` override for that invocation.
   A `NEWS_FEED_URLS` item embedding userinfo is refused the same way, by
-  position and without quoting the item; a collector handed one anyway
+  position and without quoting the item. A collector handed one anyway
   neither requests it nor reports its userinfo.
 - **Resolves the font, strictly, with `is_usable_font_path()` as the single
   usability check** — a file that exists *and* that Pillow can load as a
@@ -1010,9 +1018,9 @@ fails.
 
 | Exit code | Meaning |
 |---|---|
-| `0` | the command completed; `--help` and `--version` end here too |
+| `0` | the command completed. `--help` and `--version` end here too |
 | `1` | the command failed: nothing collected, no topic, a missing credential, or a setting no backend can serve |
-| `2` | the command line was rejected by the parser; nothing collected, no request spent |
+| `2` | the command line was rejected by the parser. Nothing collected, no request spent |
 
 Exit 2 is the parser's, which is what makes a typo in an option cost nothing.
 Exit 1 always follows a logged error naming the cause. A schedule entry that
@@ -1028,7 +1036,8 @@ The line recording what an endpoint answered — its stop reason and content typ
 — is at info level, because it is the line an operator reads when a run fails.
 The response body is at debug level only, because it runs to thousands of tokens
 and would swamp a mail. No credential appears at any level.
-An overridden SUMMARIZER_BASE_URL is logged by setting name only, with its value redacted; invalid endpoint errors do not quote the URL.
+An overridden SUMMARIZER_BASE_URL is logged by setting name only, with its
+value redacted. Invalid endpoint errors do not quote the URL.
 
 ## 19. Security design
 
@@ -1040,9 +1049,10 @@ Four measures, each in one place so that none can be half applied.
 - **Untrusted text is not markup.** Both renderers escape by the same rules and
   never bypass escaping.
 - **Links are guarded twice.** The collectors refuse to store one that is not an
-  absolute ordinary web URL, and the template filter neutralizes one that is
-  already stored, so a report written before the filter existed, or edited by
-  hand, cannot put another scheme into an anchor.
+  absolute ordinary web URL or that embeds URL credentials, and the template
+  filter neutralizes one that is already stored, so a report written before
+  the filter existed, or edited by hand, cannot put another scheme or a
+  credential into an anchor.
 - **Paths are computed in one module**, and a date from a URL is validated
   before it names a directory.
 
@@ -1050,12 +1060,12 @@ The credential is needed by the batch alone and is read from the environment or
 `.env` only, never from an option. `load_viewer_config()` never resolves it, so
 the deployed viewer unit does not source the batch's `.env` at all (see
 Execution scope in section 16, and Deployment shape below). The application
-provides no authentication of its own; restricting who may read the viewer
+provides no authentication of its own. Restricting who may read the viewer
 belongs to the reverse proxy, which is where the deployment examples put it.
 
 ## 20. Deployment shape
 
-Enough to understand the structure; the procedure is
+Enough to understand the structure. The procedure is
 [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ```text
@@ -1074,7 +1084,7 @@ a crontab — and nothing else.
 **The two share nothing but `DATA_DIR`**, which is what keeps yesterday's report
 on the site while a batch fails. The example unit, `deploy/ai-digest.service`,
 sets `DATA_DIR` and `PORT` directly rather than sourcing the batch's `.env`, so
-the credential it holds is never part of the viewer's environment; `ExecStart`
+the credential it holds is never part of the viewer's environment. `ExecStart`
 reads the port back from that same declaration instead of a second, separately
 maintained literal. The batch, run from cron, still reads `.env` in the
 repository root as its own configuration source.
@@ -1082,8 +1092,8 @@ repository root as its own configuration source.
 ### Backup
 
 `DATA_DIR` is the unit of history. Feeds change what they publish and a model's
-answer is not deterministic, so a past report cannot be assumed reproducible;
-keeping a day means backing up the generated data rather than planning to
+answer is not deterministic, so a past report cannot be assumed reproducible.
+Keeping a day means backing up the generated data rather than planning to
 regenerate it.
 
 ## 21. Test design
@@ -1105,17 +1115,17 @@ sources or the endpoint being reachable.
 
 | Requirement | Where it is met |
 |---|---|
-| §7 sources and the window | the two collectors; the window setting carried into prompt, HTML, image and statistics |
+| §7 sources and the window | the two collectors. The window setting carried into prompt, HTML, image and statistics |
 | §7 time zone correctness | timestamps read as UTC, compared against a UTC cut-off |
 | §8 the daily process | the twelve ordered steps of §14, publishing the staged report only at the last-but-one step |
 | §9 citations | the index scheme and its restoration in §10 |
-| §10 deduplication | §7 mechanically; the model for the rest |
+| §10 deduplication | §7 mechanically. The model for the rest |
 | §11 topic editing | the tool schema and the shared prompt in §9 |
 | §12 display limits | 60 candidates (45 papers and 15 news with reassignment), 6 topics, 4 bullets, 3 citations, enforced at validation |
-| §13 categories | freely chosen labels; colour from a package-local hash |
+| §13 categories | freely chosen labels. Colour from a package-local hash |
 | §14 illustrations | resolver then fallback card, per topic |
 | §15 running without a model | the mechanical backend and the bundled sample |
-| §16 the endpoint | one backend per run; strict settings and refused legacy names |
+| §16 the endpoint | one backend per run. Strict settings and refused legacy names |
 | §17 what is produced | the five artifacts per day in §12 |
 | §18 browsing | the viewer, reading stored data only |
 | §19 failure | the isolation table and the exit codes in §17 |
