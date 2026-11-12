@@ -15,9 +15,8 @@
 11. [Repository Structure](#repository-structure)
 12. [The Japanese that stays](#the-japanese-that-stays)
 13. [Demo and sample output](#demo-and-sample-output)
-14. [Contribution](#contribution)
-15. [Primary Branch](#primary-branch)
-16. [License](#license)
+14. [Primary Branch](#primary-branch)
+15. [License](#license)
 
 ## Overview
 
@@ -1033,18 +1032,6 @@ python app.py               # browse it at http://127.0.0.1:3000/
 See [Demo mode](#demo-mode) above and [`doc/DEMO.md`](doc/DEMO.md), which states
 exactly which stages the demo replaces and how it differs from a collected
 report.
-
-## Contribution
-
-Contributions are welcome. You can help by:
-
-- Adding collectors for further sources
-- Improving the layout of the composite image
-- Reporting bugs or feature requests
-
-Please follow the style used in this repository: module level header comments
-describing purpose, requirements and version history, English comments, and
-documentation updated together with the code.
 
 ## Primary Branch
 
