@@ -36,9 +36,17 @@
 #  that is not a whole number is a configuration error rather than a
 #  silent fallback to the default, and the same holds for a value
 #  outside the setting's range. SUMMARIZER_MAX_RETRIES accepts zero. The
-#  other seven do not. MAX_TOPICS is also the one setting bounded above,
-#  since it names how many cards the fixed summary image grid can draw:
-#  1 through 6 are accepted and 7 is refused.
+#  other seven do not. MAX_TOPICS is also the one setting with a fixed
+#  upper bound, since it names how many cards the fixed summary image
+#  grid can draw: 1 through 6 are accepted and 7 is refused.
+#
+#  The collection window cases cover the bound 'run' puts on
+#  LOOKBACK_HOURS, which depends on the current UTC time rather than on a
+#  fixed number: the window must not reach back before the earliest
+#  representable UTC datetime. The current time is fixed in each case,
+#  and the expected bound at each fixed time is written out rather than
+#  derived from the code under test. render keeps its positive-integer
+#  check, and demo, list and the viewer do not read the setting at all.
 #
 #  The font cases cover the same distinction for AI_DIGEST_FONT_PATH:
 #  unset or blank probes CJK_FONT_CANDIDATES for the first Pillow can
@@ -86,6 +94,13 @@
 #    - Accept a retry budget of zero, and reject a negative one.
 #    - Reject zero and a negative value for the other numeric settings.
 #    - Accept MAX_TOPICS at its lower and upper bound, 1 and 6, and reject 7.
+#    - Bound LOOKBACK_HOURS for run and load_config() by the whole hours
+#      between the current UTC time and the earliest representable UTC
+#      datetime, accepting the bound and refusing one above it, or a huge
+#      value, as a configuration error rather than OverflowError.
+#    - Apply that bound to the effective value from the environment or
+#      .env, skip it for a replaced field, keep render's positive-integer
+#      check, and leave demo, list and the viewer unaffected.
 #    - Judge font usability by existence and by Pillow loadability alike.
 #    - Probe automatic font candidates in order, skipping an unusable one.
 #    - Resolve an unset or blank font setting automatically, and refuse
@@ -101,6 +116,8 @@
 #  - Pillow
 #
 #  Version History:
+#  v1.8 2026-11-15
+#       Cover the collection window's UTC datetime bound and scoped loaders.
 #  v1.7 2026-11-11
 #       Verify credential-bearing feed and endpoint URLs are rejected
 #       without exposing their values in errors.
@@ -128,6 +145,7 @@ import os
 import tempfile
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 from unittest import mock
 
 import config
@@ -486,10 +504,12 @@ class BlankSummarizerSettingTest(unittest.TestCase):
 
 # (env var name, Config field, default, minimum, maximum, a valid sample
 # strictly inside the setting's range) for every integer setting.
-# MAX_TOPICS is the one setting bounded above, since it names how many
-# cards the fixed summary image grid can draw. Its sample is 5, not
-# default + 1 (7), which is outside that range. Every other setting has
-# no maximum, and its sample is simply default + 1.
+# MAX_TOPICS is the one setting with a fixed upper bound, since it names
+# how many cards the fixed summary image grid can draw. Its sample is 5,
+# not default + 1 (7), which is outside that range. Every other setting
+# has no fixed maximum, and its sample is simply default + 1. The bound
+# 'run' puts on LOOKBACK_HOURS depends on the current time, so it is not
+# listed here: LookbackWindowTest covers it at fixed times instead.
 NUMERIC_SETTINGS = (
     ("SUMMARIZER_MAX_RETRIES", "summarizer_max_retries", 2, 0, None, 3),
     ("MAX_OUTPUT_TOKENS", "max_output_tokens", 8000, 1, None, 8001),
@@ -594,6 +614,138 @@ class NumericSettingTest(unittest.TestCase):
     def test_max_topics_rejects_seven(self):
         with self.assertRaisesRegex(RuntimeError, "MAX_TOPICS"):
             self.load({"MAX_TOPICS": "7"})
+
+
+# Fixed current times for the collection window bound, each with the
+# number of whole hours between it and datetime.min in UTC, written out
+# here rather than derived from the code under test.
+MIDNIGHT_UTC = datetime(2026, 11, 15, tzinfo=timezone.utc)
+MIDNIGHT_MAX_HOURS = 17758416
+ONE_AM_UTC = datetime(2026, 11, 15, 1, tzinfo=timezone.utc)
+ONE_AM_MAX_HOURS = 17758417
+
+
+class LookbackWindowTest(unittest.TestCase):
+    """
+    'run' and load_config() bound LOOKBACK_HOURS by the window the
+    collectors can subtract from the current UTC time, so a value they
+    could not compute is refused at load time instead of raising
+    OverflowError once collection has started.
+    """
+
+    def load(self, environment, dotenv=None, loader=None, now=MIDNIGHT_UTC):
+        """ Load with a fixed current time, no real .env and a fake font. """
+        loader = loader or config.load_run_config
+        with mock.patch.dict(os.environ, environment, clear=True), \
+                mock.patch.object(config, "_dotenv_values",
+                                  return_value=dict(dotenv or {})), \
+                mock.patch.object(config, "_utc_now", return_value=now,
+                                  create=True), \
+                mock.patch.object(config, "detect_font_path",
+                                  return_value=None):
+            return loader()
+
+    def batch_loaders(self):
+        return (("load_run_config", config.load_run_config),
+                ("load_config", config.load_config))
+
+    def test_the_bound_is_the_whole_hours_since_the_earliest_datetime(self):
+        for now, expected in ((MIDNIGHT_UTC, MIDNIGHT_MAX_HOURS),
+                              (ONE_AM_UTC, ONE_AM_MAX_HOURS)):
+            with self.subTest(now=now):
+                with mock.patch.object(config, "_utc_now", return_value=now,
+                                       create=True):
+                    self.assertEqual(expected, config.max_lookback_hours())
+
+    def test_accepts_a_window_up_to_the_bound(self):
+        for name, loader in self.batch_loaders():
+            for hours in (1, 24, 72, MIDNIGHT_MAX_HOURS):
+                with self.subTest(loader=name, hours=hours):
+                    loaded = self.load({"LOOKBACK_HOURS": str(hours)},
+                                       loader=loader)
+                    self.assertEqual(hours, loaded.lookback_hours)
+
+    def test_unset_and_blank_still_use_the_default(self):
+        for name, loader in self.batch_loaders():
+            for environment in ({}, {"LOOKBACK_HOURS": "  "}):
+                with self.subTest(loader=name, environment=environment):
+                    loaded = self.load(environment, loader=loader)
+                    self.assertEqual(24, loaded.lookback_hours)
+
+    def test_still_rejects_zero_a_negative_and_a_non_integer(self):
+        for name, loader in self.batch_loaders():
+            for raw in ("0", "-1", "1.5", "abc"):
+                with self.subTest(loader=name, raw=raw):
+                    with self.assertRaisesRegex(RuntimeError,
+                                                "LOOKBACK_HOURS"):
+                        self.load({"LOOKBACK_HOURS": raw}, loader=loader)
+
+    def test_rejects_a_window_beyond_the_datetime_range(self):
+        for name, loader in self.batch_loaders():
+            for raw in (str(MIDNIGHT_MAX_HOURS + 1), "100000000",
+                        str(10 ** 100)):
+                with self.subTest(loader=name, raw=raw):
+                    with self.assertRaisesRegex(
+                            RuntimeError,
+                            "LOOKBACK_HOURS.*representable UTC datetime"):
+                        self.load({"LOOKBACK_HOURS": raw}, loader=loader)
+
+    def test_the_bound_follows_the_current_time(self):
+        for name, loader in self.batch_loaders():
+            with self.subTest(loader=name):
+                loaded = self.load(
+                    {"LOOKBACK_HOURS": str(ONE_AM_MAX_HOURS)},
+                    loader=loader, now=ONE_AM_UTC)
+                self.assertEqual(ONE_AM_MAX_HOURS, loaded.lookback_hours)
+                with self.assertRaisesRegex(RuntimeError, "LOOKBACK_HOURS"):
+                    self.load({"LOOKBACK_HOURS": str(ONE_AM_MAX_HOURS + 1)},
+                              loader=loader, now=ONE_AM_UTC)
+
+    def test_applies_the_bound_to_a_value_from_dotenv(self):
+        for name, loader in self.batch_loaders():
+            with self.subTest(loader=name):
+                loaded = self.load(
+                    {}, dotenv={"LOOKBACK_HOURS": str(MIDNIGHT_MAX_HOURS)},
+                    loader=loader)
+                self.assertEqual(MIDNIGHT_MAX_HOURS, loaded.lookback_hours)
+                with self.assertRaisesRegex(RuntimeError, "LOOKBACK_HOURS"):
+                    self.load({}, dotenv={"LOOKBACK_HOURS": "100000000"},
+                              loader=loader)
+
+    def test_judges_the_effective_value_of_environment_over_dotenv(self):
+        for name, loader in self.batch_loaders():
+            with self.subTest(loader=name):
+                loaded = self.load({"LOOKBACK_HOURS": "72"},
+                                   dotenv={"LOOKBACK_HOURS": "100000000"},
+                                   loader=loader)
+                self.assertEqual(72, loaded.lookback_hours)
+                with self.assertRaisesRegex(RuntimeError, "LOOKBACK_HOURS"):
+                    self.load({"LOOKBACK_HOURS": "100000000"},
+                              dotenv={"LOOKBACK_HOURS": "72"}, loader=loader)
+
+    def test_a_replaced_window_is_not_read(self):
+        loaded = self.load(
+            {"LOOKBACK_HOURS": "100000000"},
+            loader=lambda: config.load_run_config(("lookback_hours",)))
+
+        self.assertEqual(24, loaded.lookback_hours)
+
+    def test_render_keeps_its_positive_integer_check(self):
+        loaded = self.load({"LOOKBACK_HOURS": "100000000"},
+                           loader=config.load_render_config)
+
+        self.assertEqual(100000000, loaded.lookback_hours)
+        with self.assertRaisesRegex(RuntimeError, "LOOKBACK_HOURS"):
+            self.load({"LOOKBACK_HOURS": "0"},
+                      loader=config.load_render_config)
+
+    def test_demo_list_and_viewer_ignore_the_window(self):
+        for loader in (config.load_demo_config, config.load_list_config,
+                       config.load_viewer_config):
+            with self.subTest(loader=loader.__name__):
+                loaded = self.load({"LOOKBACK_HOURS": "100000000"},
+                                   loader=loader)
+                self.assertEqual(24, loaded.lookback_hours)
 
 
 class FontUsabilityTest(unittest.TestCase):

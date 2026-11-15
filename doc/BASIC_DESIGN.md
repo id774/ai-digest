@@ -923,13 +923,17 @@ things.
   backend values are answered the same way.
 - **Reads every numeric setting strictly, in the loader itself.** An unset or
   blank value uses the setting's default. An explicit value is parsed as a
-  whole number and checked against the setting's minimum before `Config` is
+  whole number and checked against the setting's range before `Config` is
   built, so a value that is not a number, or falls outside its range, stops
-  the load instead of being silently replaced by the default. The command
-  line option of the same setting enforces the same minimum, so a value is
-  valid or invalid the same way whichever route set it. Only the exit code
-  differs, `2` from the parser against `1` from a failed load. This still
-  only reaches a setting the running scope actually resolves.
+  the load instead of being silently replaced by the default. For collection,
+  the maximum `LOOKBACK_HOURS` is the number of whole hours between the
+  current UTC time and the earliest representable UTC datetime. The batch
+  loader and the `run` option parser use the same range calculation. `render`
+  retains the positive-integer check because it only labels a report period.
+  The command line option of a setting enforces the same range as its
+  corresponding configuration value. Only the exit code differs, `2` from the
+  parser against `1` from a failed load. This still only reaches a setting the
+  running scope actually resolves.
 - **Normalizes a command line override the same way its environment
   equivalent is resolved.** `apply_overrides()` trims `--data-dir`,
   `--summarizer-base-url`, `--summarizer-model` and `--user-agent` before

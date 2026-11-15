@@ -42,6 +42,15 @@
 #    - Reject a non-integer or a negative value on every numeric option.
 #    - Accept --max-topics at its lower and upper bound, 1 and 6, on run and
 #      demo, and reject 7 on both with exit code 2.
+#    - Accept --lookback-hours up to the whole hours between the current
+#      UTC time and the earliest representable UTC datetime, and reject one
+#      above it, or a huge value, with usage and exit code 2 before any
+#      setting is loaded.
+#    - End a run whose LOOKBACK_HOURS from the environment or .env is beyond
+#      that range with exit code 1 and an error, before anything is
+#      collected, and let a valid --lookback-hours win over it.
+#    - Keep render accepting a large stored-report window, and demo and list
+#      ignoring LOOKBACK_HOURS.
 #    - Accept a known summarizer backend, and reject an unknown one.
 #    - Accept a real calendar date on 'run', 'demo' and 'render', and
 #      reject an impossible or a non-canonical one on all three.
@@ -65,6 +74,8 @@
 #  - See requirements.txt (the command line module imports the whole pipeline)
 #
 #  Version History:
+#  v1.7 2026-11-15
+#       Cover look back window bounds, error status and override precedence.
 #  v1.6 2026-11-11
 #       Cover endpoint URL redaction in command line override logs.
 #  v1.5 2026-11-07
@@ -90,6 +101,7 @@ import os
 import tempfile
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 from unittest import mock
 
 import cli
@@ -276,8 +288,10 @@ class NumericOptionTest(unittest.TestCase):
 
 
 # (option, minimum, maximum) for every numeric option 'run' accepts.
-# Retries alone allows zero. --Max-topics alone has an upper bound, the
-# six topics the summary image grid can draw. The environment variable
+# Retries alone allows zero. --Max-topics alone has a fixed upper bound,
+# the six topics the summary image grid can draw. The bound of
+# --lookback-hours depends on the current time, so it is not listed here:
+# LookbackWindowOptionTest covers it at fixed times. The environment variable
 # of the same name shares each bound, which is what NumericSettingTest
 # in test_config.py pins on the other side of the same setting.
 NUMERIC_OPTIONS = (
@@ -316,7 +330,7 @@ class NumericOptionParityTest(unittest.TestCase):
             with self.subTest(option=option):
                 self.assertEqual(2, refused(["run", option, "-1"]))
 
-    def test_only_max_topics_has_a_maximum(self):
+    def test_only_max_topics_has_a_fixed_maximum(self):
         for option, _minimum, maximum in NUMERIC_OPTIONS:
             with self.subTest(option=option):
                 if maximum is None:
@@ -364,6 +378,193 @@ class MaxTopicsOptionTest(unittest.TestCase):
 
     def test_demo_rejects_seven(self):
         self.assertEqual(2, refused(["demo", "--max-topics", "7"]))
+
+
+# Fixed current times for the look back window bound, each with the
+# number of whole hours between it and datetime.min in UTC, written out
+# here rather than derived from the code under test.
+MIDNIGHT_UTC = datetime(2026, 11, 15, tzinfo=timezone.utc)
+MIDNIGHT_MAX_HOURS = 17758416
+ONE_AM_UTC = datetime(2026, 11, 15, 1, tzinfo=timezone.utc)
+ONE_AM_MAX_HOURS = 17758417
+OUT_OF_RANGE_WINDOWS = (str(MIDNIGHT_MAX_HOURS + 1), "100000000",
+                        str(10 ** 100))
+
+
+def at(now):
+    """ Fix the current UTC time the look back window bound is read at. """
+    return mock.patch.object(config_module, "_utc_now", return_value=now,
+                             create=True)
+
+
+class LookbackWindowOptionTest(unittest.TestCase):
+    """
+    --lookback-hours is bounded by the window the collectors can subtract
+    from the current UTC time, the same bound load_run_config() applies to
+    LOOKBACK_HOURS, and a value beyond it is a parser error.
+    """
+
+    def rejected(self, argv):
+        """ Return (exit code, standard error) of a refused cli.main(). """
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            with self.assertRaises(SystemExit) as exit_request:
+                cli.main(argv)
+        return exit_request.exception.code, errors.getvalue()
+
+    def test_accepts_a_window_up_to_the_bound(self):
+        for hours in (1, 24, 72, MIDNIGHT_MAX_HOURS):
+            with self.subTest(hours=hours), at(MIDNIGHT_UTC):
+                args = cli.parse_args(["run", "--lookback-hours", str(hours)])
+                self.assertEqual(hours, args.lookback_hours)
+
+    def test_the_bound_follows_the_current_time(self):
+        with at(ONE_AM_UTC):
+            args = cli.parse_args(
+                ["run", "--lookback-hours", str(ONE_AM_MAX_HOURS)])
+            self.assertEqual(ONE_AM_MAX_HOURS, args.lookback_hours)
+            self.assertEqual(2, refused(
+                ["run", "--lookback-hours", str(ONE_AM_MAX_HOURS + 1)]))
+
+    def test_rejects_a_window_beyond_the_datetime_range_before_loading(self):
+        for raw in OUT_OF_RANGE_WINDOWS:
+            with self.subTest(raw=raw), at(MIDNIGHT_UTC), \
+                    mock.patch.dict(os.environ, {"LOOKBACK_HOURS": "24"},
+                                    clear=True), \
+                    mock.patch.object(config_module, "_dotenv_values",
+                                      return_value={}) as dotenv, \
+                    mock.patch.object(cli, "command_run") as handler:
+                code, errors = self.rejected(
+                    ["run", "--lookback-hours", raw,
+                     "--summarizer-backend", "plain"])
+
+                self.assertEqual(2, code)
+                self.assertIn("usage:", errors)
+                self.assertIn("--lookback-hours", errors)
+                self.assertIn("representable UTC datetime", errors)
+                self.assertNotIn("Traceback", errors)
+                dotenv.assert_not_called()
+                handler.assert_not_called()
+
+    def test_still_rejects_zero_and_a_non_integer(self):
+        for raw in ("0", "-1", "soon"):
+            with self.subTest(raw=raw), at(MIDNIGHT_UTC):
+                self.assertEqual(2, refused(["run", "--lookback-hours", raw]))
+
+    def test_help_names_the_datetime_range(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit):
+                cli.parse_args(["run", "--help"])
+
+        self.assertIn("within the representable UTC datetime range",
+                      " ".join(output.getvalue().split()))
+
+
+class LookbackWindowSettingTest(unittest.TestCase):
+    """
+    cli.main ends a run whose effective LOOKBACK_HOURS is beyond the
+    representable UTC datetime range with exit code 1, before anything is
+    collected, while a valid --lookback-hours wins without reading it.
+    """
+
+    def main(self, argv, environment, dotenv=None, handler="command_run"):
+        """ Return (exit code, configuration, error log, collector mocks). """
+        seen = []
+
+        def record(_args, configured):
+            seen.append(configured)
+            return 0
+
+        with at(MIDNIGHT_UTC), \
+                mock.patch.dict(os.environ, environment, clear=True), \
+                mock.patch.object(config_module, "_dotenv_values",
+                                  return_value=dict(dotenv or {})), \
+                mock.patch.object(config_module, "detect_font_path",
+                                  return_value=None), \
+                mock.patch.object(cli.arxiv, "collect") as arxiv_collect, \
+                mock.patch.object(cli.news_rss, "collect") as rss_collect, \
+                mock.patch.object(cli, handler, side_effect=record), \
+                self.assertLogs("ai_digest.cli", level="INFO") as logs:
+            code = cli.main(argv)
+            # assertLogs needs at least one record on a successful run.
+            cli.logger.info("done")
+        return (code, (seen[0] if seen else None), "\n".join(logs.output),
+                (arxiv_collect, rss_collect))
+
+    def test_an_out_of_range_setting_ends_the_run_before_collecting(self):
+        for source in ("environment", ".env"):
+            for raw in OUT_OF_RANGE_WINDOWS:
+                with self.subTest(source=source, raw=raw):
+                    setting = {"LOOKBACK_HOURS": raw}
+                    if source == "environment":
+                        result = self.main(
+                            ["run", "--summarizer-backend", "plain"], setting)
+                    else:
+                        result = self.main(
+                            ["run", "--summarizer-backend", "plain"], {},
+                            dotenv=setting)
+                    code, configured, log, collectors = result
+
+                    self.assertEqual(1, code)
+                    self.assertIsNone(configured)
+                    self.assertIn("ERROR", log)
+                    self.assertIn("LOOKBACK_HOURS", log)
+                    self.assertIn("representable UTC datetime", log)
+                    self.assertNotIn("Traceback", log)
+                    for collect in collectors:
+                        collect.assert_not_called()
+
+    def test_a_valid_option_wins_over_an_out_of_range_setting(self):
+        for environment, dotenv in (({"LOOKBACK_HOURS": "100000000"}, {}),
+                                    ({}, {"LOOKBACK_HOURS": "100000000"})):
+            with self.subTest(environment=environment, dotenv=dotenv):
+                code, configured, _log, _collectors = self.main(
+                    ["run", "--lookback-hours", "72",
+                     "--summarizer-backend", "plain"],
+                    environment, dotenv)
+
+                self.assertEqual(0, code)
+                self.assertEqual(72, configured.lookback_hours)
+
+    def test_an_invalid_option_is_not_rescued_by_a_valid_setting(self):
+        with at(MIDNIGHT_UTC), \
+                mock.patch.dict(os.environ, {"LOOKBACK_HOURS": "24"},
+                                clear=True):
+            self.assertEqual(2, refused(
+                ["run", "--lookback-hours", "100000000"]))
+
+    def test_other_settings_are_still_validated_beside_the_option(self):
+        for environment in ({"LOOKBACK_HOURS": "100000000",
+                             "MAX_TOPICS": "0"},
+                            {"LOOKBACK_HOURS": "100000000",
+                             "ANTHROPIC_MODEL": "old"}):
+            with self.subTest(environment=environment):
+                code, configured, log, _collectors = self.main(
+                    ["run", "--lookback-hours", "72",
+                     "--summarizer-backend", "plain"], environment)
+
+                self.assertEqual(1, code)
+                self.assertIsNone(configured)
+                self.assertNotIn("LOOKBACK_HOURS", log)
+
+    def test_render_keeps_a_large_stored_report_window(self):
+        code, configured, _log, _collectors = self.main(
+            ["render", VALID_DATE], {"LOOKBACK_HOURS": "100000000"},
+            handler="command_render")
+
+        self.assertEqual(0, code)
+        self.assertEqual(100000000, configured.lookback_hours)
+
+    def test_demo_and_list_ignore_the_window(self):
+        for argv, handler in ((["demo"], "command_demo"),
+                              (["list"], "command_list")):
+            with self.subTest(argv=argv):
+                code, configured, _log, _collectors = self.main(
+                    argv, {"LOOKBACK_HOURS": "100000000"}, handler=handler)
+
+                self.assertEqual(0, code)
+                self.assertIsNotNone(configured)
 
 
 # A leap day only 2024 actually has, and a shape-valid but impossible

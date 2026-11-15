@@ -114,7 +114,8 @@
 #      item must be an absolute HTTPS URL. Blank disables news-feed
 #      collection.
 #  - LOOKBACK_HOURS
-#      Age limit, in hours, of collected entries.
+#      Age limit, in hours, of collected entries. For run, the window
+#      must not extend before the earliest representable UTC datetime.
 #  - MAX_TOPICS
 #      Maximum number of topics rendered in one daily report. Limited to
 #      1 through MAX_REPORT_TOPICS (6), the number of cards the fixed
@@ -145,6 +146,9 @@
 #      TCP port used by the development server and by gunicorn.
 #
 #  Version History:
+#  v2.5 2026-11-15
+#       Reject LOOKBACK_HOURS outside the UTC datetime range, an incompatible
+#       change to accepted collection windows.
 #  v2.4 2026-11-11
 #       Incompatible: reject userinfo in feed and summarizer endpoint URLs,
 #       keeping credentials out of requests, logs and reports.
@@ -191,6 +195,7 @@
 
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Collection, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -268,6 +273,17 @@ LEGACY_BACKENDS = {
 # topic set, which is only possible up to the six the grid holds.
 MAX_REPORT_TOPICS = 6
 
+# Earliest instant a timezone-aware UTC datetime can represent. The
+# collectors subtract LOOKBACK_HOURS from the current UTC time, and a
+# result before this instant raises OverflowError instead of a window.
+EARLIEST_UTC_DATETIME = datetime.min.replace(tzinfo=timezone.utc)
+
+# Why the maximum of a collection window is what it is, quoted by the
+# loader and by the --lookback-hours option when a value exceeds it.
+LOOKBACK_HOURS_RANGE = (
+    "the window must not extend before the earliest representable UTC "
+    "datetime")
+
 # Default arXiv categories: artificial intelligence, machine learning,
 # computation and language, computer vision, and cryptography and security.
 DEFAULT_ARXIV_CATEGORIES = "cs.AI,cs.LG,cs.CL,cs.CV,cs.CR"
@@ -310,6 +326,25 @@ def split_csv(value: str) -> List[str]:
     option is read exactly like the same list given in the environment.
     """
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _utc_now() -> datetime:
+    """ Return the current time in UTC, read at the moment of the check. """
+    return datetime.now(timezone.utc)
+
+
+def max_lookback_hours() -> int:
+    """
+    Return the largest collection window, in whole hours, for this moment.
+
+    It is the number of whole hours between the current UTC time and
+    EARLIEST_UTC_DATETIME, computed by integer division of timedeltas, so
+    no float is rounded and no timedelta is built from the value being
+    checked. The current time is read on every call rather than at
+    import, and shared by the 'run' loader and the --lookback-hours
+    option, so both refuse the same values.
+    """
+    return (_utc_now() - EARLIEST_UTC_DATETIME) // timedelta(hours=1)
 
 
 def validated_news_feed_urls(urls: List[str]) -> List[str]:
@@ -386,7 +421,8 @@ def _blank_to_none(value: Optional[str]) -> Optional[str]:
 
 
 def _env_int(env: Dict[str, str], name: str, default: int,
-            minimum: int, maximum: Optional[int] = None) -> int:
+            minimum: int, maximum: Optional[int] = None,
+            maximum_reason: Optional[str] = None) -> int:
     """
     Read an integer setting, strictly.
 
@@ -394,9 +430,11 @@ def _env_int(env: Dict[str, str], name: str, default: int,
     Every other value must parse as a whole number no smaller than
     minimum. A value that does not is a configuration error rather than
     a silent fallback, so a typo is caught here instead of acted on.
-    When maximum is given, a value above it is refused the same way:
-    MAX_TOPICS is the one setting bounded above, because it names how
-    many cards the fixed summary image grid must draw.
+    When maximum is given, a value above it is refused the same way.
+    The caller supplies the upper bound appropriate to the setting.
+
+    maximum_reason, when given, explains the maximum in the error, which
+    then names the maximum without quoting the value, however long.
     """
     raw = _setting(env, name)
     if raw is None or not raw.strip():
@@ -411,6 +449,10 @@ def _env_int(env: Dict[str, str], name: str, default: int,
         raise RuntimeError(
             "{0} is {1}; expected {2} or more.".format(name, value, minimum))
     if maximum is not None and value > maximum:
+        if maximum_reason is not None:
+            raise RuntimeError(
+                "{0} is above {1}; expected {1} or less, because {2}.".format(
+                    name, maximum, maximum_reason))
         raise RuntimeError(
             "{0} is {1}; expected {2} or less.".format(name, value, maximum))
     return value
@@ -805,7 +847,9 @@ def _resolve_batch_settings(env: Dict[str, str],
             env, "ARXIV_MAX_RESULTS", 60, 1),
         "news_feed_urls": lambda: split_csv(
             _setting(env, "NEWS_FEED_URLS", DEFAULT_NEWS_FEED_URLS)),
-        "lookback_hours": lambda: _env_int(env, "LOOKBACK_HOURS", 24, 1),
+        "lookback_hours": lambda: _env_int(
+            env, "LOOKBACK_HOURS", 24, 1, max_lookback_hours(),
+            LOOKBACK_HOURS_RANGE),
         "max_topics": lambda: _env_int(
             env, "MAX_TOPICS", 6, 1, MAX_REPORT_TOPICS),
         "font_path": lambda: resolve_font_path(

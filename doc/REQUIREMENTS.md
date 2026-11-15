@@ -204,6 +204,13 @@ time the collector starts and never forward: an entry dated after that time
 is not kept, while one dated exactly at that time or exactly at the far edge
 of the window is.
 
+A collection window must be a positive whole number of hours and must not
+extend before the earliest representable UTC datetime when subtracted from
+the current UTC time. An effective setting outside that range is refused
+before collection or summarization, with exit status 1 for a configuration
+error or 2 for an invalid command-line option. Rendering a stored report does
+not perform that subtraction and retains its positive-integer check.
+
 **The configured window must be applied consistently.** It governs the actual
 collection, what the model is told it is looking at, what the HTML says, what
 the summary image announces, and what the stored statistics record. A report

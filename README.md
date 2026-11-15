@@ -206,7 +206,7 @@ Its URL is never printed in the override log.
 | `ARXIV_CATEGORIES` | `cs.AI,cs.LG,cs.CL,cs.CV,cs.CR` | arXiv categories to collect, comma separated: artificial intelligence, machine learning, computation and language, computer vision, and cryptography and security. |
 | `ARXIV_MAX_RESULTS` | `60` | Maximum entries fetched per category. |
 | `NEWS_FEED_URLS` | the seven feeds listed below | RSS or Atom feeds to collect, comma separated. Every non-empty item must be an absolute HTTPS URL without embedded credentials (`user:password@`), which are refused before collection without being printed. Blank disables news-feed collection. |
-| `LOOKBACK_HOURS` | `24` | How many hours before the collection time an entry may have been published. An entry dated after the collection time is not collected. |
+| `LOOKBACK_HOURS` | `24` | How many hours before the collection time an entry may have been published. Future-dated entries are excluded. For `run`, the window must fit within the representable UTC datetime range. |
 | `MAX_TOPICS` | `6` | Maximum topics per report, `1` through `6`. Six fills the summary image grid. report.json, the HTML and summary.png always describe the same topic set. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Tokens the model may produce in one answer, on either API backend. A model that thinks before answering spends the same budget. |
 | `SUMMARIZER_TIMEOUT` | `180` | SDK HTTP timeout setting in seconds for each summarization attempt on either API backend. It is not a whole-attempt wall-clock deadline. See [Timeouts](#timeouts). |
@@ -240,8 +240,11 @@ Every numeric setting above shares one rule: unset or blank uses the default
 shown. An explicit value that is not a whole number, or that is out of range,
 is refused instead of silently falling back to the default.
 `SUMMARIZER_MAX_RETRIES` accepts `0` and above. `MAX_TOPICS` accepts `1`
-through `6`. Every other numeric setting requires `1` or above. The
-command-line option of the same setting enforces the same range.
+through `6`. Every other numeric setting requires `1` or above. For `run`,
+`LOOKBACK_HOURS` must also be small enough to subtract from the current UTC
+time without passing the earliest representable datetime. The corresponding
+command-line option enforces the same range. `render` only uses the window
+for a stored report's period label and retains its positive-integer check.
 
 Source retrieval is HTTPS-only. Feed and scraper redirects are followed only
 while their resolved targets remain HTTPS. An HTTP downgrade is refused before
@@ -633,11 +636,12 @@ anything logs what it replaced, so the log of a report says how it was produced.
 command line is readable by every user of the host, through `ps`, so a
 credential stays in the environment or in `.env`.
 
-Values are validated by the parser, which refuses a look back window of `0` or a
-model name given to `--summarizer-backend`, and exits with status 2 without
-collecting anything. A valid option is not affected by an invalid value of the
-same setting in the environment or `.env`. The other settings of the subcommand
-are still validated, and an invalid one ends the run with exit status 1.
+Values are validated by the parser, which refuses a look back window of `0`,
+a window outside the representable UTC datetime range, or a model name given
+to `--summarizer-backend`, and exits with status 2 without collecting anything.
+A valid option is not affected by an invalid value of the same setting in the
+environment or `.env`. The other settings of the subcommand are still
+validated, and an invalid one ends the run with exit status 1.
 
 ### Browse the reports
 
