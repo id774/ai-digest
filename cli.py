@@ -118,6 +118,9 @@
 #    'run' command, unless SUMMARIZER_BACKEND=plain is used
 #
 #  Version History:
+#  v2.5 2026-11-15
+#       Reject --lookback-hours outside the UTC datetime range, an incompatible
+#       change to accepted option values.
 #  v2.4 2026-11-11
 #       Redact summarizer endpoint URL values in override logs.
 #  v2.3 2026-11-07
@@ -180,12 +183,13 @@ from ai_digest.storage import (ReportPublicationError, copy_existing_report,
                                is_valid_date, list_dates, load_report,
                                publication_workspace, report_dir,
                                write_report_json)
-from config import (BASE_DIR, DEFAULT_USER_AGENT, MAX_REPORT_TOPICS,
-                    SUMMARIZER_BACKENDS, SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
+from config import (BASE_DIR, DEFAULT_USER_AGENT, LOOKBACK_HOURS_RANGE,
+                    MAX_REPORT_TOPICS, SUMMARIZER_BACKENDS,
+                    SUMMARIZER_TEXT_JSON_FALLBACK_MODES,
                     SUMMARIZER_THINKING_MODES, SUMMARIZER_TOOL_CHOICE_MODES,
                     Config, is_usable_font_path, load_demo_config,
                     load_list_config, load_render_config, load_run_config,
-                    split_csv, validated_news_feed_urls)
+                    max_lookback_hours, split_csv, validated_news_feed_urls)
 
 logger = logging.getLogger("ai_digest.cli")
 
@@ -236,13 +240,15 @@ def non_negative_int(value: str) -> int:
 
 
 def bounded_int(value: str, minimum: int,
-                maximum: Optional[int] = None) -> int:
+                maximum: Optional[int] = None,
+                maximum_reason: Optional[str] = None) -> int:
     """
     Parse an integer option, rejecting anything below minimum.
 
     When maximum is given, anything above it is rejected the same way,
     at the parser boundary, before the value ever reaches config load,
-    collection or an API call.
+    collection or an API call. maximum_reason, when given, explains the
+    maximum in the error, which then does not quote the value.
     """
     try:
         number = int(value)
@@ -253,9 +259,23 @@ def bounded_int(value: str, minimum: int,
         raise argparse.ArgumentTypeError(
             "{0} is below the minimum of {1}".format(number, minimum))
     if maximum is not None and number > maximum:
+        if maximum_reason is not None:
+            raise argparse.ArgumentTypeError(
+                "the value is above the maximum of {0}, because {1}".format(
+                    maximum, maximum_reason))
         raise argparse.ArgumentTypeError(
             "{0} is above the maximum of {1}".format(number, maximum))
     return number
+
+
+def lookback_hours_int(value: str) -> int:
+    """
+    Parse --lookback-hours, bounded by the representable UTC datetime range.
+
+    The maximum is max_lookback_hours(), the same bound load_run_config()
+    applies to LOOKBACK_HOURS, read when the option is parsed.
+    """
+    return bounded_int(value, 1, max_lookback_hours(), LOOKBACK_HOURS_RANGE)
 
 
 def max_topics_int(value: str) -> int:
@@ -781,9 +801,10 @@ def add_font_option(parser: argparse.ArgumentParser) -> None:
 
 def add_collection_options(parser: argparse.ArgumentParser) -> None:
     """ Add the options shaping what 'run' collects. """
-    parser.add_argument("--lookback-hours", type=positive_int,
+    parser.add_argument("--lookback-hours", type=lookback_hours_int,
                         help="age limit of the collected entries, in hours "
-                             "(LOOKBACK_HOURS)")
+                             "(LOOKBACK_HOURS), within the representable "
+                             "UTC datetime range")
     parser.add_argument("--arxiv-categories", type=split_csv,
                         help="comma separated arXiv categories "
                              "(ARXIV_CATEGORIES)")
