@@ -9,8 +9,10 @@ v1.3 (Release Date: TBD)
   limit.
 - Apply validated CLI overrides before checking lower-priority settings, an
   incompatible change to how a setting is resolved.
-- Exclude future-dated or unrepresentable feed timestamps and require ASCII
-  digits in report dates, incompatible changes to accepted entries and dates.
+- Exclude future-dated or unrepresentable publication timestamps, an
+  incompatible change to which entries are collected.
+- Require ASCII digits in report dates, an incompatible change to which
+  report dates are accepted.
 - Skip untitled RSS entries instead of publishing blank topic headlines.
 - Fall back for incomplete images or malformed URLs; validate and pin public
   IPv4/IPv6 targets within the fetch deadline with safe DNS restoration.
